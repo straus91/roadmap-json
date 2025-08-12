@@ -1,0 +1,84 @@
+{
+  "$schema": "ROADMAP-model-2025-05.json",
+  "Model": {
+    "Name": "Lung Cancer Classification Model",
+    "Indexing code": {
+      "Content": ["CT", "AI", "OI"]
+    },
+    "Author": [
+      {
+        "Name": "Dr. Jane Smith",
+        "Email": "jane.smith@university.edu",
+        "ORCID": "https://orcid.org/0000-0000-0000-0001"
+      },
+      {
+        "Name": "Dr. John Doe", 
+        "Email": "john.doe@hospital.org"
+      }
+    ],
+    "Organization": [
+      {
+        "Name": "University Medical Center",
+        "Contact name": "Research Coordinator",
+        "Email": "research@university.edu"
+      }
+    ],
+    "Date": {
+      "Created": "2024-01-15",
+      "Published": "2024-03-20",
+      "Updated": "2024-06-10"
+    },
+    "Version": "v2.1",
+    "Reference": [
+      {
+        "Authors": "Smith J, et al.",
+        "Title": "Deep Learning for Lung Cancer Detection in CT Scans",
+        "Source": "Medical Imaging Journal",
+        "Year": 2024,
+        "DOI": "10.1000/example.2024.001",
+        "URL": "https://doi.org/10.1000/example.2024.001"
+      }
+    ],
+    "License": {
+      "Text": "MIT License",
+      "URL": "https://opensource.org/licenses/MIT"
+    },
+    "Contact": "jane.smith@university.edu",
+    "Funding": "NIH Grant R01CA123456",
+    "Comments": "This model was developed for early detection of lung cancer in CT scans with high accuracy.",
+    "Use": {
+      "Intended": ["Detection", "Diagnosis", "Decision support"],
+      "Out-of-scope": ["Treatment planning"],
+      "Excluded": ["Pediatric cases"]
+    },
+    "User": {
+      "Intended": ["Radiologist", "Diagnostic radiologist"],
+      "Out-of-scope": ["Patient"],
+      "Excluded": ["Layperson"]
+    },
+    "Input": "Non-contrast CT chest images in DICOM format",
+    "Output": "Classification probabilities for malignant vs benign lesions with confidence scores",
+    "Results": [
+      {
+        "Result Information": "Primary validation results on internal test set",
+        "Metric": ["Accuracy", "Sensitivity", "Specificity"],
+        "Value": "Accuracy: 0.94, Sensitivity: 0.92, Specificity: 0.96",
+        "Decision Threshold": "0.5 probability threshold",
+        "Uncertainty": "95% CI: 0.91-0.97",
+        "Subset": "Internal test set (n=500 cases)"
+      }
+    ],
+    "Caveat": {
+      "Limitations": "Model trained on single institution data, may not generalize to different scanner types or protocols",
+      "Bias": "Potential selection bias toward more severe cases from tertiary care center",
+      "Risks": "False negatives could delay necessary treatment"
+    },
+    "Method": [
+      "https://paperswithcode.com/method/resnet",
+      "https://paperswithcode.com/method/unet"
+    ],
+    "Computational Task": [
+      "https://paperswithcode.com/task/classification-1"
+    ]
+  }
+}

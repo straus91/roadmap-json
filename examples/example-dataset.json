@@ -1,0 +1,109 @@
+{
+  "$schema": "ROADMAP-dataset-2025-05.json",
+  "Dataset": {
+    "Name": "Chest CT Dataset for Lung Nodule Detection",
+    "Indexing code": {
+      "Content": ["CT", "CH", "OI"]
+    },
+    "Author": [
+      {
+        "Name": "Dr. Sarah Johnson",
+        "Email": "sarah.johnson@research.org",
+        "ORCID": "https://orcid.org/0000-0000-0000-0002"
+      }
+    ],
+    "Organization": [
+      {
+        "Name": "Medical Research Institute",
+        "Contact name": "Data Manager",
+        "Email": "data@research.org"
+      }
+    ],
+    "Date": {
+      "Created": "2023-08-01",
+      "Published": "2024-01-15"
+    },
+    "Version": "1.0",
+    "Reference": [
+      {
+        "Authors": "Johnson S, et al.",
+        "Title": "Large-Scale Chest CT Dataset for Machine Learning Applications",
+        "Source": "Nature Scientific Data",
+        "Year": 2024,
+        "DOI": "10.1038/s41597-024-00001-x"
+      }
+    ],
+    "License": {
+      "Text": "Creative Commons Attribution 4.0",
+      "URL": "https://creativecommons.org/licenses/by/4.0/"
+    },
+    "Contact": "sarah.johnson@research.org",
+    "Funding": "NSF Grant DMS-2024001",
+    "Comments": "High-quality annotated chest CT dataset collected from multiple institutions",
+    "Imaging": {
+      "Modality": ["Computed tomography (RID10321)"],
+      "Procedure": [
+        {
+          "Name": "CT Chest without contrast",
+          "LOINC": "30745-4"
+        }
+      ],
+      "File format": ["DICOM"],
+      "Resolution": "0.5-1.0 mm slice thickness",
+      "Pre-processing": "Standardized to HU values, anonymized",
+      "Burned-in PHI": "No"
+    },
+    "Labeling": "Each case labeled by expert radiologists for presence/absence of lung nodules with bounding box annotations",
+    "Missing information": "Some cases missing smoking history information",
+    "External data": "Self-contained dataset with no external dependencies",
+    "Confidentiality": "All PHI removed according to HIPAA Safe Harbor guidelines",
+    "Subpopulations": "Balanced distribution across age groups (18-90), gender (52% female), and nodule types",
+    "Re-identification": "Not possible - all identifiers removed and images processed to prevent re-identification",
+    "Collection process": "Retrospectively collected from 5 academic medical centers between 2020-2023",
+    "Composition": {
+      "Data type": ["Image"],
+      "Number of instances": 10000,
+      "Representativeness": {
+        "Sample type": ["Random sample"],
+        "Population": "Adults undergoing chest CT screening or diagnostic imaging",
+        "Verification": "Demographics compared against national lung screening statistics"
+      }
+    },
+    "Motivation": {
+      "Purpose": "Create large-scale dataset for training and evaluation of lung nodule detection algorithms",
+      "Team": "Multi-institutional collaboration led by Medical Research Institute",
+      "Funding": "Supported by NSF and private foundation grants"
+    },
+    "Partioning scheme": "70% training, 15% validation, 15% testing with patient-level split",
+    "Partition": [
+      {
+        "Partition name": "Training",
+        "Data": {
+          "Patient count": 5600,
+          "Image count": 7000,
+          "Age range": [[18, "years"], [90, "years"]],
+          "Sex": "Mixed",
+          "Demographic": "Representative of screening population"
+        }
+      },
+      {
+        "Partition name": "Validation", 
+        "Data": {
+          "Patient count": 1200,
+          "Image count": 1500,
+          "Age range": [[18, "years"], [90, "years"]],
+          "Sex": "Mixed"
+        }
+      },
+      {
+        "Partition name": "Testing",
+        "Data": {
+          "Patient count": 1200,
+          "Image count": 1500,
+          "Age range": [[18, "years"], [90, "years"]],
+          "Sex": "Mixed"
+        }
+      }
+    ]
+  }
+}
