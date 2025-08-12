@@ -12,6 +12,58 @@ class SchemaProcessor {
                     "description": "Enter the name or title of your model",
                     "default": ""
                 },
+                "Indexing code": {
+                    "type": "object",
+                    "title": "Indexing Codes",
+                    "description": "Classification codes for this model",
+                    "properties": {
+                        "Content": {
+                            "type": "array",
+                            "title": "Content Codes",
+                            "description": "RSNA 2-letter content codes (e.g., 'CT', 'AI', 'OI')",
+                            "format": "checkbox",
+                            "uniqueItems": true,
+                            "minItems": 1,
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "AI - Artificial Intelligence",
+                                    "BR - Breast Imaging", 
+                                    "BQ - Biomarkers/Quantitative Imaging",
+                                    "CA - Cardiac Imaging",
+                                    "CH - Chest Imaging",
+                                    "CT - Computed Tomography",
+                                    "DM - Dose Management",
+                                    "ED - Education",
+                                    "ER - Emergency Radiology",
+                                    "GI - Gastrointestinal Imaging",
+                                    "GU - Genitourinary Imaging",
+                                    "HN - Head and Neck Imaging",
+                                    "HP - Health Policy",
+                                    "IN - Informatics",
+                                    "IR - Interventional Radiology",
+                                    "LM - Laboratory Medicine",
+                                    "MI - Molecular Imaging",
+                                    "MK - Musculoskeletal Imaging",
+                                    "MR - Magnetic Resonance",
+                                    "NM - Nuclear Medicine",
+                                    "NR - Neuroradiology",
+                                    "OB - Obstetric and Gynecologic Imaging",
+                                    "OI - Oncological Imaging",
+                                    "OT - Outcomes Research",
+                                    "PD - Pediatric Imaging",
+                                    "PH - Physics",
+                                    "PR - Practice Management",
+                                    "SQ - Safety and Quality",
+                                    "RO - Radiation Oncology",
+                                    "RS - Radiological Sciences",
+                                    "US - Ultrasound",
+                                    "VA - Vascular and Interventional Imaging"
+                                ]
+                            }
+                        }
+                    }
+                },
                 "Author": {
                     "type": "array",
                     "title": "Author(s)",
@@ -395,6 +447,58 @@ class SchemaProcessor {
                     "title": "Dataset Name",
                     "description": "Enter the name of your dataset",
                     "default": ""
+                },
+                "Indexing code": {
+                    "type": "object",
+                    "title": "Indexing Codes",
+                    "description": "Classification codes for this dataset",
+                    "properties": {
+                        "Content": {
+                            "type": "array",
+                            "title": "Content Codes",
+                            "description": "RSNA 2-letter content codes (e.g., 'CT', 'CH', 'OI')",
+                            "format": "checkbox",
+                            "uniqueItems": true,
+                            "minItems": 1,
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "AI - Artificial Intelligence",
+                                    "BR - Breast Imaging", 
+                                    "BQ - Biomarkers/Quantitative Imaging",
+                                    "CA - Cardiac Imaging",
+                                    "CH - Chest Imaging",
+                                    "CT - Computed Tomography",
+                                    "DM - Dose Management",
+                                    "ED - Education",
+                                    "ER - Emergency Radiology",
+                                    "GI - Gastrointestinal Imaging",
+                                    "GU - Genitourinary Imaging",
+                                    "HN - Head and Neck Imaging",
+                                    "HP - Health Policy",
+                                    "IN - Informatics",
+                                    "IR - Interventional Radiology",
+                                    "LM - Laboratory Medicine",
+                                    "MI - Molecular Imaging",
+                                    "MK - Musculoskeletal Imaging",
+                                    "MR - Magnetic Resonance",
+                                    "NM - Nuclear Medicine",
+                                    "NR - Neuroradiology",
+                                    "OB - Obstetric and Gynecologic Imaging",
+                                    "OI - Oncological Imaging",
+                                    "OT - Outcomes Research",
+                                    "PD - Pediatric Imaging",
+                                    "PH - Physics",
+                                    "PR - Practice Management",
+                                    "SQ - Safety and Quality",
+                                    "RO - Radiation Oncology",
+                                    "RS - Radiological Sciences",
+                                    "US - Ultrasound",
+                                    "VA - Vascular and Interventional Imaging"
+                                ]
+                            }
+                        }
+                    }
                 },
                 "Author": {
                     "type": "array",
