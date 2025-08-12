@@ -180,7 +180,8 @@ async function initializeEditor(initialData = null) {
 
 function enableEditorControls() {
     document.getElementById('validate-btn').disabled = false;
-    document.getElementById('download-btn').disabled = false;
+    document.getElementById('download-json-btn').disabled = false;
+    document.getElementById('download-txt-btn').disabled = false;
 }
 
 // File handling
@@ -197,11 +198,13 @@ function initializeFileHandler() {
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    const jsonData = JSON.parse(e.target.result);
-                    displayFilePreview(jsonData);
+                    const fileContent = e.target.result;
+                    const jsonData = JSON.parse(fileContent);
+                    const fileFormat = detectFileFormat(file.name, jsonData);
+                    displayFilePreview(jsonData, fileFormat);
                     loadBtn.disabled = false;
                 } catch (error) {
-                    showAlert('Invalid JSON file. Please select a valid ROADMAP JSON file.', 'danger');
+                    showAlert('Invalid file format. Please select a valid ROADMAP JSON or TXT file.', 'danger');
                     fileLabel.textContent = 'Choose file...';
                     loadBtn.disabled = true;
                     hideFilePreview();
@@ -216,33 +219,36 @@ function initializeFileHandler() {
     });
 }
 
-function displayFilePreview(jsonData) {
+function displayFilePreview(jsonData, fileFormat) {
     const preview = document.getElementById('file-preview');
     const content = document.getElementById('file-content-preview');
     
     // Determine card type from JSON structure
     let detectedType = 'unknown';
-    if (jsonData.Model) {
+    if (jsonData.Model || jsonData.model_name) {
         detectedType = 'model';
-    } else if (jsonData.Dataset) {
+    } else if (jsonData.Dataset || jsonData.dataset_name) {
         detectedType = 'dataset';
     }
     
     content.innerHTML = `
+        <strong>Format:</strong> ${fileFormat.toUpperCase()}<br>
         <strong>Type:</strong> ${detectedType.charAt(0).toUpperCase() + detectedType.slice(1)} Card<br>
         <strong>Size:</strong> ${JSON.stringify(jsonData).length} characters<br>
-        <strong>Schema:</strong> ${jsonData.$schema || 'Not specified'}
+        <strong>Schema:</strong> ${jsonData.$schema || 'Detected from content'}
     `;
     
     preview.style.display = 'block';
     window.uploadedJsonData = jsonData;
     window.detectedCardType = detectedType;
+    window.uploadedFileFormat = fileFormat;
 }
 
 function hideFilePreview() {
     document.getElementById('file-preview').style.display = 'none';
     window.uploadedJsonData = null;
     window.detectedCardType = null;
+    window.uploadedFileFormat = null;
 }
 
 function loadFile() {
@@ -271,10 +277,17 @@ function loadFile() {
     
     // Extract the relevant data for the editor
     let editorData = {};
-    if (cardType === 'model' && jsonData.Model) {
-        editorData = jsonData.Model;
-    } else if (cardType === 'dataset' && jsonData.Dataset) {
-        editorData = jsonData.Dataset;
+    
+    if (window.uploadedFileFormat === 'txt') {
+        // Convert TXT format to ROADMAP format
+        editorData = convertTxtToRoadmapFormat(jsonData, cardType);
+    } else {
+        // Standard JSON format
+        if (cardType === 'model' && jsonData.Model) {
+            editorData = jsonData.Model;
+        } else if (cardType === 'dataset' && jsonData.Dataset) {
+            editorData = jsonData.Dataset;
+        }
     }
     
     // Initialize editor with data
@@ -462,6 +475,212 @@ function resetForm() {
     // Clear uploaded data
     window.uploadedJsonData = null;
     window.detectedCardType = null;
+    window.uploadedFileFormat = null;
+}
+
+// File format detection
+function detectFileFormat(fileName, jsonData) {
+    if (fileName.toLowerCase().endsWith('.txt')) {
+        return 'txt';
+    } else if (fileName.toLowerCase().endsWith('.json')) {
+        return 'json';
+    }
+    
+    // Detect based on content structure
+    if (jsonData.model_name || jsonData.dataset_name) {
+        return 'txt'; // TXT format has these field names
+    } else if (jsonData.Model || jsonData.Dataset) {
+        return 'json'; // JSON format has these sections
+    }
+    
+    return 'json'; // Default to JSON
+}
+
+// Convert TXT format to ROADMAP format
+function convertTxtToRoadmapFormat(txtData, cardType) {
+    if (cardType === 'model') {
+        return convertTxtModelToRoadmap(txtData);
+    } else if (cardType === 'dataset') {
+        return convertTxtDatasetToRoadmap(txtData);
+    }
+    return txtData;
+}
+
+// Convert TXT model format to ROADMAP
+function convertTxtModelToRoadmap(txtData) {
+    const roadmapData = {
+        Name: txtData.model_name || "",
+        "Indexing code": {
+            Content: txtData.content_code || []
+        },
+        Comments: txtData.medical_task || "",
+        Date: {
+            Created: txtData.date_created || ""
+        },
+        License: {
+            Text: txtData.license || ""
+        },
+        Funding: txtData.funding || "",
+        Use: {
+            Intended: txtData.use_case || []
+        },
+        User: {
+            Intended: txtData.users || []
+        },
+        Results: (txtData.results || []).map(result => ({
+            "Result Information": result.result_description || "",
+            Metric: [result.result_metric || ""],
+            Value: result.result_value || "",
+            "Decision Threshold": result.result_decision_threshold || "",
+            Subset: result.result_subset_data || ""
+        })),
+        Limitations: txtData.caveats || "",
+        Input: txtData.model_architecture || "",
+        Output: txtData.model_architecture || ""
+    };
+    
+    return roadmapData;
+}
+
+// Convert TXT dataset format to ROADMAP
+function convertTxtDatasetToRoadmap(txtData) {
+    const roadmapData = {
+        Name: txtData.dataset_name || "",
+        "Indexing code": {
+            Content: extractContentCodesFromDataset(txtData)
+        },
+        Composition: {
+            "Number of instances": txtData.number_of_instances ? parseInt(txtData.number_of_instances) : 0,
+            "Data type": ["Image"] // Default assumption
+        },
+        Imaging: {
+            "File format": txtData.file_format || ["DICOM"],
+            Resolution: txtData.resolution || "",
+            "Burned-in PHI": txtData.burned_in_phi || "Unknown"
+        },
+        "Collection process": txtData.collection_process || "",
+        Labeling: txtData.labeling || "",
+        "Ethical review": txtData.confidentiality || "",
+        Confidentiality: txtData.confidentiality || ""
+    };
+    
+    return roadmapData;
+}
+
+// Extract content codes from dataset TXT format
+function extractContentCodesFromDataset(txtData) {
+    // Try to infer content codes from imaging details or other fields
+    const codes = [];
+    
+    if (txtData.imaging_details) {
+        const details = Array.isArray(txtData.imaging_details) ? txtData.imaging_details.join(' ') : txtData.imaging_details;
+        if (details.includes('CT') || details.includes('computed tomography')) {
+            codes.push('CT - Computed Tomography');
+        }
+        if (details.includes('MRI') || details.includes('magnetic resonance')) {
+            codes.push('MR - Magnetic Resonance');
+        }
+    }
+    
+    return codes.length > 0 ? codes : ['OT - Other'];
+}
+
+// Download TXT format
+function downloadTXT() {
+    if (!editor) {
+        showAlert('Editor not ready yet. Please wait and try again.', 'warning');
+        return;
+    }
+    
+    try {
+        const editorData = editor.getValue();
+        
+        // Convert to TXT format
+        let txtData;
+        if (currentCardType === 'model') {
+            txtData = convertRoadmapToTxtModel(editorData);
+        } else if (currentCardType === 'dataset') {
+            txtData = convertRoadmapToTxtDataset(editorData);
+        }
+        
+        // Create and download file
+        const txtString = JSON.stringify(txtData, null, 0);
+        const blob = new Blob([txtString], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `roadmap-${currentCardType}-${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showAlert('✅ TXT file downloaded successfully!', 'success');
+        
+    } catch (error) {
+        console.error('Download error:', error);
+        showAlert('Error creating download file: ' + error.message, 'danger');
+    }
+}
+
+// Convert ROADMAP model to TXT format
+function convertRoadmapToTxtModel(roadmapData) {
+    return {
+        model_name: roadmapData.Name || "",
+        content_code: roadmapData["Indexing code"]?.Content || [],
+        medical_task: roadmapData.Comments || roadmapData.Input || "",
+        date_created: roadmapData.Date?.Created || "",
+        license: roadmapData.License?.Text || "",
+        funding: roadmapData.Funding || "",
+        use_case: roadmapData.Use?.Intended || [],
+        users: roadmapData.User?.Intended || [],
+        results: (roadmapData.Results || []).map(result => ({
+            result_name: result["Result Information"] || "",
+            result_metric: Array.isArray(result.Metric) ? result.Metric[0] : result.Metric || "",
+            result_value: result.Value || "",
+            result_decision_threshold: result["Decision Threshold"] || "",
+            result_description: result["Result Information"] || "",
+            result_subset_data: result.Subset || ""
+        })),
+        caveats: roadmapData.Limitations || "",
+        model_code_availability: "NA",
+        sustainability: "NA",
+        time_to_train: "NA",
+        time_to_inference: "NA",
+        hardware_requirements: "NA",
+        model_architecture: roadmapData.Input || roadmapData.Output || ""
+    };
+}
+
+// Convert ROADMAP dataset to TXT format  
+function convertRoadmapToTxtDataset(roadmapData) {
+    return {
+        dataset_name: roadmapData.Name || "",
+        imaging_details: ["Image data"],
+        file_format: roadmapData.Imaging?.["File format"] || ["DICOM"],
+        resolution: roadmapData.Imaging?.Resolution || "",
+        burned_in_phi: roadmapData.Imaging?.["Burned-in PHI"] || "Unknown",
+        labeling: roadmapData.Labeling || "",
+        missing_information: "",
+        relationships_between_instances: "",
+        noise: "",
+        external_data: "",
+        confidentiality: roadmapData.Confidentiality || roadmapData["Ethical review"] || "",
+        subpopulations: "",
+        re_identification: "",
+        collection_process: roadmapData["Collection process"] || "",
+        composition: "",
+        number_of_instances: roadmapData.Composition?.["Number of instances"] || 0,
+        representativeness: "",
+        verification: "",
+        motivation: "",
+        purpose: "",
+        partioning_scheme: "",
+        partitions: [],
+        dataset_availability: "",
+        dataset_license: ""
+    };
 }
 
 // Schema management functions

@@ -1,0 +1,31 @@
+Model Name (model_name): Combination of Peri- and Intratumoral Radiomic Features on Baseline CT Scans Predicts Response to Chemotherapy in Lung Adenocarcinoma
+
+Content Code (content_code): Radiomics, Lung Adenocarcinoma, Chemotherapy Response Prediction, Peri- and Intratumoral features, CT Imaging
+
+Medical Task (medical_task): The model addresses the prediction of chemotherapy response in patients with non-small cell lung cancer (NSCLC) using radiomic features from baseline CT scans. The input data includes non-contrast-enhanced CT images from which radiomic texture features are extracted from intra- and peritumoral regions. The outputs are predictions of response to chemotherapy, time to progression (TTP), and overall survival (OS).
+
+Date Created (date_created): 2019-03-20
+
+License (license): Not explicitly mentioned, but the article is © RSNA, 2019.
+
+Funding (funding): Supported by the U.S. Department of Defense, the National Cancer Institute, the National Institute of Diabetes and Digestive and Kidney Diseases, the National Center for Research Resources, the Ohio Third Frontier Technology Validation Fund, the Wallace H. Coulter Foundation Program in the Department of Biomedical Engineering, and the Clinical and Translational Science Award Program at Case Western Reserve University.
+
+Use Case (use_case): The model can be employed in the prediction of chemotherapy response for patients with NSCLC to better tailor individual treatment plans and manage resource allocation in clinical settings. It is especially useful for distinguishing responders from non-responders before chemotherapy begins.
+
+Users (users): The primary users are healthcare professionals, particularly oncologists and radiologists, researchers in medical imaging and oncology, and potentially healthcare institutions analyzing patient responses to lung cancer treatments.
+
+Results (results): The model achieved an AUC of 0.82 ± 0.09 in the training set and an AUC of 0.77 in the validation set for predicting chemotherapy response. The radiomics signature was significantly associated with TTP (HR = 2.8) and OS (HR = 2.35). Decision curve analysis indicated the radiomics signature had a higher clinical net benefit than clinicopathological measurements.
+
+Caveats (caveats): Limitations include a small cohort size, variability in imaging protocols, and dependency on manual CT nodule segmentation. The generalizability of the model is questioned due to its single-institution study design, and there are challenges in translating findings to standard clinical biomarkers due to variability.
+
+Model Code Availability (model_code_availability): Not mentioned; no direct link or repository information provided.
+
+Sustainability (sustainability): There are no explicit discussions about environmental or resource considerations in the model’s development or deployment.
+
+Time to Train (time_to_train): Not specified in the document.
+
+Time to Inference (time_to_inference): Not specified in the document.
+
+Hardware Requirements (hardware_requirements): Not specified, but typical radiomic feature extraction and model training would require substantial computational resources (e.g., workstations or servers with sufficient CPU/GPU capacity).
+
+Model Architecture (model_architecture): The model uses a quadratic discriminant analysis (QDA) classifier for predicting chemotherapy response. Additionally, least absolute shrinkage and selection operator (LASSO) with the Cox regression model is used for generating a radiomic risk-score signature associated with TTP and OS. The feature extraction includes various texture and shape analysis methods such as Gabor and Laws texture features.
