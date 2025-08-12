@@ -10,8 +10,8 @@ let schemaProcessor = null;
 document.addEventListener('DOMContentLoaded', function() {
     console.log('ROADMAP Model Card Editor initialized');
     
-    // Initialize schema processor
-    schemaProcessor = new SchemaProcessor();
+    // Initialize dynamic schema processor
+    schemaProcessor = new DynamicSchemaProcessor();
     
     // Initialize file input handler
     initializeFileHandler();
@@ -106,21 +106,31 @@ function updateEditorUI(cardType) {
     document.getElementById('form-title').textContent = title + ' Information';
 }
 
-function initializeEditor(initialData = null) {
+async function initializeEditor(initialData = null) {
     const editorHolder = document.getElementById('editor-holder');
-    editorHolder.innerHTML = '';
+    editorHolder.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div><p class="mt-2 text-muted">Loading schema...</p></div>';
     
     console.log(`Initializing editor for ${currentCardType}`);
     
-    // Get schema
-    const schema = schemaProcessor.getSchema(currentCardType);
-    
-    if (!schema) {
-        showAlert('Schema not available for ' + currentCardType + ' cards.', 'danger');
-        return;
-    }
-    
     try {
+        // Get custom schema URL if provided
+        const customUrl = document.getElementById('custom-schema-url')?.value.trim() || null;
+        
+        // Get schema (base or custom)
+        const schema = await schemaProcessor.getSchema(currentCardType, customUrl);
+        
+        if (!schema) {
+            showAlert('Schema not available for ' + currentCardType + ' cards.', 'danger');
+            return;
+        }
+        
+        // Update schema info display
+        updateSchemaInfo();
+    
+        // Clear loading indicator
+        editorHolder.innerHTML = '';
+
+        // Initialize JSON Editor
         editor = new JSONEditor(editorHolder, {
             schema: schema,
             startval: initialData || {},
@@ -160,8 +170,11 @@ function initializeEditor(initialData = null) {
         });
         
     } catch (error) {
-        console.error('Error initializing editor:', error);
-        showAlert('Error initializing the editor: ' + error.message, 'danger');
+        console.error('Error loading schema or initializing editor:', error);
+        showAlert('Error: ' + error.message, 'danger');
+        
+        // Show fallback message
+        editorHolder.innerHTML = '<div class="alert alert-warning"><i class="fa fa-exclamation-triangle mr-2"></i>Unable to load schema. Please check your connection or try a different schema URL.</div>';
     }
 }
 
@@ -449,6 +462,68 @@ function resetForm() {
     // Clear uploaded data
     window.uploadedJsonData = null;
     window.detectedCardType = null;
+}
+
+// Schema management functions
+function updateSchemaInfo() {
+    if (!schemaProcessor || !currentCardType) return;
+    
+    const info = schemaProcessor.getSchemaInfo(currentCardType);
+    const sourceElement = document.getElementById('schema-source');
+    const versionElement = document.getElementById('schema-version');
+    
+    if (sourceElement && versionElement) {
+        sourceElement.textContent = info.source;
+        versionElement.textContent = info.version;
+        
+        // Add visual indicator for custom schemas
+        if (info.isCustom) {
+            sourceElement.innerHTML = '<i class="fa fa-cloud text-info mr-1"></i>' + info.source;
+        } else {
+            sourceElement.innerHTML = '<i class="fa fa-file text-success mr-1"></i>' + info.source;
+        }
+    }
+}
+
+async function loadCustomSchema() {
+    const urlInput = document.getElementById('custom-schema-url');
+    const customUrl = urlInput.value.trim();
+    
+    if (!customUrl) {
+        showAlert('Please enter a schema URL', 'warning');
+        return;
+    }
+    
+    if (!currentCardType) {
+        showAlert('Please select a card type first', 'warning');
+        return;
+    }
+    
+    // Show loading state
+    showAlert('Loading custom schema...', 'info', 2000);
+    
+    try {
+        // Reload editor with custom schema
+        await initializeEditor();
+        showAlert('✅ Custom schema loaded successfully!', 'success');
+    } catch (error) {
+        showAlert('Failed to load custom schema: ' + error.message, 'danger');
+    }
+}
+
+function resetToBaseSchema() {
+    if (!schemaProcessor || !currentCardType) return;
+    
+    // Clear custom URL
+    const urlInput = document.getElementById('custom-schema-url');
+    if (urlInput) urlInput.value = '';
+    
+    // Reset to base schema
+    schemaProcessor.resetToBase(currentCardType);
+    
+    // Reload editor
+    initializeEditor();
+    showAlert('Reset to base schema', 'info');
 }
 
 // Error handling
