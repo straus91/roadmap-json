@@ -323,6 +323,24 @@ header .display-4 {
     box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
 }
 
+/* Sticky Right Panel */
+#editor-section .col-lg-4 {
+    position: sticky;
+    top: 20px;
+    height: fit-content;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
+/* Ensure proper spacing on smaller screens */
+@media (max-width: 991px) {
+    #editor-section .col-lg-4 {
+        position: static;
+        max-height: none;
+        overflow-y: visible;
+    }
+}
+
 /* Print styles */
 @media print {
     .no-print {
