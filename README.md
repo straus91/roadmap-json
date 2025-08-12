@@ -1,11 +1,11 @@
 # 🏥 ROADMAP Model Card Editor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub Pages](https://img.shields.io/badge/demo-live-green.svg)](https://your-username.github.io/roadmap-card-editor/)
+[![GitHub Pages](https://img.shields.io/badge/demo-live-green.svg)](https://straus91.github.io/roadmap-json/)
 
 > **A user-friendly web application for creating and editing ROADMAP-compliant JSON files for AI models and datasets in medical imaging.**
 
-🌟 **[Try the Live Demo](https://your-username.github.io/roadmap-card-editor/)** | 📖 **[Documentation](https://github.com/your-username/roadmap-card-editor/wiki)** | 🐛 **[Report Issues](https://github.com/your-username/roadmap-card-editor/issues)**
+🌟 **[Try the Live Demo](https://straus91.github.io/roadmap-json/)** | 📖 **[Documentation](https://github.com/straus91/roadmap-json/wiki)** | 🐛 **[Report Issues](https://github.com/straus91/roadmap-json/issues)**
 
 ## ✨ Key Features
 
@@ -37,7 +37,7 @@
 ## 🚀 Quick Start
 
 ### **Option 1: Use Online (Recommended)**
-Visit the live demo: **[https://your-username.github.io/roadmap-card-editor/](https://your-username.github.io/roadmap-card-editor/)**
+Visit the live demo: **[https://straus91.github.io/roadmap-json/](https://straus91.github.io/roadmap-json/)**
 
 ### **Option 2: Run Locally**
 
@@ -49,8 +49,8 @@ Visit the live demo: **[https://your-username.github.io/roadmap-card-editor/](ht
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/roadmap-card-editor.git
-   cd roadmap-card-editor
+   git clone https://github.com/straus91/roadmap-json.git
+   cd roadmap-json
    ```
 
 2. **Start a development server**:
@@ -89,10 +89,6 @@ Visit the live demo: **[https://your-username.github.io/roadmap-card-editor/](ht
    - Click "Validate" to check for errors
    - Click "Download JSON" to export your card
 
-## 🎯 Target Audience
-
-The application serves users ranging from clinicians with low technical skill to ML engineers with high technical expertise. The design prioritizes simplicity and guidance for less technical users while providing efficiency for expert users.
-
 ## 🛠️ Technology Stack
 
 - **Frontend**: HTML5, CSS3, JavaScript (ES6+)
@@ -114,28 +110,3 @@ roadmap-card-editor/
 ├── LICENSE                         # MIT License
 └── README.md                       # This file
 ```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
-- Setting up the development environment
-- Code style and conventions
-- Submitting pull requests
-- Reporting bugs and feature requests
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/your-username/roadmap-card-editor/issues)
-- **Documentation**: Check our [Wiki](https://github.com/your-username/roadmap-card-editor/wiki) for detailed guides
-
-## 🙏 Acknowledgments
-
-This project facilitates the creation of standardized, compliant documentation for AI models and datasets in medical imaging research, following the official ROADMAP schema specifications.
-
----
-
-*🤖 Built to support the medical imaging AI community in creating better, more standardized model and dataset documentation.*
