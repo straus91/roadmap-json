@@ -125,7 +125,7 @@ class DynamicSchemaProcessor {
             const jsonEditorSchema = {
                 type: "object",
                 title: `${sectionName} Information`,
-                properties: this.processProperties(sectionDef.properties || {}, roadmapSchema.$defs),
+                properties: this.processProperties(sectionDef.properties || {}, roadmapSchema.$defs, new Set(), 0),
                 required: sectionDef.required || []
             };
 
@@ -152,25 +152,55 @@ class DynamicSchemaProcessor {
     }
 
     // Process schema properties recursively
-    processProperties(properties, defs) {
+    processProperties(properties, defs, visited = new Set(), depth = 0) {
         const processed = {};
+        const maxDepth = 10; // Prevent infinite recursion
+        
+        if (depth > maxDepth) {
+            console.warn(`Maximum depth ${maxDepth} exceeded, stopping recursion`);
+            return processed;
+        }
         
         for (const [key, prop] of Object.entries(properties)) {
-            processed[key] = this.processProperty(prop, defs);
+            processed[key] = this.processProperty(prop, defs, visited, depth + 1);
         }
         
         return processed;
     }
 
     // Process individual property
-    processProperty(prop, defs) {
+    processProperty(prop, defs, visited = new Set(), depth = 0) {
         // Handle $ref references
         if (prop.$ref) {
             const refPath = prop.$ref.replace('#/$defs/', '');
+            
+            // Prevent circular references
+            if (visited.has(refPath)) {
+                console.warn(`Circular reference detected: ${refPath}`);
+                return {
+                    type: "string",
+                    title: refPath,
+                    description: `Reference to ${refPath} (circular reference avoided)`,
+                    default: ""
+                };
+            }
+            
             const refDef = defs[refPath];
             if (refDef) {
-                return this.processProperty(refDef, defs);
+                const newVisited = new Set(visited);
+                newVisited.add(refPath);
+                return this.processProperty(refDef, defs, newVisited, depth + 1);
             }
+        }
+
+        // Skip overly complex properties that cause issues
+        if (this.isComplexProperty(prop)) {
+            return {
+                type: "string", 
+                title: prop.title || "Complex Field",
+                description: prop.description || "This field has been simplified for form display",
+                default: ""
+            };
         }
 
         // Process based on type
@@ -178,7 +208,7 @@ class DynamicSchemaProcessor {
 
         // Handle arrays
         if (prop.type === 'array' && prop.items) {
-            processed.items = this.processProperty(prop.items, defs);
+            processed.items = this.processProperty(prop.items, defs, visited, depth);
             
             // Convert enum arrays to checkbox format for better UX
             if (prop.items.enum && prop.items.enum.length > 5) {
@@ -189,7 +219,7 @@ class DynamicSchemaProcessor {
 
         // Handle objects
         if (prop.type === 'object' && prop.properties) {
-            processed.properties = this.processProperties(prop.properties, defs);
+            processed.properties = this.processProperties(prop.properties, defs, visited, depth);
         }
 
         // Add default values where missing
@@ -205,6 +235,23 @@ class DynamicSchemaProcessor {
         if (prop.format === 'uri') processed.format = 'uri';
 
         return processed;
+    }
+
+    // Check if property is too complex for JSON Editor
+    isComplexProperty(prop) {
+        // Skip properties with deep nesting
+        if (prop.anyOf || prop.oneOf || prop.allOf) return true;
+        
+        // Skip properties with complex conditional logic
+        if (prop.if || prop.then || prop.else) return true;
+        
+        // Skip properties with pattern properties
+        if (prop.patternProperties) return true;
+        
+        // Skip properties with additional properties of complex type
+        if (prop.additionalProperties && typeof prop.additionalProperties === 'object') return true;
+        
+        return false;
     }
 
     // Get current schema info
