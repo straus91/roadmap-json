@@ -69,10 +69,40 @@ header .display-4 {
     font-weight: 600;
 }
 
+/* Ensure dropdowns can extend outside card boundaries */
+#editor-section .card-body {
+    overflow: visible !important;
+    position: relative;
+    z-index: 1;
+}
+
 /* JSON Editor Customizations */
 #editor_holder {
     background-color: #fff;
     border-radius: 8px;
+}
+
+/* Fix dropdown overflow issues in Model Information */
+.json-editor .well,
+.json-editor .form-group,
+.json-editor [data-schemapath] {
+    overflow: visible !important;
+}
+
+.json-editor select {
+    z-index: 1050 !important;
+    position: relative;
+}
+
+/* Ensure dropdowns appear above other elements */
+.json-editor .form-control:focus {
+    z-index: 1060 !important;
+}
+
+/* Fix for Edge browser dropdown rendering */
+.json-editor select option {
+    background-color: white;
+    color: black;
 }
 
 /* Custom styling for JSON Editor form elements */
