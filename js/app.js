@@ -506,63 +506,169 @@ function convertTxtToRoadmapFormat(txtData, cardType) {
     return txtData;
 }
 
-// Convert TXT model format to ROADMAP
+// Convert TXT model format to ROADMAP - COMPREHENSIVE MAPPING
 function convertTxtModelToRoadmap(txtData) {
     const roadmapData = {
+        // Basic Information
         Name: txtData.model_name || "",
+        
+        // Indexing and Content Codes
         "Indexing code": {
             Content: txtData.content_code || []
         },
-        Comments: txtData.medical_task || "",
+        
+        // Dates
         Date: {
             Created: txtData.date_created || ""
         },
+        
+        // License and Legal
         License: {
             Text: txtData.license || ""
         },
+        
+        // Funding
         Funding: txtData.funding || "",
+        
+        // Comments and Description
+        Comments: [
+            txtData.medical_task,
+            txtData.model_architecture,
+            txtData.model_code_availability ? `Code Availability: ${txtData.model_code_availability}` : null,
+            txtData.sustainability ? `Sustainability: ${txtData.sustainability}` : null,
+            txtData.time_to_train ? `Training Time: ${txtData.time_to_train}` : null,
+            txtData.time_to_inference ? `Inference Time: ${txtData.time_to_inference}` : null,
+            txtData.hardware_requirements ? `Hardware: ${txtData.hardware_requirements}` : null
+        ].filter(Boolean).join('\n\n'),
+        
+        // Input/Output
+        Input: txtData.model_architecture || "",
+        Output: txtData.model_architecture || "",
+        
+        // Use Cases
         Use: {
             Intended: txtData.use_case || []
         },
+        
+        // Users
         User: {
             Intended: txtData.users || []
         },
+        
+        // Results - Comprehensive mapping
         Results: (txtData.results || []).map(result => ({
-            "Result Information": result.result_description || "",
-            Metric: [result.result_metric || ""],
+            "Result Information": result.result_description || result.result_name || "",
+            Metric: Array.isArray(result.result_metric) ? result.result_metric : [result.result_metric || ""],
             Value: result.result_value || "",
             "Decision Threshold": result.result_decision_threshold || "",
             Subset: result.result_subset_data || ""
         })),
+        
+        // Limitations and Caveats
         Limitations: txtData.caveats || "",
-        Input: txtData.model_architecture || "",
-        Output: txtData.model_architecture || ""
+        
+        // Additional Technical Details (stored in Comments if no direct mapping)
+        "Technical Details": {
+            "Code Availability": txtData.model_code_availability || "NA",
+            "Sustainability": txtData.sustainability || "NA", 
+            "Training Time": txtData.time_to_train || "NA",
+            "Inference Time": txtData.time_to_inference || "NA",
+            "Hardware Requirements": txtData.hardware_requirements || "NA"
+        }
     };
+    
+    // Remove empty technical details
+    if (Object.values(roadmapData["Technical Details"]).every(v => v === "NA" || !v)) {
+        delete roadmapData["Technical Details"];
+    }
     
     return roadmapData;
 }
 
-// Convert TXT dataset format to ROADMAP
+// Convert TXT dataset format to ROADMAP - COMPREHENSIVE MAPPING
 function convertTxtDatasetToRoadmap(txtData) {
     const roadmapData = {
+        // Basic Information
         Name: txtData.dataset_name || "",
+        
+        // Indexing and Content Codes
         "Indexing code": {
             Content: extractContentCodesFromDataset(txtData)
         },
+        
+        // Composition - comprehensive mapping
         Composition: {
             "Number of instances": txtData.number_of_instances ? parseInt(txtData.number_of_instances) : 0,
-            "Data type": ["Image"] // Default assumption
+            "Data type": ["Image"], // Default, could be inferred from imaging_details
+            "Sample Size Calculation": txtData.representativeness || "",
+            "Representativeness": {
+                "Sample type": txtData.representativeness || "",
+                "Population": txtData.subpopulations || "",
+                "Verification": txtData.verification || ""
+            }
         },
+        
+        // Imaging Details - comprehensive mapping
         Imaging: {
             "File format": txtData.file_format || ["DICOM"],
-            Resolution: txtData.resolution || "",
-            "Burned-in PHI": txtData.burned_in_phi || "Unknown"
+            "Resolution": txtData.resolution || "",
+            "Burned-in PHI": txtData.burned_in_phi || "Unknown",
+            "Pre-processing": txtData.imaging_details ? (Array.isArray(txtData.imaging_details) ? txtData.imaging_details.join('; ') : txtData.imaging_details) : ""
         },
-        "Collection process": txtData.collection_process || "",
-        Labeling: txtData.labeling || "",
+        
+        // Collection and Processing
+        "Collection process": [
+            txtData.collection_process,
+            txtData.composition ? `Composition: ${txtData.composition}` : null,
+            txtData.partioning_scheme ? `Partitioning: ${txtData.partioning_scheme}` : null
+        ].filter(Boolean).join('\n\n'),
+        
+        // Data Quality and Issues
+        Labeling: [
+            txtData.labeling,
+            txtData.missing_information ? `Missing Information: ${txtData.missing_information}` : null,
+            txtData.noise ? `Noise Issues: ${txtData.noise}` : null,
+            txtData.relationships_between_instances ? `Instance Relationships: ${txtData.relationships_between_instances}` : null
+        ].filter(Boolean).join('\n\n'),
+        
+        // Privacy and Ethics
         "Ethical review": txtData.confidentiality || "",
-        Confidentiality: txtData.confidentiality || ""
+        Confidentiality: [
+            txtData.confidentiality,
+            txtData.re_identification ? `Re-identification: ${txtData.re_identification}` : null
+        ].filter(Boolean).join('\n\n'),
+        
+        // Research Context
+        Comments: [
+            txtData.motivation ? `Motivation: ${txtData.motivation}` : null,
+            txtData.purpose ? `Purpose: ${txtData.purpose}` : null,
+            txtData.external_data ? `External Data: ${txtData.external_data}` : null,
+            txtData.dataset_availability ? `Availability: ${txtData.dataset_availability}` : null
+        ].filter(Boolean).join('\n\n'),
+        
+        // License
+        License: {
+            Text: txtData.dataset_license || "Not specified"
+        },
+        
+        // Partitions/Subsets - comprehensive mapping
+        Subsets: (txtData.partitions || []).map(partition => ({
+            "Subset name": partition.subset_name || "",
+            "Subset description": partition.subset_description || "",
+            "Number of instances": partition.number_instances || partition.patient_count || "",
+            "Site count": partition.site_count || "",
+            "Patient count": partition.patient_count || "",
+            "Age": partition.age || "Not specified",
+            "Sex": partition.sex || "Not specified", 
+            "Demographic": partition.demographic || "",
+            "Criterion": partition.criterion || ""
+        }))
     };
+    
+    // Remove empty subsets if none exist
+    if (!roadmapData.Subsets || roadmapData.Subsets.length === 0) {
+        delete roadmapData.Subsets;
+    }
     
     return roadmapData;
 }
@@ -624,12 +730,21 @@ function downloadTXT() {
     }
 }
 
-// Convert ROADMAP model to TXT format
+// Convert ROADMAP model to TXT format - COMPREHENSIVE REVERSE MAPPING
 function convertRoadmapToTxtModel(roadmapData) {
+    // Extract technical details from Comments or Technical Details field
+    const comments = roadmapData.Comments || "";
+    const technicalDetails = roadmapData["Technical Details"] || {};
+    
+    const extractFromComments = (keyword) => {
+        const match = comments.match(new RegExp(`${keyword}:\\s*([^\\n]+)`, 'i'));
+        return match ? match[1].trim() : "NA";
+    };
+    
     return {
         model_name: roadmapData.Name || "",
         content_code: roadmapData["Indexing code"]?.Content || [],
-        medical_task: roadmapData.Comments || roadmapData.Input || "",
+        medical_task: roadmapData.Comments?.split('\n\n')[0] || roadmapData.Input || "",
         date_created: roadmapData.Date?.Created || "",
         license: roadmapData.License?.Text || "",
         funding: roadmapData.Funding || "",
@@ -644,42 +759,80 @@ function convertRoadmapToTxtModel(roadmapData) {
             result_subset_data: result.Subset || ""
         })),
         caveats: roadmapData.Limitations || "",
-        model_code_availability: "NA",
-        sustainability: "NA",
-        time_to_train: "NA",
-        time_to_inference: "NA",
-        hardware_requirements: "NA",
+        model_code_availability: technicalDetails["Code Availability"] || extractFromComments("Code Availability") || "NA",
+        sustainability: technicalDetails["Sustainability"] || extractFromComments("Sustainability") || "NA",
+        time_to_train: technicalDetails["Training Time"] || extractFromComments("Training Time") || "NA",
+        time_to_inference: technicalDetails["Inference Time"] || extractFromComments("Inference Time") || "NA",
+        hardware_requirements: technicalDetails["Hardware Requirements"] || extractFromComments("Hardware") || "NA",
         model_architecture: roadmapData.Input || roadmapData.Output || ""
     };
 }
 
-// Convert ROADMAP dataset to TXT format  
+// Convert ROADMAP dataset to TXT format - COMPREHENSIVE REVERSE MAPPING  
 function convertRoadmapToTxtDataset(roadmapData) {
+    // Extract details from combined text fields
+    const extractFromText = (text, keyword) => {
+        if (!text) return "";
+        const match = text.match(new RegExp(`${keyword}:\\s*([^\\n]+)`, 'i'));
+        return match ? match[1].trim() : "";
+    };
+    
+    const collectionText = roadmapData["Collection process"] || "";
+    const labelingText = roadmapData.Labeling || "";
+    const commentsText = roadmapData.Comments || "";
+    const confidentialityText = roadmapData.Confidentiality || "";
+    
     return {
         dataset_name: roadmapData.Name || "",
-        imaging_details: ["Image data"],
+        imaging_details: roadmapData.Imaging?.["Pre-processing"] ? 
+            roadmapData.Imaging["Pre-processing"].split('; ') : ["Image data"],
         file_format: roadmapData.Imaging?.["File format"] || ["DICOM"],
         resolution: roadmapData.Imaging?.Resolution || "",
         burned_in_phi: roadmapData.Imaging?.["Burned-in PHI"] || "Unknown",
-        labeling: roadmapData.Labeling || "",
-        missing_information: "",
-        relationships_between_instances: "",
-        noise: "",
-        external_data: "",
-        confidentiality: roadmapData.Confidentiality || roadmapData["Ethical review"] || "",
-        subpopulations: "",
-        re_identification: "",
-        collection_process: roadmapData["Collection process"] || "",
-        composition: "",
+        
+        // Extract from combined labeling text
+        labeling: labelingText.split('\n\n')[0] || "",
+        missing_information: extractFromText(labelingText, "Missing Information"),
+        relationships_between_instances: extractFromText(labelingText, "Instance Relationships"),
+        noise: extractFromText(labelingText, "Noise Issues"),
+        
+        // Extract from comments
+        external_data: extractFromText(commentsText, "External Data"),
+        motivation: extractFromText(commentsText, "Motivation"),
+        purpose: extractFromText(commentsText, "Purpose"),
+        dataset_availability: extractFromText(commentsText, "Availability"),
+        
+        // Extract from confidentiality
+        confidentiality: confidentialityText.split('\n\n')[0] || "",
+        re_identification: extractFromText(confidentialityText, "Re-identification"),
+        
+        // Extract from collection process
+        collection_process: collectionText.split('\n\n')[0] || "",
+        composition: extractFromText(collectionText, "Composition"),
+        partioning_scheme: extractFromText(collectionText, "Partitioning"),
+        
+        // From composition object
+        subpopulations: roadmapData.Composition?.Representativeness?.Population || "",
         number_of_instances: roadmapData.Composition?.["Number of instances"] || 0,
-        representativeness: "",
-        verification: "",
-        motivation: "",
-        purpose: "",
-        partioning_scheme: "",
-        partitions: [],
-        dataset_availability: "",
-        dataset_license: ""
+        representativeness: roadmapData.Composition?.Representativeness?.["Sample type"] || 
+                          roadmapData.Composition?.["Sample Size Calculation"] || "",
+        verification: roadmapData.Composition?.Representativeness?.Verification || "",
+        
+        // License
+        dataset_license: roadmapData.License?.Text || "Not specified",
+        
+        // Convert subsets back to partitions
+        partitions: (roadmapData.Subsets || []).map(subset => ({
+            subset_name: subset["Subset name"] || "",
+            subset_description: subset["Subset description"] || "",
+            site_count: subset["Site count"] || "1",
+            patient_count: subset["Patient count"] || subset["Number of instances"] || "",
+            number_instances: subset["Number of instances"] || subset["Patient count"] || "",
+            age: subset.Age || "Not specified",
+            sex: subset.Sex || "Not specified",
+            demographic: subset.Demographic || "",
+            criterion: subset.Criterion || ""
+        }))
     };
 }
 
