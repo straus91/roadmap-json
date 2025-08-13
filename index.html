@@ -25,33 +25,54 @@
 
         <!-- Initial Choice Screen -->
         <div id="initial-screen" class="row justify-content-center">
-            <div class="col-12 col-md-10 col-lg-8">
-                <div class="card-deck mb-4">
+            <div class="col-12">
+                <div class="row mb-4">
                     <!-- Create New Card -->
-                    <div class="card shadow-sm hover-card" id="create-new-card">
-                        <div class="card-body text-center p-4">
-                            <div class="mb-3">
-                                <i class="fa fa-plus-circle fa-3x text-primary"></i>
+                    <div class="col-lg-4 col-md-6 mb-4">
+                        <div class="card shadow-sm hover-card h-100" id="create-new-card">
+                            <div class="card-body text-center p-4">
+                                <div class="mb-3">
+                                    <i class="fa fa-plus-circle fa-3x text-primary"></i>
+                                </div>
+                                <h4 class="card-title">Create New Card</h4>
+                                <p class="card-text">Start with a blank form to manually input all the required information for your model or dataset card.</p>
+                                <button class="btn btn-primary btn-lg" onclick="showCardTypeSelection('create')">
+                                    Get Started
+                                </button>
                             </div>
-                            <h4 class="card-title">Create New Card</h4>
-                            <p class="card-text">Start with a blank form to manually input all the required information for your model or dataset card.</p>
-                            <button class="btn btn-primary btn-lg" onclick="showCardTypeSelection('create')">
-                                Get Started
-                            </button>
                         </div>
                     </div>
 
                     <!-- Load & Edit Card -->
-                    <div class="card shadow-sm hover-card" id="load-edit-card">
-                        <div class="card-body text-center p-4">
-                            <div class="mb-3">
-                                <i class="fa fa-upload fa-3x text-success"></i>
+                    <div class="col-lg-4 col-md-6 mb-4">
+                        <div class="card shadow-sm hover-card h-100" id="load-edit-card">
+                            <div class="card-body text-center p-4">
+                                <div class="mb-3">
+                                    <i class="fa fa-upload fa-3x text-success"></i>
+                                </div>
+                                <h4 class="card-title">Load & Edit Card</h4>
+                                <p class="card-text">Upload an existing ROADMAP JSON file to populate the form and make edits or corrections.</p>
+                                <button class="btn btn-success btn-lg" onclick="showFileUpload()">
+                                    Upload File
+                                </button>
                             </div>
-                            <h4 class="card-title">Load & Edit Card</h4>
-                            <p class="card-text">Upload an existing ROADMAP JSON file to populate the form and make edits or corrections.</p>
-                            <button class="btn btn-success btn-lg" onclick="showFileUpload()">
-                                Upload File
-                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Create from PDF Card -->
+                    <div class="col-lg-4 col-md-12 mb-4">
+                        <div class="card shadow-sm hover-card h-100" id="process-pdf-card">
+                            <div class="card-body text-center p-4">
+                                <div class="mb-3">
+                                    <i class="fa fa-file-pdf-o fa-3x text-danger"></i>
+                                </div>
+                                <h4 class="card-title">Create from PDF</h4>
+                                <p class="card-text">Upload a PDF document and let AI extract the information to pre-fill the form for you.</p>
+                                <input type="file" id="pdf-file-input" accept=".pdf" style="display: none;" onchange="handlePdfUpload(event)">
+                                <button class="btn btn-danger btn-lg" onclick="document.getElementById('pdf-file-input').click()">
+                                    Upload PDF
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -287,9 +308,10 @@
                             </p>
                             <ul class="small text-muted">
                                 <li><strong>Authors/Organizations:</strong> Use "Add Item" to add more entries</li>
+                                <li><strong>Adding Sections:</strong> Property search is case-sensitive</li>
                                 <li><strong>Checkboxes:</strong> Select multiple items for uses and modalities</li>
                                 <li><strong>Dates:</strong> Use YYYY-MM-DD format</li>
-                                <li><strong>Required:</strong> Only "Name" field is required</li>
+                                <li><strong>Required:</strong> All fields are optional (fill in what you have)</li>
                                 <li><strong>Download:</strong> Creates complete ROADMAP JSON</li>
                             </ul>
                         </div>

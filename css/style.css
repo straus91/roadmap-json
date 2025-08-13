@@ -77,32 +77,102 @@ header .display-4 {
 }
 
 /* JSON Editor Customizations */
-#editor_holder {
+#editor_holder,
+#editor-holder {
     background-color: #fff;
     border-radius: 8px;
+    overflow: visible !important;
+    position: relative;
+    z-index: 1;
 }
 
-/* Fix dropdown overflow issues in Model Information */
-.json-editor .well,
-.json-editor .form-group,
-.json-editor [data-schemapath] {
+/* Force specific containers to allow dropdown overflow */
+#editor_holder .json-editor-object,
+#editor-holder .json-editor-object,
+#editor_holder .well,
+#editor-holder .well {
     overflow: visible !important;
 }
 
+/* Fix dropdown overflow issues in Model Information - Enhanced */
+.json-editor .well,
+.json-editor .form-group,
+.json-editor [data-schemapath],
+.json-editor .object-properties {
+    overflow: visible !important;
+    position: relative !important;
+    z-index: auto !important;
+}
+
+/* Base select styling with proper layering */
 .json-editor select {
     z-index: 1050 !important;
+    position: relative !important;
+    margin-bottom: 15px !important;
+}
+
+/* Higher priority when focused */
+.json-editor select:focus {
+    z-index: 2000 !important;
+    position: relative !important;
+}
+
+/* Edge browser specific dropdown fixes */
+.json-editor select option {
+    background-color: white !important;
+    color: black !important;
+    padding: 2px 4px !important;
+}
+
+/* Force dropdown list appearance in Edge */
+.json-editor select[size="1"] {
+    appearance: menulist !important;
+    -webkit-appearance: menulist !important;
+    -moz-appearance: menulist !important;
+}
+
+/* Property name inputs positioning */
+.json-editor input[placeholder*="Property name"],
+.json-editor .property-selector {
+    z-index: 999 !important;
+    position: relative !important;
+    margin-top: 20px !important;
+    margin-bottom: 10px !important;
+}
+
+/* Prevent property controls from overlapping dropdowns */
+.json-editor .property-controls {
+    margin-top: 25px !important;
+    z-index: 998 !important;
+    position: relative !important;
+    background: white !important;
+    padding: 8px 0 !important;
+    border-top: 1px solid #e9ecef !important;
+}
+
+/* Container spacing to prevent overlap */
+.json-editor .well .form-group:has(select) {
+    margin-bottom: 25px !important;
+}
+
+/* Special handling for object property containers */
+.json-editor .well:has(select) {
+    padding-bottom: 25px !important;
+}
+
+/* Ensure object properties container allows overflow */
+.json-editor .object-properties {
+    overflow: visible !important;
     position: relative;
 }
 
-/* Ensure dropdowns appear above other elements */
-.json-editor .form-control:focus {
-    z-index: 1060 !important;
-}
-
-/* Fix for Edge browser dropdown rendering */
-.json-editor select option {
-    background-color: white;
-    color: black;
+/* Fix for property controls at bottom of objects */
+.json-editor .property-controls {
+    margin-top: 15px;
+    z-index: 1000;
+    position: relative;
+    background: white;
+    padding: 5px 0;
 }
 
 /* Custom styling for JSON Editor form elements */
@@ -371,6 +441,43 @@ header .display-4 {
     }
 }
 
+
+/* Field Examples Styling */
+.field-examples {
+    margin-top: 5px !important;
+    padding: 8px 12px !important;
+    background: #f8f9fa !important;
+    border: 1px solid #e9ecef !important;
+    border-radius: 4px !important;
+    font-size: 12px !important;
+    color: #6c757d !important;
+    line-height: 1.4 !important;
+}
+
+.field-examples code {
+    background: white !important;
+    padding: 2px 6px !important;
+    border-radius: 3px !important;
+    font-size: 11px !important;
+    border: 1px solid #dee2e6 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    display: inline-block !important;
+    margin: 1px 0 !important;
+}
+
+.field-examples code:hover {
+    background-color: #e9ecef !important;
+    border-color: #007bff !important;
+    color: #007bff !important;
+    transform: translateY(-1px) !important;
+}
+
+.field-examples strong {
+    color: #495057 !important;
+    font-size: 12px !important;
+}
+
 /* Print styles */
 @media print {
     .no-print {
@@ -379,5 +486,9 @@ header .display-4 {
     
     .card {
         break-inside: avoid;
+    }
+    
+    .field-examples {
+        display: none !important;
     }
 }

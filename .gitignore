@@ -65,3 +65,4 @@ dev/
 # Testing files
 test-results/
 .nyc_output/
+.vercel

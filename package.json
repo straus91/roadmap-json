@@ -1,0 +1,31 @@
+{
+  "name": "roadmap-model-card-editor",
+  "version": "1.0.0",
+  "description": "ROADMAP Model Card Editor with PDF processing capabilities",
+  "type": "module",
+  "main": "index.html",
+  "scripts": {
+    "start": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "formidable": "^3.5.1",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "roadmap",
+    "model-card",
+    "ai",
+    "medical-imaging",
+    "pdf-processing"
+  ],
+  "author": "",
+  "license": "MIT"
+}

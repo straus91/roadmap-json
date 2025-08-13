@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/process-pdf.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
+  ]
+}

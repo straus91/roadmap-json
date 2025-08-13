@@ -145,13 +145,27 @@ async function initializeEditor(initialData = null) {
             disable_properties: false,
             show_opt_in: false,
             compact: false,
-            object_layout: 'normal'
+            object_layout: 'normal',
+            // Additional options to help with dropdown rendering
+            use_default_values: true,
+            remove_empty_properties: false,
+            array_controls_top: true,
+            object_controls_top: false
         });
         
         // Editor event listeners
         editor.on('ready', function() {
             console.log('✅ Editor ready for', currentCardType);
             enableEditorControls();
+            
+            // Fix dropdown positioning issues
+            fixDropdownOverlapIssues();
+            
+            // Add examples to form fields - wait longer for full form rendering
+            setTimeout(() => {
+                addExamplesToFields();
+            }, 1500);
+            
             
             // Expand all by default
             setTimeout(() => {
@@ -896,6 +910,610 @@ function resetToBaseSchema() {
     // Reload editor
     initializeEditor();
     showAlert('Reset to base schema', 'info');
+}
+
+// Fix dropdown overlap issues - Enhanced approach
+function fixDropdownOverlapIssues() {
+    setTimeout(() => {
+        const editorContainer = document.getElementById('editor-holder');
+        if (!editorContainer) return;
+        
+        // Apply comprehensive fixes
+        applyDropdownContainerFixes(editorContainer);
+        fixPropertyNameOverlap(editorContainer);
+        handleSelectFocusEvents(editorContainer);
+        
+    }, 500);
+    
+    // Re-apply fixes when editor content changes
+    setTimeout(() => {
+        if (editor && editor.on) {
+            editor.on('change', function() {
+                setTimeout(() => fixDropdownOverlapIssues(), 100);
+            });
+        }
+    }, 1000);
+}
+
+function applyDropdownContainerFixes(container) {
+    // Force all containers to allow overflow
+    const objectContainers = container.querySelectorAll('.well, .json-editor-object, .form-group, [data-schemapath]');
+    objectContainers.forEach(element => {
+        element.style.overflow = 'visible';
+        element.style.position = 'relative';
+        element.style.zIndex = 'auto';
+    });
+}
+
+function fixPropertyNameOverlap(container) {
+    // Find property name inputs and physically reorder them
+    const propertyInputs = container.querySelectorAll('input[placeholder*="Property name"], .property-selector');
+    propertyInputs.forEach(input => {
+        const parentContainer = input.closest('.well, .json-editor-object, .form-group');
+        if (parentContainer) {
+            const selects = parentContainer.querySelectorAll('select');
+            if (selects.length > 0) {
+                // Create separator div to provide visual space
+                let separator = input.parentNode.querySelector('.dropdown-separator');
+                if (!separator) {
+                    separator = document.createElement('div');
+                    separator.className = 'dropdown-separator';
+                    separator.style.cssText = 'height: 25px; clear: both; border-top: 1px solid #e9ecef; margin: 15px 0; background: #f8f9fa;';
+                }
+                
+                // Move the input after selects
+                const inputParent = input.parentNode;
+                const lastSelect = selects[selects.length - 1];
+                const selectParent = lastSelect.closest('.form-group') || lastSelect.parentNode;
+                
+                // Insert separator and then input
+                selectParent.parentNode.insertBefore(separator, selectParent.nextSibling);
+                selectParent.parentNode.insertBefore(inputParent, separator.nextSibling);
+                
+                // Style adjustments
+                input.style.marginTop = '10px';
+                input.style.position = 'relative';
+                input.style.zIndex = '999';
+                
+                // Ensure select dropdowns have higher z-index
+                selects.forEach(select => {
+                    select.style.zIndex = '1050';
+                    select.style.position = 'relative';
+                    select.style.marginBottom = '15px';
+                });
+            }
+        }
+    });
+}
+
+function handleSelectFocusEvents(container) {
+    const selectElements = container.querySelectorAll('select');
+    
+    selectElements.forEach(select => {
+        // Remove any existing event listeners to avoid duplicates
+        select.removeEventListener('focus', handleDropdownFocus);
+        select.removeEventListener('blur', handleDropdownBlur);
+        
+        // Add enhanced event listeners
+        select.addEventListener('focus', function() {
+            handleDropdownFocus(this);
+        });
+        
+        select.addEventListener('blur', function() {
+            handleDropdownBlur(this);
+        });
+        
+        // For Edge browser specifically - set explicit size for large dropdowns
+        if (select.options.length > 8) {
+            select.setAttribute('size', '1'); // Keep as dropdown, not listbox
+            select.style.maxHeight = 'none'; // Let browser handle
+        }
+    });
+}
+
+function handleDropdownFocus(selectElement) {
+    try {
+        // Temporarily increase z-index during focus
+        selectElement.style.zIndex = '2000';
+        selectElement.style.position = 'relative';
+        
+        // Find and temporarily hide property name inputs in the same container
+        const container = selectElement.closest('.well, .json-editor-object, .form-group');
+        if (container) {
+            const propertyInputs = container.querySelectorAll('input[placeholder*="Property name"], .property-selector');
+            propertyInputs.forEach(input => {
+                input.style.visibility = 'hidden';
+                input.setAttribute('data-hidden-for-dropdown', 'true');
+            });
+        }
+    } catch (error) {
+        console.log('Dropdown focus handling failed:', error);
+    }
+}
+
+function handleDropdownBlur(selectElement) {
+    try {
+        // Reset z-index after blur
+        setTimeout(() => {
+            selectElement.style.zIndex = '1050';
+            
+            // Restore visibility of property name inputs
+            const container = selectElement.closest('.well, .json-editor-object, .form-group');
+            if (container) {
+                const hiddenInputs = container.querySelectorAll('input[data-hidden-for-dropdown="true"]');
+                hiddenInputs.forEach(input => {
+                    input.style.visibility = 'visible';
+                    input.removeAttribute('data-hidden-for-dropdown');
+                });
+            }
+        }, 150); // Small delay to allow dropdown to close
+    } catch (error) {
+        console.log('Dropdown blur handling failed:', error);
+    }
+}
+
+// Add examples to form fields
+function addExamplesToFields() {
+    const editorContainer = document.getElementById('editor-holder');
+    if (!editorContainer || !editor) {
+        console.log('Editor container or editor not ready yet');
+        setTimeout(() => addExamplesToFields(), 1000);
+        return;
+    }
+    
+    // Wait for actual form fields to be generated (not just structural elements)
+    const checkForRealFields = () => {
+        const realFields = editorContainer.querySelectorAll('[data-schemapath*="Name"], [data-schemapath*="Method"], [data-schemapath*="Version"], [data-schemapath*="License"]');
+        
+        if (realFields.length === 0) {
+            console.log('Waiting for actual form fields to be generated...');
+            setTimeout(checkForRealFields, 500);
+            return;
+        }
+        
+        console.log('=== Adding examples to fields ===');
+        console.log(`Found ${realFields.length} actual form fields generated`);
+        
+        // Find all input fields with meaningful schema paths
+        const meaningfulInputs = editorContainer.querySelectorAll('input[data-schemapath]:not([data-schemapath="root"]), textarea[data-schemapath]:not([data-schemapath="root"])');
+        console.log(`Found ${meaningfulInputs.length} inputs with meaningful schema paths`);
+        
+        // Also find inputs within labeled containers (for nested objects)
+        const containerInputs = editorContainer.querySelectorAll('[data-schemapath*="."] input, [data-schemapath*="."] textarea');
+        console.log(`Found ${containerInputs.length} inputs in nested containers`);
+        
+        let examplesAdded = 0;
+        
+        // Combine all potential inputs
+        const allInputs = [...meaningfulInputs, ...containerInputs];
+        const uniqueInputs = [...new Set(allInputs)]; // Remove duplicates
+        
+        console.log(`Processing ${uniqueInputs.length} unique input fields`);
+        
+        uniqueInputs.forEach((input, index) => {
+            const pathElement = input.closest('[data-schemapath]');
+            const schemaPath = pathElement?.getAttribute('data-schemapath');
+            console.log(`Input ${index}: type=${input.type}, path=${schemaPath}`);
+            
+            if (addExampleToField(input)) {
+                examplesAdded++;
+            }
+        });
+        
+        console.log(`✅ Added examples to ${examplesAdded} fields`);
+        
+        // Handle array items that get added dynamically
+        const addButtons = editorContainer.querySelectorAll('button[title*="Add"], .json-editor-btn-add, button[class*="add"]');
+        console.log(`Found ${addButtons.length} add buttons for dynamic content`);
+        
+        addButtons.forEach(button => {
+            // Remove existing listener to avoid duplicates
+            button.removeEventListener('click', handleAddButtonClick);
+            button.addEventListener('click', handleAddButtonClick);
+        });
+        
+        // Also periodically re-check for new fields
+        setTimeout(() => {
+            console.log('Re-checking for new fields that need examples...');
+            const newInputs = editorContainer.querySelectorAll('input[type="text"], input[type="url"], input[type="email"], textarea');
+            let newExamples = 0;
+            newInputs.forEach(input => {
+                if (!input.parentNode.querySelector('.field-examples') && addExampleToField(input)) {
+                    newExamples++;
+                }
+            });
+            if (newExamples > 0) {
+                console.log(`✅ Added examples to ${newExamples} additional fields`);
+            }
+        }, 2000);
+        
+    };
+    
+    // Start checking for real fields
+    checkForRealFields();
+}
+
+function handleAddButtonClick() {
+    setTimeout(() => {
+        console.log('Array item added, re-adding examples...');
+        addExamplesToFields();
+    }, 1000);
+}
+
+function addExampleToField(inputElement) {
+    try {
+        // Skip if already has examples
+        if (inputElement.parentNode.querySelector('.field-examples')) return false;
+        
+        // Get the JSON Editor path from the input's data attributes or parent structure
+        const pathElement = inputElement.closest('[data-schemapath]');
+        if (!pathElement) {
+            // Try alternative methods to get schema path
+            const labelElement = inputElement.closest('.form-group')?.querySelector('label');
+            if (labelElement) {
+                console.log('No direct schema path, trying label:', labelElement.textContent);
+            }
+            return false;
+        }
+        
+        const schemaPath = pathElement.getAttribute('data-schemapath');
+        console.log('Processing field with schema path:', schemaPath);
+        
+        const examples = getExamplesFromSchema(schemaPath);
+        
+        if (examples && examples.length > 0) {
+            console.log('✅ Found examples for field at', schemaPath, ':', examples);
+            // Create examples container
+            let examplesContainer = inputElement.parentNode.querySelector('.field-examples');
+            if (!examplesContainer) {
+                examplesContainer = document.createElement('div');
+                examplesContainer.className = 'field-examples';
+                examplesContainer.style.cssText = `
+                    margin-top: 5px;
+                    padding: 8px 12px;
+                    background: #f8f9fa;
+                    border: 1px solid #e9ecef;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    color: #6c757d;
+                `;
+                
+                // Add examples content
+                const examplesList = examples.slice(0, 3).map(ex => `<code style="background: white; padding: 1px 4px; border-radius: 3px; font-size: 11px;">${ex}</code>`).join('<br>');
+                examplesContainer.innerHTML = `
+                    <strong style="color: #495057;">Examples:</strong><br>
+                    ${examplesList}
+                    ${examples.length > 3 ? `<br><em>...and ${examples.length - 3} more</em>` : ''}
+                `;
+                
+                // Make examples clickable to fill the field
+                const codeElements = examplesContainer.querySelectorAll('code');
+                codeElements.forEach((code, index) => {
+                    code.style.cursor = 'pointer';
+                    code.style.transition = 'background-color 0.2s';
+                    code.addEventListener('mouseenter', () => code.style.backgroundColor = '#e9ecef');
+                    code.addEventListener('mouseleave', () => code.style.backgroundColor = 'white');
+                    code.addEventListener('click', () => {
+                        inputElement.value = examples[index];
+                        inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                        inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                });
+                
+                inputElement.parentNode.appendChild(examplesContainer);
+                return true;
+            }
+        } else {
+            console.log('No examples found for field at path:', schemaPath);
+        }
+        
+        return false;
+    } catch (error) {
+        console.log('Could not add examples to field:', error);
+        return false;
+    }
+}
+
+function getExamplesFromSchema(schemaPath) {
+    if (!schemaProcessor || !currentCardType) return null;
+    
+    try {
+        // Get both the processed schema (used by JSON Editor) and the original ROADMAP schema
+        const processedSchema = schemaProcessor.loadedSchemas[currentCardType];
+        const originalSchema = schemaProcessor.baseSchemas[currentCardType] || schemaProcessor.loadedSchemas[currentCardType];
+        
+        if (!processedSchema || !originalSchema) return null;
+        
+        console.log('Looking for examples in schema path:', schemaPath);
+        
+        // Try to find examples in the original ROADMAP schema structure
+        const examples = findExamplesInOriginalSchema(originalSchema, schemaPath, currentCardType);
+        if (examples) {
+            console.log('Found examples:', examples);
+            return examples;
+        }
+        
+        return null;
+    } catch (error) {
+        console.log('Error getting examples from schema:', error);
+        return null;
+    }
+}
+
+function findExamplesInOriginalSchema(schema, schemaPath, cardType) {
+    try {
+        console.log(`=== Finding examples for path: ${schemaPath} ===`);
+        
+        // For ROADMAP schemas, look in the $defs section
+        const sectionName = cardType.toLowerCase();
+        const sectionDef = schema.$defs?.[sectionName];
+        
+        if (!sectionDef || !sectionDef.properties) {
+            console.log(`No section definition found for ${sectionName}`);
+            return null;
+        }
+        
+        // Extract field name from schema path (e.g., "root.Method.0" -> "Method")
+        const pathParts = schemaPath.replace('root.', '').split('.');
+        const fieldName = pathParts[0];
+        console.log('Looking for field:', fieldName, 'in path parts:', pathParts);
+        
+        // Look for the field in the section properties
+        let fieldDef = sectionDef.properties[fieldName];
+        if (!fieldDef) {
+            console.log(`Field ${fieldName} not found in main properties, checking nested...`);
+            
+            // Try to find in nested structures or $defs
+            fieldDef = findNestedField(schema, fieldName);
+            if (!fieldDef) {
+                console.log(`Field ${fieldName} not found anywhere. Available properties:`, Object.keys(sectionDef.properties));
+                return null;
+            }
+        }
+        
+        console.log('Found field definition for', fieldName, ':', fieldDef);
+        
+        // Check for examples in various locations
+        const examples = extractExamplesFromFieldDef(fieldDef, schema, fieldName);
+        
+        if (examples && examples.length > 0) {
+            console.log('✅ Found examples for', fieldName, ':', examples);
+            return examples;
+        }
+        
+        console.log('No examples found for field:', fieldName);
+        return null;
+    } catch (error) {
+        console.log('Error finding examples in original schema:', error);
+        return null;
+    }
+}
+
+function findNestedField(schema, fieldName) {
+    // Search in all $defs for the field
+    if (schema.$defs) {
+        for (const [defName, defValue] of Object.entries(schema.$defs)) {
+            if (defValue.properties && defValue.properties[fieldName]) {
+                console.log(`Found ${fieldName} in $defs.${defName}`);
+                return defValue.properties[fieldName];
+            }
+        }
+    }
+    return null;
+}
+
+function extractExamplesFromFieldDef(fieldDef, schema, fieldName) {
+    // Direct examples
+    if (fieldDef.examples) {
+        return fieldDef.examples;
+    }
+    
+    // Array items examples
+    if (fieldDef.type === 'array' && fieldDef.items) {
+        if (fieldDef.items.examples) {
+            return fieldDef.items.examples;
+        }
+        
+        // Handle $ref in array items
+        if (fieldDef.items.$ref) {
+            const refPath = fieldDef.items.$ref.replace('#/$defs/', '');
+            const refDef = schema.$defs?.[refPath];
+            if (refDef && refDef.examples) {
+                return refDef.examples;
+            }
+        }
+        
+        // Handle enum in array items (treat as examples)
+        if (fieldDef.items.enum) {
+            return fieldDef.items.enum.slice(0, 5); // Take first 5 as examples
+        }
+    }
+    
+    // Object properties examples
+    if (fieldDef.type === 'object' && fieldDef.properties) {
+        // Look for examples in object properties
+        const objectExamples = [];
+        for (const [propName, propDef] of Object.entries(fieldDef.properties)) {
+            if (propDef.examples) {
+                objectExamples.push(`${propName}: ${propDef.examples[0]}`);
+            }
+        }
+        if (objectExamples.length > 0) {
+            return objectExamples;
+        }
+    }
+    
+    // Handle $ref at field level
+    if (fieldDef.$ref) {
+        const refPath = fieldDef.$ref.replace('#/$defs/', '');
+        const refDef = schema.$defs?.[refPath];
+        return extractExamplesFromFieldDef(refDef, schema, fieldName);
+    }
+    
+    // Handle enum (treat as examples)
+    if (fieldDef.enum) {
+        return fieldDef.enum.slice(0, 5); // Take first 5 as examples
+    }
+    
+    return null;
+}
+
+
+// Debug function to manually trigger examples (available in console)
+window.debugExamples = function() {
+    console.log('=== Manual Examples Debug ===');
+    const container = document.getElementById('editor-holder');
+    if (!container) {
+        console.log('No editor container found');
+        return;
+    }
+    
+    // Show all elements with data-schemapath
+    const pathElements = container.querySelectorAll('[data-schemapath]');
+    console.log('All elements with schema paths:');
+    pathElements.forEach((el, i) => {
+        console.log(`${i}: ${el.getAttribute('data-schemapath')} -> ${el.tagName} ${el.className}`);
+    });
+    
+    const inputs = container.querySelectorAll('input[type="text"], input[type="url"], input[type="email"], textarea');
+    console.log('Found', inputs.length, 'total input fields');
+    
+    inputs.forEach((input, i) => {
+        const pathElement = input.closest('[data-schemapath]');
+        const schemaPath = pathElement?.getAttribute('data-schemapath');
+        const hasExamples = !!input.parentNode.querySelector('.field-examples');
+        const isInWell = !!input.closest('.well');
+        
+        console.log(`Input ${i}:`, {
+            type: input.type,
+            schemaPath: schemaPath,
+            hasExamples: hasExamples,
+            placeholder: input.placeholder,
+            inWell: isInWell,
+            className: input.className,
+            parentClasses: input.parentNode?.className
+        });
+        
+        if (schemaPath && schemaPath !== 'root' && !hasExamples) {
+            console.log(`  -> Trying to find examples for ${schemaPath}...`);
+            const examples = getExamplesFromSchema(schemaPath);
+            if (examples) {
+                console.log(`  -> Found examples:`, examples);
+            } else {
+                console.log(`  -> No examples found`);
+            }
+        }
+    });
+    
+    // Force re-add examples
+    console.log('Force re-adding examples...');
+    addExamplesToFields();
+};
+
+// PDF Upload Handler
+async function handlePdfUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+        showAlert('Please select a valid PDF file.', 'danger');
+        return;
+    }
+
+    // Validate file size (10MB limit)
+    const maxSizeInMB = 10;
+    if (file.size > maxSizeInMB * 1024 * 1024) {
+        showAlert(`File size exceeds ${maxSizeInMB}MB limit. Please select a smaller PDF file.`, 'danger');
+        return;
+    }
+
+    // Show a loading indicator
+    showAlert('Processing PDF... This may take a moment.', 'info', 0); // 0 duration = sticky
+
+    const formData = new FormData();
+    formData.append('pdf', file);
+
+    try {
+        // Send the file to your new serverless function
+        const response = await fetch('/api/process-pdf', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error occurred' }));
+            throw new Error(errorData.error || `Server error: ${response.status}`);
+        }
+
+        const structuredJson = await response.json();
+
+        // Hide the loading indicator
+        document.querySelector('.alert.custom-alert')?.remove();
+
+        // Validate the response structure
+        if (!structuredJson || (typeof structuredJson !== 'object')) {
+            throw new Error('Invalid response format from PDF processing');
+        }
+
+        // Determine the card type from the LLM's output
+        let cardType = 'unknown';
+        let editorData = {};
+
+        if (structuredJson.Model) {
+            cardType = 'model';
+            editorData = structuredJson.Model;
+        } else if (structuredJson.Dataset) {
+            cardType = 'dataset';
+            editorData = structuredJson.Dataset;
+        } else {
+            // Try to infer from the structure
+            if (structuredJson.Name || structuredJson.Input || structuredJson.Output || structuredJson.Results) {
+                cardType = 'model';
+                editorData = structuredJson;
+            } else if (structuredJson.Composition || structuredJson.Imaging || structuredJson.Labeling) {
+                cardType = 'dataset';
+                editorData = structuredJson;
+            } else {
+                throw new Error('Could not determine if this describes a model or dataset from the PDF content');
+            }
+        }
+
+        // Show success message
+        showAlert(`✅ Successfully extracted ${cardType} information from PDF!`, 'success');
+
+        // Start the editor with the pre-filled data
+        currentCardType = cardType;
+        document.getElementById('initial-screen').style.display = 'none';
+        document.getElementById('editor-section').style.display = 'block';
+        updateEditorUI(cardType);
+        
+        // Initialize editor with the extracted data
+        initializeEditor(editorData);
+
+        // Clear the file input for next use
+        event.target.value = '';
+
+    } catch (error) {
+        console.error('PDF Upload Error:', error);
+        
+        // Hide the loading indicator
+        document.querySelector('.alert.custom-alert')?.remove();
+        
+        // Show error message
+        let errorMessage = 'Error processing PDF: ' + error.message;
+        
+        if (error.message.includes('API key')) {
+            errorMessage = 'PDF processing is not configured. Please contact your administrator.';
+        } else if (error.message.includes('Failed to fetch')) {
+            errorMessage = 'Network error. Please check your connection and try again.';
+        }
+        
+        showAlert(errorMessage, 'danger');
+        
+        // Clear the file input
+        event.target.value = '';
+    }
 }
 
 // Error handling
