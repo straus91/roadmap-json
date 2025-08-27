@@ -1,0 +1,37 @@
+{
+  "Name": "Duke Lung Cancer Screening (DLCS) Dataset",
+  "Version": "Not specified",
+  "License": {
+    "Text": "Not specified in the article."
+  },
+  "Comments": "A reference dataset of annotated low-dose screening thoracic CT scans from a high-volume lung cancer screening center.  Intended for lung cancer risk stratification, radiomics analysis, and development of AI algorithms for lung nodule detection and classification. Includes Lung-RADS scores and, if applicable, timing and characteristics of future lung cancer diagnoses.",
+  "Imaging": {
+    "Modality": [],
+    "File format": [
+      null
+    ],
+    "Resolution": "0.6 mm section thickness",
+    "Acquisition": "Detailed acquisition parameters referenced in a prior study (13), but not provided in this article.",
+    "Quality": "Scans excluded if Lung-RADS 0, image or report data unavailable, or no nodules met annotation criteria (size ≥ 4 mm or any segmental/proximal airway nodule)."
+  },
+  "Labeling": "{\"Methodology\":\"Semiautomated annotation process using a MONAI nodule detection algorithm for initial nodule candidates.  Radiologists reviewed and corrected annotations. Four annotation groups based on level of automation.\",\"Ground Truth\":\"Radiologist reports served as the basis for annotation.  Spot checks performed by fellowship-trained cardiothoracic radiologists.\",\"Inter-reader\":\"Annotation success rates: Group 1: 99% (22/22 failures removed); Group 2: 97.7% (11/477 failures removed); Group 3: 100%; Group 4: 98%. Overall success rate in spot checks: 97-100%.\",\"Quality Control\":\"All semiautomated annotations inspected to ensure a pulmonary lesion was annotated; obvious failures removed. Spot checks by fellowship-trained radiologists.\",\"Annotation Tools\":\"Custom Python program, MONAI nodule detection algorithm\"}",
+  "Collection process": "{\"Methodology\":\"Retrospective study. LDCT scans and radiologist reports were collected from a single center.\",\"Sources\":\"Single-center data from a high-volume lung cancer screening center.\",\"Time period\":\"January 1, 2015, through June 30, 2021\",\"Inclusion Exclusion\":\"Patients receiving LDCT screening during the study period. Scans excluded if Lung-RADS 0, image or report data unavailable, or no nodules met annotation criteria (size ≥ 4 mm or any segmental/proximal airway nodule). For patients with multiple scans, the terminal examination was used.\",\"IRB Ethics\":\"IRB approval obtained (Pro00108863) with waiver of informed consent. HIPAA compliant.\"}",
+  "Composition": {
+    "Data type": "Report text",
+    "Number of instances": "2061 LDCT scans; 3187 annotated nodules. Publicly available subset: 1613 scans, 2487 nodules. Held-out test set: 448 scans.",
+    "Demographics": "1032 female, 1029 male patients; mean age 66.7 years ± 6.2 (SD).  Detailed demographics in Table 1 (not provided in article).",
+    "Disease Distribution": "7.5% (155 of 2061) of patients had later diagnoses of lung cancer.",
+    "Temporal": "Data collected from January 1, 2015, through June 30, 2021. Minimum 1-year follow-up available for some patients."
+  },
+  "Technical": {
+    "Storage": "De-identified data stored as Neuroimaging Informatics Technology Initiative (NIfTI) files. Annotations stored as .obj files (containing 8 coordinates representing a 3D bounding box).",
+    "Privacy": "Data de-identified to remove protected health information (PHI). HIPAA compliant.",
+    "Validation": "A held-out test set of 448 scans (21.7%) was withheld.",
+    "Benchmarking": "The MONAI algorithm used for annotation had previously reported cross-validation sensitivities of 0.835 and 0.988 at different false positive rates (14)."
+  },
+  "Clinical": {
+    "Application": "Lung cancer screening workflow; lung cancer risk stratification; radiomics analysis; development of AI algorithms for lung nodule detection and classification.",
+    "Validation Studies": "Not specified.",
+    "Impact": "Potential to improve lung cancer screening and diagnosis through the development and validation of AI algorithms."
+  }
+}

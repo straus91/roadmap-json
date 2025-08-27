@@ -229,6 +229,15 @@
                             </button>
                             
                             <div class="btn-group-vertical w-100 mb-2">
+                                <button class="btn btn-success" id="save-to-server-btn" onclick="saveToServer()" disabled>
+                                    <i class="fa fa-save mr-1"></i>
+                                    Save to Server
+                                </button>
+                                <button class="btn btn-info" id="browse-schemas-btn" onclick="browseSchemas()">
+                                    <i class="fa fa-folder-open mr-1"></i>
+                                    Browse Saved Schemas
+                                </button>
+                                <div class="btn-divider my-2"></div>
                                 <button class="btn btn-primary" id="download-json-btn" onclick="downloadJSON()" disabled>
                                     <i class="fa fa-download mr-1"></i>
                                     Download JSON
@@ -316,6 +325,70 @@
                             </ul>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Browse Schemas Modal -->
+    <div class="modal fade" id="browseSchemasModal" tabindex="-1" role="dialog" aria-labelledby="browseSchemasModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="browseSchemasModalLabel">
+                        <i class="fa fa-folder-open mr-2"></i>Browse Saved Schemas
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <!-- Search and Filter Controls -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" id="schema-search" placeholder="Search by title, authors, or journal...">
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-control" id="schema-type-filter">
+                                <option value="">All Types</option>
+                                <option value="model">Models</option>
+                                <option value="dataset">Datasets</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <input type="number" class="form-control" id="schema-year-filter" placeholder="Year" min="2010" max="2030">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary" onclick="searchSchemas()">
+                                <i class="fa fa-search mr-1"></i>Search
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-outline-secondary" onclick="refreshSchemas()">
+                                <i class="fa fa-refresh mr-1"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Statistics Row -->
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="alert alert-info" id="schema-statistics">
+                                Loading statistics...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Schemas List -->
+                    <div id="schemas-list">
+                        <div class="text-center p-4">
+                            <i class="fa fa-spinner fa-spin fa-2x mb-2"></i>
+                            <p>Loading saved schemas...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>

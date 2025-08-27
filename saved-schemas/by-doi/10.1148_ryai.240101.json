@@ -1,0 +1,37 @@
+{
+  "Name": "RSNA Abdominal Traumatic Injury CT (RATIC) dataset",
+  "Version": "Not specified",
+  "License": {
+    "Text": "Not specified"
+  },
+  "Comments": "Large, publicly available, expert-labeled dataset of abdominal CT images for traumatic injuries.  Focuses on injuries to the liver, spleen, kidneys, bowel, mesentery, and active extravasation. Used for the RSNA 2023 Abdominal Trauma Detection competition to develop AI models for detecting traumatic injuries in abdominal CT scans.  Aimed at improving the speed and accuracy of trauma diagnosis, particularly valuable in areas with limited subspecialist availability.",
+  "Imaging": {
+    "Modality": [],
+    "File format": [
+      "DICOM"
+    ],
+    "Resolution": "Not specified",
+    "Acquisition": "Variation in protocols across different hospitals (single portal venous phase, multiphasic imaging, split bolus approaches). Specific parameters are not detailed.",
+    "Quality": "Not specified"
+  },
+  "Labeling": "{\"Methodology\":\"Radiologist annotators (43 attending radiologists and 2 fellows) independently reviewed and annotated the images according to the AAST organ injury grading system for solid organ injuries and presence/absence of other injuries (bowel, mesenteric injuries, and active extravasation).\",\"Ground Truth\":\"Established through independent annotation by multiple radiologists.\",\"Inter-reader\":\"Not specified\",\"Quality Control\":\"Not specified\",\"Annotation Tools\":\"Not specified\"}",
+  "Collection process": "{\"Methodology\":\"Multi-center data acquisition from 23 institutions across 14 countries and six continents.  Initial labels for the presence of different traumatic injuries were provided based on clinical reports. Radiologist annotators independently reviewed and annotated the images.  Detailed description mentioned as available in Appendix S1.\",\"Sources\":\"Multi-center; 23 institutions across 14 countries and six continents.\",\"Time period\":\"Not specified\",\"Inclusion Exclusion\":\"Not specified\",\"IRB Ethics\":\"Not specified\"}",
+  "Composition": {
+    "Data type": "Report text",
+    "Number of instances": "4274 adult patients (≥18 years), 6481 image series",
+    "Demographics": "Age ≥18 years. Detailed breakdown not provided in the text but mentioned as available in Table 1.",
+    "Disease Distribution": "Detailed breakdown of injury severity for the training set is mentioned as available in Table 3.  The demographic and case-level composition of the training and test sets are mentioned as available in Table 2.",
+    "Temporal": "Not specified"
+  },
+  "Technical": {
+    "Storage": "Not specified",
+    "Privacy": "Not specified",
+    "Validation": "Dataset was split into training and test sets (details in Table 2, not provided).",
+    "Benchmarking": "The dataset was used for the RSNA 2023 Abdominal Trauma Detection competition; specific benchmark results are not provided in this article."
+  },
+  "Clinical": {
+    "Application": "Detection and classification of traumatic injuries in abdominal CT scans.  Grading of solid organ injuries (liver, spleen, kidneys) and detection of bowel, mesenteric injuries, and active extravasation.",
+    "Validation Studies": "Not specified",
+    "Impact": "Potential to prioritize studies requiring expedient interpretation and augment radiologist accuracy and efficiency."
+  }
+}

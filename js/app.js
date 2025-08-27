@@ -1448,6 +1448,14 @@ async function handlePdfUpload(event) {
 
         const structuredJson = await response.json();
 
+        // Store PDF metadata for potential saving
+        if (structuredJson._metadata) {
+            currentPdfMetadata = structuredJson._metadata;
+            console.log('📋 PDF metadata stored:', currentPdfMetadata);
+            // Remove metadata from schema data before processing
+            delete structuredJson._metadata;
+        }
+
         // Hide the loading indicator
         document.querySelector('.alert.custom-alert')?.remove();
 
@@ -1524,3 +1532,308 @@ window.addEventListener('error', function(e) {
 window.addEventListener('unhandledrejection', function(e) {
     console.error('Unhandled promise rejection:', e.reason);
 });
+
+// Schema Storage Functions
+
+// Global variable to store PDF metadata for saving
+let currentPdfMetadata = null;
+
+async function saveToServer() {
+    if (!editor) {
+        showAlert('Editor not ready yet. Please wait a moment and try again.', 'warning');
+        return;
+    }
+
+    try {
+        const schemaData = editor.getValue();
+        
+        // Check if we have DOI from PDF processing
+        if (!currentPdfMetadata || !currentPdfMetadata.doi) {
+            // Try to extract DOI from the schema data or ask user
+            const doi = prompt('Please enter the DOI for this paper (required for saving):');
+            if (!doi || doi.trim() === '') {
+                showAlert('DOI is required to save schemas to the server.', 'warning');
+                return;
+            }
+            currentPdfMetadata = { doi: doi.trim() };
+        }
+
+        const saveButton = document.getElementById('save-to-server-btn');
+        saveButton.disabled = true;
+        saveButton.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i>Saving...';
+
+        const response = await fetch('/api/save-schema', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                schema: schemaData,
+                doi: currentPdfMetadata.doi,
+                paperMetadata: currentPdfMetadata
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showAlert(`✅ ${result.message} for DOI: ${currentPdfMetadata.doi}`, 'success');
+        } else {
+            throw new Error(result.error || 'Failed to save schema');
+        }
+
+    } catch (error) {
+        console.error('Save to server error:', error);
+        showAlert('Failed to save schema: ' + error.message, 'danger');
+    } finally {
+        const saveButton = document.getElementById('save-to-server-btn');
+        saveButton.disabled = false;
+        saveButton.innerHTML = '<i class="fa fa-save mr-1"></i>Save to Server';
+    }
+}
+
+async function browseSchemas() {
+    // Show the modal
+    $('#browseSchemasModal').modal('show');
+    
+    // Load schemas and statistics
+    await Promise.all([
+        loadSchemas(),
+        loadStatistics()
+    ]);
+}
+
+async function loadSchemas(filters = {}) {
+    try {
+        const schemasList = document.getElementById('schemas-list');
+        schemasList.innerHTML = '<div class="text-center p-4"><i class="fa fa-spinner fa-spin fa-2x mb-2"></i><p>Loading schemas...</p></div>';
+
+        const queryParams = new URLSearchParams();
+        if (filters.type) queryParams.append('type', filters.type);
+        if (filters.year) queryParams.append('year', filters.year);
+        if (filters.search) queryParams.append('search', filters.search);
+
+        const response = await fetch(`/api/schemas?${queryParams}`);
+        const result = await response.json();
+
+        if (result.success) {
+            displaySchemas(result.schemas);
+        } else {
+            throw new Error(result.error || 'Failed to load schemas');
+        }
+
+    } catch (error) {
+        console.error('Error loading schemas:', error);
+        document.getElementById('schemas-list').innerHTML = 
+            '<div class="alert alert-danger">Error loading schemas: ' + error.message + '</div>';
+    }
+}
+
+function displaySchemas(schemas) {
+    const schemasList = document.getElementById('schemas-list');
+    
+    if (schemas.length === 0) {
+        schemasList.innerHTML = '<div class="text-center p-4"><i class="fa fa-folder-open fa-3x text-muted mb-3"></i><p class="text-muted">No schemas found</p></div>';
+        return;
+    }
+
+    let html = '<div class="row">';
+    
+    schemas.forEach(schema => {
+        const authors = schema.authors && schema.authors.length > 0 ? schema.authors.slice(0, 3).join(', ') + (schema.authors.length > 3 ? ', et al.' : '') : 'Unknown Authors';
+        const typeColor = schema.schema_type === 'model' ? 'primary' : 'success';
+        const typeIcon = schema.schema_type === 'model' ? 'brain' : 'database';
+        
+        html += `
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="badge badge-${typeColor}">
+                        <i class="fa fa-${typeIcon} mr-1"></i>${schema.schema_type.toUpperCase()}
+                    </span>
+                    <small class="text-muted">${new Date(schema.extraction_date).toLocaleDateString()}</small>
+                </div>
+                <div class="card-body">
+                    <h6 class="card-title" title="${schema.title}">
+                        ${schema.title ? schema.title.substring(0, 100) + (schema.title.length > 100 ? '...' : '') : 'Untitled'}
+                    </h6>
+                    <p class="card-text small text-muted mb-1">
+                        <strong>Authors:</strong> ${authors}
+                    </p>
+                    ${schema.journal ? `<p class="card-text small text-muted mb-1"><strong>Journal:</strong> ${schema.journal}</p>` : ''}
+                    ${schema.publication_year ? `<p class="card-text small text-muted mb-1"><strong>Year:</strong> ${schema.publication_year}</p>` : ''}
+                    <p class="card-text small">
+                        <strong>DOI:</strong> <code class="small">${schema.doi}</code>
+                    </p>
+                    ${schema.version_count > 1 ? `<p class="card-text small text-info"><i class="fa fa-history mr-1"></i>Version ${schema.version_count}</p>` : ''}
+                </div>
+                <div class="card-footer">
+                    <div class="btn-group btn-group-sm w-100" role="group">
+                        <button class="btn btn-primary" onclick="loadSchema('${encodeURIComponent(schema.doi)}')">Load</button>
+                        <button class="btn btn-outline-secondary" onclick="viewSchemaDetails('${encodeURIComponent(schema.doi)}')">Details</button>
+                        <button class="btn btn-outline-danger" onclick="confirmDeleteSchema('${encodeURIComponent(schema.doi)}', '${schema.title ? schema.title.replace(/'/g, "\\'"): 'Untitled'}')">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    });
+    
+    html += '</div>';
+    schemasList.innerHTML = html;
+}
+
+async function loadStatistics() {
+    try {
+        const response = await fetch('/api/statistics');
+        const result = await response.json();
+
+        if (result.success) {
+            const stats = result.statistics;
+            document.getElementById('schema-statistics').innerHTML = `
+                <strong>Database Statistics:</strong> 
+                ${stats.total_schemas} total schemas • 
+                ${stats.model_count} models • 
+                ${stats.dataset_count} datasets • 
+                Average ${stats.avg_versions ? parseFloat(stats.avg_versions).toFixed(1) : '1.0'} versions per schema
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading statistics:', error);
+        document.getElementById('schema-statistics').innerHTML = 
+            '<span class="text-warning">Statistics unavailable</span>';
+    }
+}
+
+async function loadSchema(encodedDoi) {
+    try {
+        const doi = decodeURIComponent(encodedDoi);
+        
+        showAlert('Loading schema...', 'info', 0);
+        
+        const response = await fetch(`/api/schema/${encodedDoi}`);
+        const result = await response.json();
+        
+        document.querySelector('.alert.custom-alert')?.remove();
+        
+        if (result.success) {
+            // Close the modal
+            $('#browseSchemasModal').modal('hide');
+            
+            // Set the current metadata for potential saving
+            currentPdfMetadata = {
+                doi: doi,
+                ...result.metadata
+            };
+            
+            // Determine card type and switch to editor
+            const cardType = result.schema.Model ? 'model' : 'dataset';
+            const editorData = result.schema.Model || result.schema.Dataset;
+            
+            currentCardType = cardType;
+            document.getElementById('initial-screen').style.display = 'none';
+            document.getElementById('editor-section').style.display = 'block';
+            updateEditorUI(cardType);
+            
+            // Initialize editor with loaded data
+            initializeEditor(editorData);
+            
+            showAlert(`✅ Loaded schema for: ${result.metadata.title || doi}`, 'success');
+        } else {
+            throw new Error(result.error || 'Failed to load schema');
+        }
+    } catch (error) {
+        console.error('Error loading schema:', error);
+        document.querySelector('.alert.custom-alert')?.remove();
+        showAlert('Failed to load schema: ' + error.message, 'danger');
+    }
+}
+
+function viewSchemaDetails(encodedDoi) {
+    const doi = decodeURIComponent(encodedDoi);
+    alert(`Schema Details:\n\nDOI: ${doi}\n\nFull details viewer coming soon!`);
+}
+
+function confirmDeleteSchema(encodedDoi, title) {
+    if (confirm(`Are you sure you want to delete the schema for:\n\n"${title}"\n\nThis action cannot be undone.`)) {
+        deleteSchema(encodedDoi);
+    }
+}
+
+async function deleteSchema(encodedDoi) {
+    try {
+        const doi = decodeURIComponent(encodedDoi);
+        
+        const response = await fetch(`/api/schema/${encodedDoi}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert(`✅ Schema deleted: ${doi}`, 'success');
+            // Refresh the schemas list
+            await loadSchemas();
+            await loadStatistics();
+        } else {
+            throw new Error(result.error || 'Failed to delete schema');
+        }
+    } catch (error) {
+        console.error('Error deleting schema:', error);
+        showAlert('Failed to delete schema: ' + error.message, 'danger');
+    }
+}
+
+async function searchSchemas() {
+    const filters = {
+        search: document.getElementById('schema-search').value,
+        type: document.getElementById('schema-type-filter').value,
+        year: document.getElementById('schema-year-filter').value
+    };
+    
+    await loadSchemas(filters);
+}
+
+async function refreshSchemas() {
+    // Clear filters
+    document.getElementById('schema-search').value = '';
+    document.getElementById('schema-type-filter').value = '';
+    document.getElementById('schema-year-filter').value = '';
+    
+    await Promise.all([
+        loadSchemas(),
+        loadStatistics()
+    ]);
+}
+
+// Update the PDF upload handler to store metadata
+const originalHandlePdfUpload = handlePdfUpload;
+
+handlePdfUpload = async function(event) {
+    // Call the original function
+    await originalHandlePdfUpload(event);
+    
+    // The original function should have set currentPdfMetadata if processing was successful
+    // This happens in the PDF processing response handling
+};
+
+// Update editor button states to include save button
+function updateEditorButtons() {
+    const downloadJsonBtn = document.getElementById('download-json-btn');
+    const downloadTxtBtn = document.getElementById('download-txt-btn');
+    const saveToServerBtn = document.getElementById('save-to-server-btn');
+    
+    const hasData = editor && editor.getValue();
+    
+    if (downloadJsonBtn) downloadJsonBtn.disabled = !hasData;
+    if (downloadTxtBtn) downloadTxtBtn.disabled = !hasData;
+    if (saveToServerBtn) saveToServerBtn.disabled = !hasData;
+}
+
+// Update the PDF upload success handler to store metadata
+const originalInitializeEditor = initializeEditor;
+initializeEditor = function(data) {
+    originalInitializeEditor(data);
+    
+    // Update button states after editor is initialized
+    setTimeout(updateEditorButtons, 100);
+};

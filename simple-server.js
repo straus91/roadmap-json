@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import { promises as fs } from 'fs';
 import { IncomingForm } from 'formidable';
 import { extractTextFromPDF } from './pdf-processor.js';
+import { extractDOI, sanitizeDOI, extractPaperMetadata } from './doi-extractor.js';
+import { schemaDB } from './database.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -31,8 +33,14 @@ async function loadEnvVars() {
 
 await loadEnvVars();
 
+// Initialize schema database
+await schemaDB.initialize();
+
 // Serve static files
 app.use(express.static(__dirname));
+
+// Parse JSON bodies
+app.use(express.json({ limit: '10mb' }));
 
 // Test endpoint to verify Gemini API works
 app.get('/api/test-gemini', async (req, res) => {
@@ -161,25 +169,189 @@ app.post('/api/process-pdf', async (req, res) => {
       return res.status(400).json({ error: 'No text could be extracted from the PDF' });
     }
 
+    // Extract DOI for potential schema storage
+    const extractedDOIs = extractDOI(extractedText);
+    const primaryDOI = extractedDOIs.length > 0 ? extractedDOIs[0] : null;
+    console.log('🔍 Primary DOI found:', primaryDOI);
+
     // Process the extracted text with multi-stage Gemini pipeline
     console.log('🧠 Starting multi-stage AI processing...');
-    const processedData = await processTextWithMultiStageGemini(extractedText.substring(0, 12000));
+    let processedData = await processTextWithMultiStageGemini(extractedText.substring(0, 12000));
     
     if (!processedData) {
-      console.error('❌ Gemini processing failed');
-      return res.status(500).json({ error: 'Failed to process extracted text' });
+      console.log('🔄 Multi-stage processing failed, trying single-stage fallback...');
+      processedData = await processTextWithGemini(extractedText.substring(0, 8000));
+      
+      if (!processedData) {
+        console.error('❌ All Gemini processing attempts failed');
+        return res.status(500).json({ error: 'Failed to process extracted text. Please try again in a moment.' });
+      }
     }
 
     console.log('✅ PDF processed successfully!');
     console.log('📤 Returning structured data');
     
-    res.json(processedData);
+    // Include DOI and paper metadata in response for potential saving
+    const responseData = {
+      ...processedData,
+      _metadata: {
+        doi: primaryDOI,
+        paperMetadata: primaryDOI ? extractPaperMetadata(extractedText, primaryDOI) : null,
+        extractedText: extractedText.substring(0, 1000) // First 1000 chars for debugging
+      }
+    };
+    
+    res.json(responseData);
 
   } catch (error) {
     console.error('❌ PDF processing error:', error);
     res.status(500).json({ 
       error: 'Failed to process PDF',
       details: error.message 
+    });
+  }
+});
+
+// Schema Storage Endpoints
+
+// Save schema to server with DOI-based indexing
+app.post('/api/save-schema', async (req, res) => {
+  try {
+    console.log('💾 Schema save request received');
+    
+    const { schema, doi, paperMetadata } = req.body;
+    
+    if (!schema) {
+      return res.status(400).json({ error: 'Schema data is required' });
+    }
+    
+    if (!doi) {
+      return res.status(400).json({ error: 'DOI is required for schema storage' });
+    }
+    
+    console.log('🔍 Saving schema for DOI:', doi);
+    
+    const sanitizedDoi = sanitizeDOI(doi);
+    const result = await schemaDB.saveSchema(schema, paperMetadata || {}, doi, sanitizedDoi);
+    
+    console.log('✅ Schema saved successfully:', result);
+    res.json({
+      success: true,
+      ...result,
+      message: result.isNew ? 'New schema saved' : `Schema updated (version ${result.versionCount})`
+    });
+    
+  } catch (error) {
+    console.error('❌ Schema save error:', error);
+    res.status(500).json({
+      error: 'Failed to save schema',
+      details: error.message
+    });
+  }
+});
+
+// Get all saved schemas with optional filtering
+app.get('/api/schemas', async (req, res) => {
+  try {
+    const filters = {
+      type: req.query.type, // 'model' or 'dataset'
+      year: req.query.year ? parseInt(req.query.year) : null,
+      search: req.query.search
+    };
+    
+    console.log('📋 Fetching schemas with filters:', filters);
+    
+    const schemas = await schemaDB.getAllSchemas(filters);
+    
+    console.log(`✅ Found ${schemas.length} schemas`);
+    res.json({
+      success: true,
+      count: schemas.length,
+      schemas: schemas
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching schemas:', error);
+    res.status(500).json({
+      error: 'Failed to fetch schemas',
+      details: error.message
+    });
+  }
+});
+
+// Get specific schema by DOI
+app.get('/api/schema/:doi', async (req, res) => {
+  try {
+    const doi = decodeURIComponent(req.params.doi);
+    console.log('🗋 Fetching schema for DOI:', doi);
+    
+    const result = await schemaDB.getSchemaContent(doi);
+    
+    console.log('✅ Schema retrieved successfully');
+    res.json({
+      success: true,
+      ...result
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching schema:', error);
+    if (error.message === 'Schema not found') {
+      res.status(404).json({ error: 'Schema not found' });
+    } else {
+      res.status(500).json({
+        error: 'Failed to fetch schema',
+        details: error.message
+      });
+    }
+  }
+});
+
+// Delete schema by DOI
+app.delete('/api/schema/:doi', async (req, res) => {
+  try {
+    const doi = decodeURIComponent(req.params.doi);
+    console.log('🗑️ Deleting schema for DOI:', doi);
+    
+    const result = await schemaDB.deleteSchema(doi);
+    
+    console.log('✅ Schema deleted successfully');
+    res.json({
+      success: true,
+      ...result,
+      message: 'Schema deleted successfully'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting schema:', error);
+    if (error.message === 'Schema not found') {
+      res.status(404).json({ error: 'Schema not found' });
+    } else {
+      res.status(500).json({
+        error: 'Failed to delete schema',
+        details: error.message
+      });
+    }
+  }
+});
+
+// Get database statistics
+app.get('/api/statistics', async (req, res) => {
+  try {
+    console.log('📊 Fetching database statistics');
+    
+    const stats = await schemaDB.getStatistics();
+    
+    console.log('✅ Statistics retrieved:', stats);
+    res.json({
+      success: true,
+      statistics: stats
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching statistics:', error);
+    res.status(500).json({
+      error: 'Failed to fetch statistics',
+      details: error.message
     });
   }
 });
@@ -221,7 +393,7 @@ async function processTextWithMultiStageGemini(extractedText) {
 async function analyzeAndSummarizeDocument(text) {
   try {
     const apiKey = process.env.GEMINI_API_KEY || process.env.LLM_API_KEY;
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-latest:generateContent?key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
     const prompt = `You are an expert radiologist and AI researcher specializing in analyzing published radiology AI journal articles. Your task is to perform comprehensive document analysis for ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) extraction.
 
@@ -499,8 +671,11 @@ COMPREHENSIVE JSON OUTPUT:`;
   }
 }
 
-// Helper function to call Gemini API
-async function callGeminiAPI(url, prompt, config = {}) {
+// Helper function to call Gemini API with retry logic
+async function callGeminiAPI(url, prompt, config = {}, retryCount = 0) {
+  const maxRetries = 3;
+  const baseDelay = 1000; // 1 second
+  
   try {
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
@@ -512,6 +687,9 @@ async function callGeminiAPI(url, prompt, config = {}) {
       }
     };
 
+    console.log(`📤 Sending request to Gemini API (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+    console.log('📝 Prompt length:', prompt.length, 'characters');
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -519,15 +697,36 @@ async function callGeminiAPI(url, prompt, config = {}) {
     });
 
     if (!response.ok) {
-      console.error('❌ Gemini API error:', response.status);
+      const errorText = await response.text().catch(() => 'No error details');
+      console.error('❌ Gemini API error:', response.status, response.statusText);
+      console.error('❌ Error details:', errorText.substring(0, 500));
+      
+      // Retry for 503 (Service Unavailable) and 429 (Rate Limited) errors
+      if ((response.status === 503 || response.status === 429) && retryCount < maxRetries) {
+        const delay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
+        console.log(`🔄 Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return await callGeminiAPI(url, prompt, config, retryCount + 1);
+      }
+      
       return null;
     }
 
     const result = await response.json();
+    console.log('✅ Gemini API call successful');
     return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
 
   } catch (error) {
     console.error('❌ Gemini API call failed:', error.message);
+    
+    // Retry on network errors
+    if (retryCount < maxRetries && (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT')) {
+      const delay = baseDelay * Math.pow(2, retryCount);
+      console.log(`🔄 Network error, retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return await callGeminiAPI(url, prompt, config, retryCount + 1);
+    }
+    
     return null;
   }
 }
@@ -1010,12 +1209,20 @@ function createFallbackMock() {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`\n🚀 Simple test server running at http://localhost:${PORT}`);
+  console.log(`\n🚀 ROADMAP Schema Server running at http://localhost:${PORT}`);
   console.log('✅ Frontend: Available');
-  console.log('✅ API: /api/test-gemini - Test Gemini connection');
-  console.log('✅ API: /api/process-pdf - Mock PDF processing');
-  console.log('\nTest steps:');
+  console.log('✅ PDF Processing: /api/process-pdf');
+  console.log('✅ Schema Storage: DOI-based indexing enabled');
+  console.log('\n📦 Available APIs:');
+  console.log('  🧠 /api/test-gemini - Test Gemini connection');
+  console.log('  📜 /api/process-pdf - Extract ROADMAP data from PDF');
+  console.log('  💾 /api/save-schema - Save schema with DOI indexing');
+  console.log('  🗋 /api/schemas - Browse saved schemas');
+  console.log('  🗋 /api/schema/:doi - Get specific schema');
+  console.log('  🗑️ /api/schema/:doi - Delete schema');
+  console.log('  📊 /api/statistics - Database statistics');
+  console.log('\n🗺️ Usage:');
   console.log('1. Open browser: http://localhost:3000');
-  console.log('2. Test Gemini: http://localhost:3000/api/test-gemini (POST)');
-  console.log('3. Try PDF upload - should populate form with mock data');
+  console.log('2. Upload PDF → Extract schema → Save to server');
+  console.log('3. Browse saved schemas with DOI-based organization');
 });

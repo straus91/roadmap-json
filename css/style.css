@@ -478,6 +478,30 @@ header .display-4 {
     font-size: 12px !important;
 }
 
+/* Button divider */
+.btn-divider {
+    border-top: 1px solid #dee2e6;
+    margin: 0.5rem 0;
+}
+
+/* Schema cards hover effect */
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    transition: all 0.2s ease-in-out;
+}
+
+/* DOI code styling */
+code.small {
+    font-size: 0.75rem;
+    word-break: break-all;
+}
+
+/* Modal sizing */
+.modal-xl {
+    max-width: 90%;
+}
+
 /* Print styles */
 @media print {
     .no-print {
