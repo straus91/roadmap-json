@@ -109,6 +109,78 @@ function extractSchemaStructure(schema, schemaType) {
   return extractProperties(mainDef.properties || {});
 }
 
+// Helper function to call Gemini API with retry logic
+async function callGeminiAPI(url, prompt, config = {}, retryCount = 0) {
+  const maxRetries = 3;
+  const baseDelay = 1000; // 1 second
+  
+  try {
+    const requestBody = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: config.temperature || 0.2,
+        maxOutputTokens: config.maxOutputTokens || 4096,
+        topK: 40,
+        topP: 0.95
+      },
+      safetySettings: config.safetySettings || [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        }
+      ]
+    };
+
+    console.log(`📤 Sending request to Gemini API (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+    console.log('📝 Prompt length:', prompt.length, 'characters');
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'No error details');
+      console.error('❌ Gemini API error:', response.status, response.statusText);
+      console.error('❌ Error details:', errorText.substring(0, 500));
+      
+      // Retry for 503 (Service Unavailable) and 429 (Rate Limited) errors
+      if ((response.status === 503 || response.status === 429) && retryCount < maxRetries) {
+        const delay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
+        console.log(`🔄 Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return await callGeminiAPI(url, prompt, config, retryCount + 1);
+      }
+      
+      return { error: true, status: response.status, message: errorText };
+    }
+
+    const result = await response.json();
+    console.log('✅ Gemini API call successful');
+    return result;
+
+  } catch (error) {
+    console.error('❌ Gemini API call failed:', error.message);
+    
+    // Retry on network errors
+    if (retryCount < maxRetries && (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT')) {
+      const delay = baseDelay * Math.pow(2, retryCount);
+      console.log(`🔄 Network error, retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return await callGeminiAPI(url, prompt, config, retryCount + 1);
+    }
+    
+    return { error: true, message: error.message };
+  }
+}
+
 // Function to create intelligent prompt with full schema reference
 function createEnhancedPrompt(extractedText, schemas) {
   const modelStructure = extractSchemaStructure(schemas.model, 'model');
@@ -315,7 +387,7 @@ export default async function handler(req, res) {
 
     console.log('Extracted text length:', extractedText.length, 'characters');
 
-    // 4. Call Gemini API with enhanced prompt
+    // 4. Call Gemini API with enhanced prompt and retry logic
     const apiKey = process.env.GEMINI_API_KEY || process.env.LLM_API_KEY;
     
     if (!apiKey) {
@@ -325,20 +397,11 @@ export default async function handler(req, res) {
     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
     
     const enhancedPrompt = createEnhancedPrompt(extractedText, schemas);
-    console.log('Prompt length:', enhancedPrompt.length, 'characters');
-
-    const requestBody = {
-      contents: [{
-        parts: [{
-          text: enhancedPrompt
-        }]
-      }],
-      generationConfig: {
-        temperature: 0.2,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 4096,
-      },
+    
+    // Call Gemini API with retry logic
+    const geminiResult = await callGeminiAPI(geminiApiUrl, enhancedPrompt, {
+      temperature: 0.2,
+      maxOutputTokens: 4096,
       safetySettings: [
         {
           category: "HARM_CATEGORY_HARASSMENT",
@@ -349,27 +412,17 @@ export default async function handler(req, res) {
           threshold: "BLOCK_MEDIUM_AND_ABOVE"
         }
       ]
-    };
-
-    console.log('Sending request to Gemini API...');
-    const geminiResponse = await fetch(geminiApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
     });
 
-    if (!geminiResponse.ok) {
-      const errorData = await geminiResponse.text();
-      console.error('Gemini API Error:', errorData);
+    // Handle retry function errors
+    if (geminiResult.error) {
+      console.error('Gemini API failed after retries:', geminiResult.message);
       return res.status(500).json({ 
-        error: `Gemini API request failed with status ${geminiResponse.status}`,
-        details: errorData.substring(0, 200)
+        error: 'Gemini API request failed after retries',
+        details: geminiResult.message?.substring(0, 200)
       });
     }
 
-    const geminiResult = await geminiResponse.json();
     console.log('Received response from Gemini API');
     
     if (!geminiResult.candidates || !geminiResult.candidates[0] || !geminiResult.candidates[0].content) {
