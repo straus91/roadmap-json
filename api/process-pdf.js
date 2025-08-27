@@ -1,7 +1,6 @@
 // api/process-pdf.js
 import { IncomingForm } from 'formidable';
 import { promises as fs } from 'fs';
-import pdf from 'pdf-parse';
 import path from 'path';
 
 // This disables the default body parser to allow formidable to handle the file stream
@@ -215,7 +214,17 @@ export default async function handler(req, res) {
     console.log('Processing PDF file:', pdfFile.originalFilename);
     const fileContent = await fs.readFile(pdfFile.filepath);
 
-    // 3. Extract text from the PDF buffer
+    // 3. Extract text from the PDF buffer using dynamic import
+    let pdf;
+    try {
+      // Dynamic import to avoid initialization issues in serverless
+      const pdfParse = await import('pdf-parse');
+      pdf = pdfParse.default || pdfParse;
+    } catch (importError) {
+      console.error('Failed to import pdf-parse:', importError);
+      return res.status(500).json({ error: 'PDF parsing library unavailable' });
+    }
+
     const data = await pdf(fileContent);
     const extractedText = data.text;
 
