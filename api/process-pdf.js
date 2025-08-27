@@ -1,7 +1,6 @@
 // api/process-pdf.js
 import { IncomingForm } from 'formidable';
 import { promises as fs } from 'fs';
-import pdf from 'pdf-parse';
 import path from 'path';
 
 // This disables the default body parser to allow formidable to handle the file stream
@@ -215,9 +214,65 @@ export default async function handler(req, res) {
     console.log('Processing PDF file:', pdfFile.originalFilename);
     const fileContent = await fs.readFile(pdfFile.filepath);
 
-    // 3. Extract text from the PDF buffer
-    const data = await pdf(fileContent);
-    const extractedText = data.text;
+    // 3. Extract text using PDF.co API
+    const pdfcoApiKey = process.env.PDFCO_API_KEY;
+    
+    if (!pdfcoApiKey) {
+      return res.status(500).json({ error: 'PDF.co API key not configured' });
+    }
+
+    let extractedText = '';
+    try {
+      // Convert file buffer to base64 for PDF.co
+      const base64Content = fileContent.toString('base64');
+      
+      console.log('Calling PDF.co API for text extraction...');
+      
+      // Call PDF.co text extraction API
+      const pdfcoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': pdfcoApiKey
+        },
+        body: JSON.stringify({
+          file: `data:application/pdf;base64,${base64Content}`,
+          inline: true, // Return text directly in response
+          pages: "", // Extract from all pages
+          password: "" // No password
+        })
+      });
+
+      if (!pdfcoResponse.ok) {
+        const errorData = await pdfcoResponse.text();
+        console.error('PDF.co API Error:', errorData);
+        return res.status(500).json({ 
+          error: `PDF.co API request failed with status ${pdfcoResponse.status}`,
+          details: errorData.substring(0, 200)
+        });
+      }
+
+      const pdfcoResult = await pdfcoResponse.json();
+      console.log('PDF.co API response received');
+
+      if (pdfcoResult.error) {
+        console.error('PDF.co processing error:', pdfcoResult.message);
+        return res.status(500).json({ 
+          error: 'PDF.co processing failed',
+          details: pdfcoResult.message
+        });
+      }
+
+      extractedText = pdfcoResult.body || '';
+      console.log('Text extraction completed, length:', extractedText.length);
+
+    } catch (pdfError) {
+      console.error('PDF processing failed:', pdfError);
+      return res.status(500).json({ 
+        error: 'Failed to process PDF file',
+        details: pdfError.message 
+      });
+    }
 
     if (!extractedText || extractedText.trim().length === 0) {
       return res.status(400).json({ error: 'No text could be extracted from the PDF' });
