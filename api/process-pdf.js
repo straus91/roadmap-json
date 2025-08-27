@@ -236,10 +236,11 @@ export default async function handler(req, res) {
           'x-api-key': pdfcoApiKey
         },
         body: JSON.stringify({
-          file: `data:application/pdf;base64,${base64Content}`,
-          inline: true, // Return text directly in response
-          pages: "", // Extract from all pages
-          password: "" // No password
+          url: `data:application/pdf;base64,${base64Content}`,
+          lang: "eng",
+          inline: true,
+          pages: "0-",
+          async: false
         })
       });
 
