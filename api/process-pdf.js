@@ -188,10 +188,10 @@ function createEnhancedPrompt(extractedText, schemas) {
   
   return `You are an expert AI system specialized in extracting structured information from medical imaging research papers and documents to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
 
-TASK: Analyze the following extracted text and determine if it describes an AI MODEL or a DATASET, then extract structured information according to the exact ROADMAP schema format.
+TASK: Analyze the following structured JSON data extracted from a PDF and determine if it describes an AI MODEL or a DATASET, then extract structured information according to the exact ROADMAP schema format.
 
 INSTRUCTIONS:
-1. READ the entire text carefully
+1. READ the structured JSON data carefully - it contains organized content from a research paper PDF
 2. DETERMINE if this describes a MODEL (AI/ML algorithm) or DATASET (collection of medical images/data)
 3. EXTRACT information following the exact schema structure provided below
 4. RETURN a valid JSON object with either "Model" or "Dataset" key
@@ -252,8 +252,8 @@ For a DATASET:
   }
 }
 
-EXTRACTED TEXT:
-"""${extractedText.substring(0, 12000)}"""
+STRUCTURED PDF DATA:
+"""${extractedText.substring(0, 15000)}"""
 
 OUTPUT (JSON only):`;
 }
@@ -332,10 +332,10 @@ export default async function handler(req, res) {
       const uploadedFileUrl = uploadResult.url;
       console.log('Step 1 complete: PDF uploaded, URL:', uploadedFileUrl.substring(0, 50) + '...');
       
-      // Step 2: Extract text from uploaded PDF
-      console.log('Step 2: Extracting text from uploaded PDF...');
+      // Step 2: Extract structured JSON from uploaded PDF
+      console.log('Step 2: Extracting structured JSON from uploaded PDF...');
       
-      const pdfcoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
+      const pdfcoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/json2', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -343,7 +343,6 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           url: uploadedFileUrl,
-          lang: "eng",
           inline: true,
           pages: "0-",
           async: false
@@ -352,26 +351,41 @@ export default async function handler(req, res) {
 
       if (!pdfcoResponse.ok) {
         const errorData = await pdfcoResponse.text();
-        console.error('PDF.co Text Extraction Error:', errorData);
+        console.error('PDF.co JSON Extraction Error:', errorData);
         return res.status(500).json({ 
-          error: `PDF.co text extraction failed with status ${pdfcoResponse.status}`,
+          error: `PDF.co JSON extraction failed with status ${pdfcoResponse.status}`,
           details: errorData.substring(0, 200)
         });
       }
 
       const pdfcoResult = await pdfcoResponse.json();
-      console.log('PDF.co text extraction response received');
+      console.log('PDF.co JSON extraction response received');
 
       if (pdfcoResult.error) {
-        console.error('PDF.co text extraction error:', pdfcoResult.message);
+        console.error('PDF.co JSON extraction error:', pdfcoResult.message);
         return res.status(500).json({ 
-          error: 'PDF.co text extraction failed',
+          error: 'PDF.co JSON extraction failed',
           details: pdfcoResult.message
         });
       }
 
-      extractedText = pdfcoResult.body || '';
-      console.log('Step 2 complete: Text extraction completed, length:', extractedText.length);
+      const structuredData = pdfcoResult.body || '';
+      console.log('Step 2 complete: JSON extraction completed, data length:', structuredData.length);
+      
+      // Convert structured JSON to text for Gemini processing
+      let extractedText = '';
+      try {
+        if (typeof structuredData === 'string') {
+          const jsonData = JSON.parse(structuredData);
+          extractedText = JSON.stringify(jsonData, null, 2);
+        } else {
+          extractedText = JSON.stringify(structuredData, null, 2);
+        }
+        console.log('Converted JSON to formatted text, length:', extractedText.length);
+      } catch (jsonError) {
+        console.error('Error parsing JSON data:', jsonError);
+        extractedText = String(structuredData);
+      }
 
     } catch (pdfError) {
       console.error('PDF processing failed:', pdfError);
