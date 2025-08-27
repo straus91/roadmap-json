@@ -214,19 +214,37 @@ export default async function handler(req, res) {
     console.log('Processing PDF file:', pdfFile.originalFilename);
     const fileContent = await fs.readFile(pdfFile.filepath);
 
-    // 3. Extract text from the PDF buffer using dynamic import
-    let pdf;
+    // 3. Extract text from the PDF buffer using pdfjs-dist
+    let extractedText = '';
     try {
-      // Dynamic import to avoid initialization issues in serverless
-      const pdfParse = await import('pdf-parse');
-      pdf = pdfParse.default || pdfParse;
-    } catch (importError) {
-      console.error('Failed to import pdf-parse:', importError);
-      return res.status(500).json({ error: 'PDF parsing library unavailable' });
+      // Dynamic import of pdfjs-dist which is more serverless-friendly
+      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.js');
+      
+      // Load the PDF document
+      const pdf = await pdfjsLib.getDocument({
+        data: new Uint8Array(fileContent),
+        useSystemFonts: true
+      }).promise;
+      
+      console.log('PDF loaded, pages:', pdf.numPages);
+      
+      // Extract text from all pages
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        extractedText += pageText + '\n';
+      }
+      
+      console.log('Text extraction completed, length:', extractedText.length);
+      
+    } catch (pdfError) {
+      console.error('PDF processing failed:', pdfError);
+      return res.status(500).json({ 
+        error: 'Failed to process PDF file',
+        details: pdfError.message 
+      });
     }
-
-    const data = await pdf(fileContent);
-    const extractedText = data.text;
 
     if (!extractedText || extractedText.trim().length === 0) {
       return res.status(400).json({ error: 'No text could be extracted from the PDF' });
