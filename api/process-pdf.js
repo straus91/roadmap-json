@@ -223,12 +223,46 @@ export default async function handler(req, res) {
 
     let extractedText = '';
     try {
-      // Convert file buffer to base64 for PDF.co
-      const base64Content = fileContent.toString('base64');
+      console.log('Step 1: Uploading PDF to PDF.co...');
       
-      console.log('Calling PDF.co API for text extraction...');
+      // Step 1: Upload PDF file to PDF.co
+      const uploadResponse = await fetch('https://api.pdf.co/v1/file/upload', {
+        method: 'POST',
+        headers: {
+          'x-api-key': pdfcoApiKey
+        },
+        body: (() => {
+          const formData = new FormData();
+          formData.append('file', new Blob([fileContent], { type: 'application/pdf' }), pdfFile.originalFilename);
+          return formData;
+        })()
+      });
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.text();
+        console.error('PDF.co Upload Error:', errorData);
+        return res.status(500).json({ 
+          error: `PDF.co upload failed with status ${uploadResponse.status}`,
+          details: errorData.substring(0, 200)
+        });
+      }
+
+      const uploadResult = await uploadResponse.json();
       
-      // Call PDF.co text extraction API
+      if (uploadResult.error) {
+        console.error('PDF.co upload error:', uploadResult.message);
+        return res.status(500).json({ 
+          error: 'PDF.co upload failed',
+          details: uploadResult.message
+        });
+      }
+
+      const uploadedFileUrl = uploadResult.url;
+      console.log('Step 1 complete: PDF uploaded, URL:', uploadedFileUrl.substring(0, 50) + '...');
+      
+      // Step 2: Extract text from uploaded PDF
+      console.log('Step 2: Extracting text from uploaded PDF...');
+      
       const pdfcoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
         method: 'POST',
         headers: {
@@ -236,7 +270,7 @@ export default async function handler(req, res) {
           'x-api-key': pdfcoApiKey
         },
         body: JSON.stringify({
-          url: `data:application/pdf;base64,${base64Content}`,
+          url: uploadedFileUrl,
           lang: "eng",
           inline: true,
           pages: "0-",
@@ -246,26 +280,26 @@ export default async function handler(req, res) {
 
       if (!pdfcoResponse.ok) {
         const errorData = await pdfcoResponse.text();
-        console.error('PDF.co API Error:', errorData);
+        console.error('PDF.co Text Extraction Error:', errorData);
         return res.status(500).json({ 
-          error: `PDF.co API request failed with status ${pdfcoResponse.status}`,
+          error: `PDF.co text extraction failed with status ${pdfcoResponse.status}`,
           details: errorData.substring(0, 200)
         });
       }
 
       const pdfcoResult = await pdfcoResponse.json();
-      console.log('PDF.co API response received');
+      console.log('PDF.co text extraction response received');
 
       if (pdfcoResult.error) {
-        console.error('PDF.co processing error:', pdfcoResult.message);
+        console.error('PDF.co text extraction error:', pdfcoResult.message);
         return res.status(500).json({ 
-          error: 'PDF.co processing failed',
+          error: 'PDF.co text extraction failed',
           details: pdfcoResult.message
         });
       }
 
       extractedText = pdfcoResult.body || '';
-      console.log('Text extraction completed, length:', extractedText.length);
+      console.log('Step 2 complete: Text extraction completed, length:', extractedText.length);
 
     } catch (pdfError) {
       console.error('PDF processing failed:', pdfError);
