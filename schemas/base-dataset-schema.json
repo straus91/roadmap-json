@@ -20,6 +20,46 @@
 	],
 	"additionalProperties": false,
 	"$defs": {
+		"age-bound": {
+			"description": "Age bound with value and units",
+			"type": "object",
+			"properties": {
+				"Value": {
+					"description": "Age value",
+					"type": "integer",
+					"minimum": 0,
+					"maximum": 240
+				},
+				"Units": {
+					"description": "Age units",
+					"type": "string",
+					"enum": [
+						"days",
+						"months", 
+						"years"
+					]
+				}
+			},
+			"required": [
+				"Value",
+				"Units"
+			],
+			"additionalProperties": false,
+			"examples": [
+				{
+					"Value": 18,
+					"Units": "years"
+				},
+				{
+					"Value": 3,
+					"Units": "months"
+				},
+				{
+					"Value": 10,
+					"Units": "days"
+				}
+			]
+		},
 		"authentication": {
 			"description": "Authentication information for ROADMAP user; must include the Authority and Date, plus at least one user identifier (ID, Name, Email).",
 			"type": "object",
@@ -828,69 +868,41 @@
 					"type": "integer"
 				},
 				"Age range": {
-					"title": "Age range",
-					"description": "Age range, specified as a 2-element array: [Lower bound, Upper bound]",
-					"type": "array",
-					"minItems": 2,
-					"maxItems": 2,
-					"items": {
-						"description": "Lower or upper bound",
-						"type": "array",
-						"minItems": 2,
-						"maxItems": 2,
-						"prefixItems": [
-							{
-								"description": "Value",
-								"type": "integer",
-								"minimum": 0,
-								"maximum": 240
-							}
-						],
-						"items": {
-							"description": "Units",
-							"type": "string",
-							"enum": [
-								"days",
-								"months",
-								"years"
-							]
+					"title": "Age range", 
+					"description": "Age range with lower and upper bounds",
+					"type": "object",
+					"properties": {
+						"Lower bound": {
+							"description": "Minimum age in the range",
+							"$ref": "#/$defs/age-bound"
 						},
-						"examples": [
-							[
-								10,
-								"days"
-							],
-							[
-								3,
-								"months"
-							],
-							[
-								18,
-								"years"
-							]
-						]
+						"Upper bound": {
+							"description": "Maximum age in the range", 
+							"$ref": "#/$defs/age-bound"
+						}
 					},
+					"additionalProperties": false,
 					"examples": [
-						[
-							[
-								2,
-								"years"
-							],
-							[
-								17,
-								"years"
-							]
-						],
-						[
-							[
-								65,
-								"years"
-							],
-							[
-								100,
-								"years"
-							]
-						]
+						{
+							"Lower bound": {
+								"Value": 2,
+								"Units": "years"
+							},
+							"Upper bound": {
+								"Value": 17,
+								"Units": "years"
+							}
+						},
+						{
+							"Lower bound": {
+								"Value": 65,
+								"Units": "years"
+							},
+							"Upper bound": {
+								"Value": 100,
+								"Units": "years"
+							}
+						}
 					]
 				},
 				"Sex": {
