@@ -11,6 +11,71 @@ export const config = {
   },
 };
 
+// Recursive function to sanitize stringified JSON objects in API responses
+function sanitizeStringifiedJson(obj) {
+  // Handle null, undefined, or primitive types
+  if (obj === null || obj === undefined || typeof obj !== 'object') {
+    return obj;
+  }
+  
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    return obj.map(item => {
+      // If array item is a string that looks like JSON, try to parse it
+      if (typeof item === 'string') {
+        const trimmed = item.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            // Recursively sanitize the parsed object
+            return sanitizeStringifiedJson(parsed);
+          } catch (e) {
+            // If parsing fails, return the original string
+            console.log('📝 Note: String looks like JSON but failed to parse:', trimmed.substring(0, 100));
+            return item;
+          }
+        }
+      }
+      // Recursively process non-string items
+      return sanitizeStringifiedJson(item);
+    });
+  }
+  
+  // Handle objects
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      // Check if string looks like JSON (starts with { or [ and ends with } or ])
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          // Recursively sanitize the parsed object
+          result[key] = sanitizeStringifiedJson(parsed);
+          console.log(`✅ Successfully parsed stringified JSON for key: ${key}`);
+        } catch (e) {
+          // If parsing fails, keep the original string
+          console.log(`📝 Note: Key "${key}" has string that looks like JSON but failed to parse:`, trimmed.substring(0, 100));
+          result[key] = value;
+        }
+      } else {
+        // Regular string, keep as is
+        result[key] = value;
+      }
+    } else if (typeof value === 'object') {
+      // Recursively process nested objects/arrays
+      result[key] = sanitizeStringifiedJson(value);
+    } else {
+      // Primitive types (number, boolean, etc.)
+      result[key] = value;
+    }
+  }
+  
+  return result;
+}
+
 // Helper function to extract text from Document AI text anchors
 function getText(textAnchor, text) {
   if (!textAnchor || !textAnchor.textSegments || !text) {
@@ -1285,6 +1350,11 @@ export default async function handler(req, res) {
       
       structuredJson = JSON.parse(cleanResponse);
       console.log('🎯 Successfully parsed final JSON response');
+      
+      // Sanitize any stringified JSON objects in the response
+      console.log('🧹 Sanitizing stringified JSON objects...');
+      structuredJson = sanitizeStringifiedJson(structuredJson);
+      console.log('✅ JSON sanitization complete');
       
     } catch (parseError) {
       console.error('Failed to parse JSON formatting response:', formattingResult.candidates[0].content.parts[0].text.substring(0, 500));
