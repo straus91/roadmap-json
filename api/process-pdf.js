@@ -382,8 +382,18 @@ export default async function handler(req, res) {
         }
         
         // Convert object to formatted JSON string
-        extractedText = JSON.stringify(structuredData, null, 2);
-        console.log('Converted JSON to formatted text, length:', extractedText.length);
+        const fullJson = JSON.stringify(structuredData, null, 2);
+        console.log('Full JSON length:', fullJson.length);
+        
+        // Truncate to manageable size for Gemini (max ~100k characters)
+        const maxLength = 100000;
+        if (fullJson.length > maxLength) {
+          extractedText = fullJson.substring(0, maxLength) + '\n\n... [JSON truncated due to size]';
+          console.log('JSON truncated from', fullJson.length, 'to', extractedText.length, 'characters');
+        } else {
+          extractedText = fullJson;
+          console.log('Using full JSON, length:', extractedText.length);
+        }
         
       } catch (jsonError) {
         console.error('Error processing JSON data:', jsonError);
