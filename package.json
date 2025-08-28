@@ -9,6 +9,7 @@
     "deploy": "vercel --prod"
   },
   "dependencies": {
+    "@google-cloud/documentai": "^8.11.0",
     "better-sqlite3": "^9.6.0",
     "express": "^5.1.0",
     "formidable": "^3.5.1",

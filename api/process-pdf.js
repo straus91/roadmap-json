@@ -2,6 +2,7 @@
 import { IncomingForm } from 'formidable';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
 
 // This disables the default body parser to allow formidable to handle the file stream
 export const config = {
@@ -9,6 +10,22 @@ export const config = {
     bodyParser: false,
   },
 };
+
+// Helper function to extract text from Document AI text anchors
+function getText(textAnchor, text) {
+  if (!textAnchor || !textAnchor.textSegments || !text) {
+    return '';
+  }
+  
+  let extractedText = '';
+  textAnchor.textSegments.forEach(segment => {
+    const startIndex = parseInt(segment.startIndex) || 0;
+    const endIndex = parseInt(segment.endIndex) || text.length;
+    extractedText += text.substring(startIndex, endIndex);
+  });
+  
+  return extractedText.trim();
+}
 
 // Function to load and parse schema files
 async function loadSchemas() {
@@ -293,17 +310,22 @@ async function callGeminiAPI(url, prompt, config = {}, retryCount = 0) {
   }
 }
 
-// Function to create intelligent prompt with full schema reference
-function createEnhancedPrompt(extractedText, schemas) {
+// Function to create intelligent prompt with full schema reference and table data
+function createEnhancedPromptWithTables(documentData, schemas) {
   const modelStructure = extractSchemaStructure(schemas.model, 'model');
   const datasetStructure = extractSchemaStructure(schemas.dataset, 'dataset');
   
   return `You are an expert AI system specialized in extracting structured information from medical imaging research papers and documents to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
 
-TASK: Analyze the following structured JSON data extracted from a PDF and determine if it describes an AI MODEL or a DATASET, then extract structured information according to the exact ROADMAP schema format.
+TASK: Analyze the following extracted document content (text + structured tables) from a research paper PDF and determine if it describes an AI MODEL or a DATASET, then extract structured information according to the exact ROADMAP schema format.
+
+DOCUMENT CONTENT INCLUDES:
+- Full text content from the PDF
+- Structured table data extracted from the document
+- Document metadata
 
 INSTRUCTIONS:
-1. READ the structured JSON data carefully - it contains organized content from a research paper PDF
+1. READ the text content AND examine the structured table data carefully
 2. DETERMINE if this describes a MODEL (AI/ML algorithm) or DATASET (collection of medical images/data)
 3. EXTRACT information following the exact schema structure provided below
 4. RETURN a valid JSON object with either "Model" or "Dataset" key
@@ -364,8 +386,18 @@ For a DATASET:
   }
 }
 
-STRUCTURED PDF DATA:
-"""${extractedText.substring(0, 15000)}"""
+DOCUMENT CONTENT:
+
+TEXT CONTENT:
+"""${documentData.text.substring(0, 12000)}${documentData.text.length > 12000 ? '\n\n... [text truncated]' : ''}"""
+
+STRUCTURED TABLES (${documentData.tables.length} tables found):
+${documentData.tables.length > 0 ? JSON.stringify(documentData.tables, null, 2) : 'No tables found in document'}
+
+METADATA:
+- Filename: ${documentData.metadata.filename}
+- Text length: ${documentData.metadata.text_length} characters
+- Tables extracted: ${documentData.metadata.tables_count}
 
 OUTPUT (JSON only):`;
 }
@@ -398,100 +430,100 @@ export default async function handler(req, res) {
     console.log('Processing PDF file:', pdfFile.originalFilename);
     const fileContent = await fs.readFile(pdfFile.filepath);
 
-    // 3. Extract text using PDF.co API
-    const pdfcoApiKey = process.env.PDFCO_API_KEY;
+    // 3. Process PDF with Google Document AI
+    const googleCloudKey = process.env.GOOGLE_CLOUD_KEY;
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'your-project-id';
+    const location = 'us';
+    const processorId = process.env.DOCUMENT_AI_PROCESSOR_ID;
     
-    if (!pdfcoApiKey) {
-      return res.status(500).json({ error: 'PDF.co API key not configured' });
+    if (!googleCloudKey) {
+      return res.status(500).json({ error: 'Google Cloud credentials not configured' });
+    }
+
+    if (!processorId) {
+      return res.status(500).json({ error: 'Document AI Processor ID not configured' });
     }
 
     let extractedText = '';
+    let extractedTables = [];
+    
     try {
-      console.log('Step 1: Uploading PDF to PDF.co...');
+      console.log('🤖 Step 1: Initializing Google Document AI...');
       
-      // Step 1: Upload PDF file to PDF.co
-      const uploadResponse = await fetch('https://api.pdf.co/v1/file/upload', {
-        method: 'POST',
-        headers: {
-          'x-api-key': pdfcoApiKey
-        },
-        body: (() => {
-          const formData = new FormData();
-          formData.append('file', new Blob([fileContent], { type: 'application/pdf' }), pdfFile.originalFilename);
-          return formData;
-        })()
+      // Initialize Document AI client with credentials
+      const credentials = JSON.parse(Buffer.from(googleCloudKey, 'base64').toString());
+      const client = new DocumentProcessorServiceClient({
+        credentials,
+        projectId: credentials.project_id
       });
 
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.text();
-        console.error('PDF.co Upload Error:', errorData);
-        return res.status(500).json({ 
-          error: `PDF.co upload failed with status ${uploadResponse.status}`,
-          details: errorData.substring(0, 200)
-        });
-      }
+      // Construct the processor name
+      const name = `projects/${credentials.project_id}/locations/${location}/processors/${processorId}`;
+      
+      console.log('📄 Step 2: Processing PDF with Document AI...');
+      console.log('Processing PDF file:', pdfFile.originalFilename);
+      console.log('File size:', Math.round(fileContent.length / 1024), 'KB');
 
-      const uploadResult = await uploadResponse.json();
-      
-      if (uploadResult.error) {
-        console.error('PDF.co upload error:', uploadResult.message);
-        return res.status(500).json({ 
-          error: 'PDF.co upload failed',
-          details: uploadResult.message
-        });
-      }
-
-      const uploadedFileUrl = uploadResult.url;
-      console.log('Step 1 complete: PDF uploaded, URL:', uploadedFileUrl.substring(0, 50) + '...');
-      
-      // Step 2: Extract AI-enhanced text from uploaded PDF
-      console.log('Step 2: Extracting AI-enhanced text from uploaded PDF...');
-      
-      const pdfcoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': pdfcoApiKey
+      // Process the document
+      const [result] = await client.processDocument({
+        name,
+        rawDocument: {
+          content: fileContent.toString('base64'),
+          mimeType: 'application/pdf',
         },
-        body: JSON.stringify({
-          url: uploadedFileUrl,
-          inline: true,
-          pages: "0-",
-          async: false,
-          lang: "eng",
-          ocrAccuracy: "balanced",
-          unwrap: true,
-          removeTextShadows: true,
-          detectTables: true,
-          cleanupAndEnhanceText: true
-        })
       });
 
-      if (!pdfcoResponse.ok) {
-        const errorData = await pdfcoResponse.text();
-        console.error('PDF.co AI Text Extraction Error:', errorData);
-        return res.status(500).json({ 
-          error: `PDF.co AI text extraction failed with status ${pdfcoResponse.status}`,
-          details: errorData.substring(0, 200)
+      const { document } = result;
+      console.log('✅ Document AI processing completed');
+      console.log('📊 Pages processed:', document.pages?.length || 0);
+
+      // Extract text content
+      if (document.text) {
+        extractedText = document.text;
+        console.log('📝 Text extracted, length:', extractedText.length);
+      }
+
+      // Extract tables with structure
+      if (document.pages) {
+        document.pages.forEach((page, pageIndex) => {
+          if (page.tables) {
+            page.tables.forEach((table, tableIndex) => {
+              const tableData = {
+                page: pageIndex + 1,
+                tableIndex: tableIndex + 1,
+                headers: [],
+                rows: []
+              };
+
+              // Extract table structure
+              if (table.headerRows) {
+                table.headerRows.forEach(headerRow => {
+                  const headerCells = headerRow.cells?.map(cell => 
+                    getText(cell.layout.textAnchor, document.text)
+                  ) || [];
+                  tableData.headers.push(headerCells);
+                });
+              }
+
+              if (table.bodyRows) {
+                table.bodyRows.forEach(bodyRow => {
+                  const rowCells = bodyRow.cells?.map(cell => 
+                    getText(cell.layout.textAnchor, document.text)
+                  ) || [];
+                  tableData.rows.push(rowCells);
+                });
+              }
+
+              if (tableData.headers.length > 0 || tableData.rows.length > 0) {
+                extractedTables.push(tableData);
+              }
+            });
+          }
         });
       }
 
-      const pdfcoResult = await pdfcoResponse.json();
-      console.log('PDF.co AI text extraction response received');
-
-      if (pdfcoResult.error) {
-        console.error('PDF.co AI text extraction error:', pdfcoResult.message);
-        return res.status(500).json({ 
-          error: 'PDF.co AI text extraction failed',
-          details: pdfcoResult.message
-        });
-      }
-
-      extractedText = pdfcoResult.body || '';
-      console.log('Step 2 complete: AI-enhanced text extraction completed');
-      console.log('Raw text length:', extractedText.length);
-      console.log('Page count:', pdfcoResult.pageCount);
-      console.log('AI enhancements applied: unwrap, cleanup, table detection');
+      console.log('📋 Tables extracted:', extractedTables.length);
+      console.log('🎯 Document AI processing complete - text + structured tables extracted');
 
     } catch (pdfError) {
       console.error('PDF processing failed:', pdfError);
@@ -523,7 +555,18 @@ export default async function handler(req, res) {
 
     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
     
-    const enhancedPrompt = createEnhancedPrompt(extractedText, schemas);
+    // Create enhanced prompt with text and structured table data
+    const documentData = {
+      text: extractedText,
+      tables: extractedTables,
+      metadata: {
+        filename: pdfFile.originalFilename,
+        text_length: extractedText.length,
+        tables_count: extractedTables.length
+      }
+    };
+    
+    const enhancedPrompt = createEnhancedPromptWithTables(documentData, schemas);
     
     // Call Gemini API with retry logic
     const geminiResult = await callGeminiAPI(geminiApiUrl, enhancedPrompt, {
