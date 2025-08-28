@@ -10,6 +10,83 @@ export const config = {
   },
 };
 
+// Helper function to check if two bounding boxes overlap significantly
+function boundingBoxesOverlap(box1, box2, overlapThreshold = 0.3) {
+  if (!box1?.vertices || !box2?.vertices) return false;
+  
+  // Extract coordinates from vertices
+  const getBoxCoords = (box) => {
+    const xs = box.vertices.map(v => v.x || 0);
+    const ys = box.vertices.map(v => v.y || 0);
+    return {
+      left: Math.min(...xs),
+      right: Math.max(...xs),
+      top: Math.min(...ys),
+      bottom: Math.max(...ys)
+    };
+  };
+  
+  const coords1 = getBoxCoords(box1);
+  const coords2 = getBoxCoords(box2);
+  
+  // Calculate intersection area
+  const intersectionLeft = Math.max(coords1.left, coords2.left);
+  const intersectionRight = Math.min(coords1.right, coords2.right);
+  const intersectionTop = Math.max(coords1.top, coords2.top);
+  const intersectionBottom = Math.min(coords1.bottom, coords2.bottom);
+  
+  // No intersection if coordinates don't overlap
+  if (intersectionLeft >= intersectionRight || intersectionTop >= intersectionBottom) {
+    return false;
+  }
+  
+  const intersectionArea = (intersectionRight - intersectionLeft) * (intersectionBottom - intersectionTop);
+  const box1Area = (coords1.right - coords1.left) * (coords1.bottom - coords1.top);
+  const box2Area = (coords2.right - coords2.left) * (coords2.bottom - coords2.top);
+  
+  // Check if intersection area is significant relative to either box
+  const overlapRatio1 = intersectionArea / box1Area;
+  const overlapRatio2 = intersectionArea / box2Area;
+  
+  return overlapRatio1 > overlapThreshold || overlapRatio2 > overlapThreshold;
+}
+
+// Function to filter out tables that are actually part of images/figures
+function filterIncorrectTables(tables, images, pageIndex) {
+  const filteredTables = [];
+  
+  for (const table of tables) {
+    let isValidTable = true;
+    
+    // Check 1: Giant cell filter - tables with single cells containing excessive text
+    if (table.rows.length === 1 && table.rows[0].length === 1) {
+      const singleCellText = table.rows[0][0] || '';
+      if (singleCellText.length > 500) {
+        console.log(`🚫 DEBUG Page ${pageIndex + 1}: Discarding giant single-cell table (${singleCellText.length} chars)`);
+        isValidTable = false;
+      }
+    }
+    
+    // Check 2: Bounding box overlap with images
+    if (isValidTable && table.boundingPoly) {
+      for (const image of images) {
+        if (image.bounds && boundingBoxesOverlap(table.boundingPoly, image.bounds)) {
+          console.log(`🚫 DEBUG Page ${pageIndex + 1}: Discarding table overlapping with image`);
+          isValidTable = false;
+          break;
+        }
+      }
+    }
+    
+    if (isValidTable) {
+      filteredTables.push(table);
+    }
+  }
+  
+  console.log(`📊 DEBUG Page ${pageIndex + 1}: Filtered tables from ${tables.length} to ${filteredTables.length}`);
+  return filteredTables;
+}
+
 // Helper function to extract text from Document AI text anchors
 function getText(textAnchor, text) {
   if (!textAnchor || !textAnchor.textSegments || !text) {
@@ -187,14 +264,45 @@ export default async function handler(req, res) {
     
     if (document.pages) {
       document.pages.forEach((page, pageIndex) => {
-        // Extract tables
+        const pageImages = [];
+        const pageTables = [];
+        
+        // First pass: Extract all images from this page
+        if (page.images) {
+          page.images.forEach((image, imageIndex) => {
+            pageImages.push({
+              page: pageIndex + 1,
+              imageIndex: imageIndex + 1,
+              bounds: image.layout?.boundingPoly,
+              hasBase64: !!image.image?.content
+            });
+          });
+        }
+
+        // Also extract visual elements (figures, charts)
+        if (page.visualElements) {
+          page.visualElements.forEach((element, elementIndex) => {
+            if (element.layout) {
+              pageImages.push({
+                page: pageIndex + 1,
+                elementIndex: elementIndex + 1,
+                type: element.type || 'visual_element',
+                bounds: element.layout.boundingPoly,
+                hasBase64: false
+              });
+            }
+          });
+        }
+        
+        // Second pass: Extract tables with bounding box information
         if (page.tables) {
           page.tables.forEach((table, tableIndex) => {
             const tableData = {
               page: pageIndex + 1,
               tableIndex: tableIndex + 1,
               headers: [],
-              rows: []
+              rows: [],
+              boundingPoly: table.layout?.boundingPoly // Store bounding box for filtering
             };
 
             if (table.headerRows) {
@@ -216,22 +324,27 @@ export default async function handler(req, res) {
             }
 
             if (tableData.headers.length > 0 || tableData.rows.length > 0) {
-              extractedTables.push(tableData);
+              pageTables.push(tableData);
             }
           });
         }
-
-        // Extract images/figures (placeholder for actual image data)
-        if (page.images) {
-          page.images.forEach((image, imageIndex) => {
-            extractedImages.push({
-              page: pageIndex + 1,
-              imageIndex: imageIndex + 1,
-              bounds: image.layout?.boundingPoly,
-              hasBase64: !!image.image?.content
-            });
-          });
-        }
+        
+        // Third pass: Filter out incorrect tables using the filtering function
+        const filteredTables = filterIncorrectTables(pageTables, pageImages, pageIndex);
+        
+        // Add filtered tables to the global array (without boundingPoly for final output)
+        filteredTables.forEach(table => {
+          const cleanTable = {
+            page: table.page,
+            tableIndex: table.tableIndex,
+            headers: table.headers,
+            rows: table.rows
+          };
+          extractedTables.push(cleanTable);
+        });
+        
+        // Add all page images to the global array
+        extractedImages.push(...pageImages);
       });
     }
 
