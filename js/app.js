@@ -2004,15 +2004,14 @@ function updateDebugDisplays(debugData) {
         : 'No images found';
     document.getElementById('debug-images-preview').textContent = imagesText;
     
-    // Two-step prompt preview
-    if (debugData.step1_extraction_prompt) {
-        document.getElementById('extraction-status').innerHTML = '<span class="badge badge-success">Step 1 Ready</span>';
-        document.getElementById('debug-extraction-prompt').textContent = debugData.step1_extraction_prompt;
-    }
-    
-    if (debugData.step2_formatting_prompt) {
-        document.getElementById('formatting-status').innerHTML = '<span class="badge badge-success">Step 2 Ready</span>';
-        document.getElementById('debug-formatting-prompt').textContent = debugData.step2_formatting_prompt;
+    // Enhanced single-step prompt preview
+    if (debugData.enhanced_prompt) {
+        document.getElementById('extraction-status').innerHTML = '<span class="badge badge-success">Enhanced Prompt Ready</span>';
+        document.getElementById('debug-extraction-prompt').textContent = debugData.enhanced_prompt;
+        
+        // Hide step 2 since we use single-step now
+        document.getElementById('formatting-status').innerHTML = '<span class="badge badge-secondary">Single-Step Process</span>';
+        document.getElementById('debug-formatting-prompt').textContent = 'This system now uses a single enhanced prompt instead of separate extraction and formatting steps.';
     }
     
     // Results preview
@@ -2021,21 +2020,19 @@ function updateDebugDisplays(debugData) {
         document.getElementById('debug-results-preview').textContent = JSON.stringify(debugData.roadmapResults, null, 2);
     }
     
-    // Update overall status with two-step workflow info
-    const workflowType = debugData.processing_summary?.workflow_type || 'single_step';
-    const step1Length = debugData.processing_summary?.step1_prompt_length || 0;
-    const step2Length = debugData.processing_summary?.step2_prompt_length || 0;
+    // Update overall status with current single-step workflow info
+    const workflowType = debugData.processing_summary?.workflow_type || 'enhanced_single_step_extraction';
+    const enhancedPromptLength = debugData.processing_summary?.enhanced_prompt_length || 0;
     
     document.getElementById('debug-status').innerHTML = `
         <div class="alert alert-success">
             <i class="fa fa-check-circle mr-2"></i>Processing complete! 
-            <strong>Two-Step Workflow:</strong> Extract-Then-Format<br>
+            <strong>Enhanced Single-Step Extraction</strong><br>
             <small>
                 Document: ${debugData.extractedText?.length || 0} chars, 
                 Tables: ${debugData.extractedTables?.length || 0}, 
                 Images: ${debugData.referencedImages?.length || 0}<br>
-                Step 1 Prompt: ${step1Length.toLocaleString()} chars, 
-                Step 2 Prompt: ${step2Length.toLocaleString()} chars, 
+                Enhanced Prompt: ${enhancedPromptLength.toLocaleString()} chars, 
                 Mode: ${debugData.processing_summary?.processing_mode || 'unknown'}
             </small>
         </div>
