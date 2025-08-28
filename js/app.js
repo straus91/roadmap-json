@@ -1963,10 +1963,15 @@ function updateDebugDisplays(debugData) {
         : 'No images found';
     document.getElementById('debug-images-preview').textContent = imagesText;
     
-    // Prompt preview
-    if (debugData.multimodalPrompt) {
-        document.getElementById('gemini-status').innerHTML = '<span class="badge badge-success">Sent to Gemini</span>';
-        document.getElementById('debug-prompt-preview').textContent = debugData.multimodalPrompt;
+    // Two-step prompt preview
+    if (debugData.step1_extraction_prompt) {
+        document.getElementById('extraction-status').innerHTML = '<span class="badge badge-success">Step 1 Ready</span>';
+        document.getElementById('debug-extraction-prompt').textContent = debugData.step1_extraction_prompt;
+    }
+    
+    if (debugData.step2_formatting_prompt) {
+        document.getElementById('formatting-status').innerHTML = '<span class="badge badge-success">Step 2 Ready</span>';
+        document.getElementById('debug-formatting-prompt').textContent = debugData.step2_formatting_prompt;
     }
     
     // Results preview
@@ -1975,13 +1980,23 @@ function updateDebugDisplays(debugData) {
         document.getElementById('debug-results-preview').textContent = JSON.stringify(debugData.roadmapResults, null, 2);
     }
     
-    // Update overall status
+    // Update overall status with two-step workflow info
+    const workflowType = debugData.processing_summary?.workflow_type || 'single_step';
+    const step1Length = debugData.processing_summary?.step1_prompt_length || 0;
+    const step2Length = debugData.processing_summary?.step2_prompt_length || 0;
+    
     document.getElementById('debug-status').innerHTML = `
         <div class="alert alert-success">
             <i class="fa fa-check-circle mr-2"></i>Processing complete! 
-            Text: ${debugData.extractedText?.length || 0} chars, 
-            Tables: ${debugData.extractedTables?.length || 0}, 
-            Images: ${debugData.referencedImages?.length || 0}
+            <strong>Two-Step Workflow:</strong> Extract-Then-Format<br>
+            <small>
+                Document: ${debugData.extractedText?.length || 0} chars, 
+                Tables: ${debugData.extractedTables?.length || 0}, 
+                Images: ${debugData.referencedImages?.length || 0}<br>
+                Step 1 Prompt: ${step1Length.toLocaleString()} chars, 
+                Step 2 Prompt: ${step2Length.toLocaleString()} chars, 
+                Mode: ${debugData.processing_summary?.processing_mode || 'unknown'}
+            </small>
         </div>
     `;
 }

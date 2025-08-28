@@ -144,54 +144,139 @@ function findReferencedImages(text, images) {
   };
 }
 
-function createDebugPrompt(documentData, processingMode = 'multimodal') {
-  if (processingMode === 'text-only') {
-    return `ROADMAP extraction from research paper PDF.
+// Import the new prompt functions from process-pdf.js logic
+function createExtractionPromptDebug(documentData, processingMode = 'multimodal') {
+  const basePrompt = `You are an expert data extraction specialist for medical imaging research papers. Your task is to thoroughly analyze the provided document content and extract ALL key information in a structured, human-readable format.
 
-PROCESSING MODE: Text-only (images excluded)
+ANALYSIS TASK:
+Examine the document content (text + tables${processingMode === 'multimodal' ? ' + figures' : ''}) and create a comprehensive structured summary of ALL information that would be relevant for creating either a Model Card or Dataset Card for ROADMAP (Radiology Ontology for AI Models, Datasets and Projects).
 
-DOCUMENT CONTENT:
+EXTRACTION INSTRUCTIONS:
+1. First determine if this describes a MODEL (AI/ML algorithm) or DATASET (collection of medical images/data)
+2. Extract ALL relevant information systematically - do NOT summarize or skip details
+3. For tables: Provide complete table contents, not summaries
+4. For figures: Describe what they show and their relevance${processingMode === 'multimodal' ? ' (visual content will be provided)' : ''}
+5. Include specific metrics, numbers, dates, and technical details
+6. Capture author information, affiliations, and publication details
+7. Extract performance metrics, evaluation methods, and statistical results
+8. Note any limitations, ethical considerations, or usage restrictions mentioned
 
-TEXT CONTENT (${documentData.text.length} characters):
-"""${documentData.text.substring(0, 10000)}${documentData.text.length > 10000 ? '\n\n... [text truncated for display]' : ''}"""
+OUTPUT STRUCTURE:
+Organize your findings into these sections:
+
+DOCUMENT TYPE: [MODEL or DATASET]
+
+IDENTIFICATION:
+- Name/Title: [Full name or title]
+- Authors: [Complete author list with affiliations]
+- Publication: [Journal, conference, date, DOI if available]
+- Version/Release: [Any version information]
+
+CORE DESCRIPTION:
+- Purpose: [What it's designed for]
+- Target Domain: [Specific medical imaging area]
+- Key Innovation: [What makes it novel or significant]
+
+TECHNICAL DETAILS:
+- Architecture/Methodology: [Detailed technical approach]
+- Data Requirements: [Input specifications, format requirements]
+- Performance Metrics: [Complete results from all tables and evaluations]
+- Validation Methods: [How it was tested/validated]
+
+DATASETS USED/PROVIDED:
+- Training Data: [Complete details of datasets used]
+- Test Data: [Evaluation datasets]
+- Data Characteristics: [Size, demographics, imaging modalities, etc.]
+
+IMPLEMENTATION:
+- Software/Frameworks: [Technical implementation details]
+- Hardware Requirements: [Computational requirements]
+- Availability: [Where to access, licensing, etc.]
+
+EVALUATION RESULTS:
+- Primary Results: [Main performance findings]
+- Detailed Table Data: [Complete extraction of all numerical results]
+- Comparative Analysis: [How it compares to other methods]
+- Statistical Analysis: [P-values, confidence intervals, etc.]
+
+LIMITATIONS & CONSIDERATIONS:
+- Known Limitations: [Acknowledged weaknesses]
+- Ethical Considerations: [Bias, fairness, privacy concerns]
+- Usage Guidelines: [Recommended and prohibited uses]
+
+ADDITIONAL INFORMATION:
+- Funding Sources: [Grant information, support]
+- Code/Data Availability: [GitHub links, data repositories]
+- Related Work: [Key references, prior work]
+
+DOCUMENT CONTENT TO ANALYZE:
+
+TEXT CONTENT:
+"""${documentData.text.substring(0, processingMode === 'text-only' ? 8000 : 6000)}${documentData.text.length > (processingMode === 'text-only' ? 8000 : 6000) ? '\n\n... [text continues but truncated for debug display]' : ''}"""
 
 STRUCTURED TABLES (${documentData.tables.length} tables found):
-${documentData.tables.length > 0 ? JSON.stringify(documentData.tables, null, 2) : 'No tables found in document'}
+${documentData.tables.length > 0 ? 
+  documentData.tables.map((table, idx) => 
+    `TABLE ${idx + 1} (Page ${table.page}):\nHeaders: ${JSON.stringify(table.headers)}\nRows: ${JSON.stringify(table.rows)}`
+  ).join('\n\n') : 'No tables found in document'}
 
-METADATA:
-- Filename: ${documentData.metadata.filename}
-- Text length: ${documentData.metadata.text_length} characters
-- Tables extracted: ${documentData.metadata.tables_count}
-- Processing mode: Text-only
-
-[Note: This is a debug view showing text-only processing - images are not included]`;
-  } else {
-    return `ROADMAP extraction from research paper PDF.
-
-PROCESSING MODE: Multimodal (text + tables + images)
-
-DOCUMENT CONTENT:
-
-TEXT CONTENT (${documentData.text.length} characters):
-"""${documentData.text.substring(0, 8000)}${documentData.text.length > 8000 ? '\n\n... [text truncated for display]' : ''}"""
-
-STRUCTURED TABLES (${documentData.tables.length} tables found):
-${documentData.tables.length > 0 ? JSON.stringify(documentData.tables, null, 2) : 'No tables found in document'}
-
+${processingMode === 'multimodal' ? `
 REFERENCED FIGURES (${documentData.images.length} selected):
 ${documentData.images.length > 0 ? 
   documentData.images.map(img => `- Figure ${img.figureNumber} (Page ${img.page}) - ${img.referenced ? 'Referenced in text' : 'Available'}`).join('\n') 
   : 'No figures available'}
 
+Note: Visual content (charts, diagrams, images) will be provided as additional input for analysis.
+` : `
+PROCESSING MODE: Text-only (images excluded)
+`}
+
 METADATA:
 - Filename: ${documentData.metadata.filename}
 - Text length: ${documentData.metadata.text_length} characters
 - Tables extracted: ${documentData.metadata.tables_count}
-- Images selected: ${documentData.metadata.images_count}
-- Processing mode: Multimodal
+${processingMode === 'multimodal' ? `- Images selected: ${documentData.metadata.images_count}` : ''}
 
-[Note: This is a debug view - in actual processing, images are included as base64 data]`;
-  }
+IMPORTANT: Extract ALL information thoroughly. Do not summarize tables - provide complete data. This structured summary will be used in a second step to create the final ROADMAP JSON format.
+
+OUTPUT (Structured text summary):`;
+
+  return basePrompt;
+}
+
+function createFormattingPromptDebug(extractedInformation) {
+  return `You are an expert JSON formatting specialist. Your task is to take a pre-extracted structured summary of information and format it perfectly into the ROADMAP JSON schema format.
+
+FORMATTING TASK:
+Take the provided structured information summary and convert it into a valid ROADMAP JSON object following the exact schema specifications.
+
+FORMATTING INSTRUCTIONS:
+1. Use the document type identified in the summary (MODEL or DATASET)
+2. Map ALL extracted information to the appropriate schema fields
+3. Follow exact field names and data types as specified in the schema
+4. Use proper JSON formatting with correct nesting structure
+5. Fill in as many fields as possible from the extracted information
+6. Set empty strings "" for text fields without information
+7. Set empty arrays [] for array fields without information
+8. Use appropriate default values for required fields
+9. Maintain all numerical precision from the extracted data
+10. Preserve all technical details and performance metrics
+
+CRITICAL FORMATTING REQUIREMENTS:
+- Return ONLY valid JSON (no markdown, no explanations, no additional text)
+- Use exact field names from schema (case-sensitive)
+- Follow proper nesting structure exactly as shown
+- Include required fields even if empty
+- Use appropriate data types (string, number, array, object)
+- For arrays of strings: ["item1", "item2"]
+- For arrays of objects: [{"field": "value"}]
+- For nested objects: {"field": {"nested": "value"}}
+
+EXTRACTED INFORMATION TO FORMAT:
+
+${extractedInformation.substring(0, 5000)}${extractedInformation.length > 5000 ? '\n\n... [extraction continues but truncated for debug display]' : ''}
+
+OUTPUT (Valid JSON only):`;
 }
 
 export default async function handler(req, res) {
@@ -366,19 +451,29 @@ export default async function handler(req, res) {
       }
     };
 
-    // Create the prompt that would be sent to Gemini (based on processing mode)
-    const promptForGemini = createDebugPrompt(documentData, processingMode);
+    // Create the two-step prompts that would be sent to Gemini
+    const step1ExtractionPrompt = createExtractionPromptDebug(documentData, processingMode);
+    const step2FormattingPrompt = createFormattingPromptDebug('[EXTRACTED INFORMATION FROM STEP 1 WOULD GO HERE]');
 
-    console.log('✅ Debug processing complete');
+    console.log('✅ Debug processing complete - Two-step workflow analysis ready');
     
-    // Return all debug information
+    // Return comprehensive debug information showing both steps
     res.status(200).json({
+      // Document extraction results (same as before)
       extractedText,
       extractedTables,
       referencedImages,
       allImagesFound: extractedImages,
       figureReferences: allReferences,
-      multimodalPrompt: promptForGemini,
+      
+      // Two-step workflow prompts
+      step1_extraction_prompt: step1ExtractionPrompt,
+      step2_formatting_prompt: step2FormattingPrompt,
+      
+      // Legacy field for backward compatibility (shows Step 1 prompt)
+      multimodalPrompt: step1ExtractionPrompt,
+      
+      // Enhanced metadata
       metadata: documentData.metadata,
       processing_summary: {
         pages_processed: document.pages?.length || 0,
@@ -386,8 +481,11 @@ export default async function handler(req, res) {
         tables_extracted: extractedTables.length,
         total_images_found: extractedImages.length,
         referenced_images_selected: referencedImages.length,
-        prompt_length: promptForGemini.length,
-        processing_mode: processingMode
+        processing_mode: processingMode,
+        workflow_type: 'two_step_extract_then_format',
+        step1_prompt_length: step1ExtractionPrompt.length,
+        step2_prompt_length: step2FormattingPrompt.length,
+        total_prompt_length: step1ExtractionPrompt.length + step2FormattingPrompt.length
       }
     });
 

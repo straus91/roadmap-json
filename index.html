@@ -423,20 +423,40 @@
                                 </div>
                             </div>
 
-                            <!-- Step 2: Multimodal Prompt -->
+                            <!-- Step 2A: Information Extraction Prompt -->
                             <div class="card mb-3">
                                 <div class="card-header bg-info text-white">
-                                    <h6 class="mb-0"><i class="fa fa-edit mr-2"></i>Multimodal Prompt Sent to Gemini</h6>
+                                    <h6 class="mb-0"><i class="fa fa-search mr-2"></i>Step 1: Information Extraction Prompt</h6>
                                 </div>
                                 <div class="card-body">
-                                    <div id="gemini-status" class="mb-2">
+                                    <div id="extraction-status" class="mb-2">
                                         <span class="badge badge-info">Waiting for Document AI...</span>
                                     </div>
                                     <div class="row">
                                         <div class="col-12">
-                                            <strong>Complete Prompt Structure:</strong>
-                                            <div id="debug-prompt-preview" class="border p-2 mt-2" style="height: 500px; overflow-y: auto; font-size: 11px; background: #f8f9fa; white-space: pre-wrap;">
+                                            <strong>Extraction Prompt (Focuses on comprehensive data capture):</strong>
+                                            <div id="debug-extraction-prompt" class="border p-2 mt-2" style="height: 400px; overflow-y: auto; font-size: 11px; background: #f8f9fa; white-space: pre-wrap;">
                                                 Waiting for processing...
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Step 2B: JSON Formatting Prompt -->
+                            <div class="card mb-3">
+                                <div class="card-header bg-warning text-dark">
+                                    <h6 class="mb-0"><i class="fa fa-code mr-2"></i>Step 2: JSON Formatting Prompt</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="formatting-status" class="mb-2">
+                                        <span class="badge badge-info">Waiting for Step 1...</span>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <strong>Formatting Prompt (Focuses on perfect JSON structure):</strong>
+                                            <div id="debug-formatting-prompt" class="border p-2 mt-2" style="height: 300px; overflow-y: auto; font-size: 11px; background: #f8f9fa; white-space: pre-wrap;">
+                                                Waiting for Step 1 extraction...
                                             </div>
                                         </div>
                                     </div>
