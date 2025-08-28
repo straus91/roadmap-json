@@ -237,6 +237,19 @@ async function loadSchemas() {
   }
 }
 
+// Helper function to filter examples for display
+function filterExamples(examples) {
+  if (!examples || !Array.isArray(examples)) return examples;
+  
+  // Filter out complex objects/arrays that cause [object Object] display
+  return examples.filter(example => {
+    if (typeof example === 'string' || typeof example === 'number' || typeof example === 'boolean') {
+      return true;
+    }
+    return false; // Filter out objects and arrays
+  });
+}
+
 // Function to extract relevant schema structure for LLM
 function extractSchemaStructure(schema, schemaType) {
   const mainDef = schema.$defs?.[schemaType];
@@ -251,7 +264,7 @@ function extractSchemaStructure(schema, schemaType) {
       result[key] = {
         type: value.type,
         description: value.description,
-        examples: value.examples,
+        examples: value.examples ? filterExamples(value.examples) : undefined,
         enum: value.enum
       };
       
@@ -264,7 +277,7 @@ function extractSchemaStructure(schema, schemaType) {
       if (value.type === 'array' && value.items) {
         result[key].items = {
           type: value.items.type,
-          examples: value.items.examples,
+          examples: value.items.examples ? filterExamples(value.items.examples) : undefined,
           enum: value.items.enum
         };
         
@@ -284,7 +297,7 @@ function extractSchemaStructure(schema, schemaType) {
             result[key].items.enum = refDef.enum;
           }
           if (refDef?.examples) {
-            result[key].items.examples = refDef.examples;
+            result[key].items.examples = filterExamples(refDef.examples);
           }
         }
       }
@@ -298,7 +311,7 @@ function extractSchemaStructure(schema, schemaType) {
             ...result[key],
             type: refDef.type,
             description: refDef.description,
-            examples: refDef.examples,
+            examples: refDef.examples ? filterExamples(refDef.examples) : undefined,
             enum: refDef.enum
           };
           if (refDef.properties) {
