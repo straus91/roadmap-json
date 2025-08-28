@@ -619,6 +619,151 @@ METADATA:
 OUTPUT (JSON only):`;
 }
 
+// STEP 1: Function to create extraction prompt - focuses solely on extracting information
+function createExtractionPrompt(documentData, processingMode = 'multimodal') {
+  const basePrompt = `You are an expert data extraction specialist for medical imaging research papers. Your task is to thoroughly analyze the provided document content and extract ALL key information in a structured, human-readable format.
+
+ANALYSIS TASK:
+Examine the document content (text + tables${processingMode === 'multimodal' ? ' + figures' : ''}) and create a comprehensive structured summary of ALL information that would be relevant for creating either a Model Card or Dataset Card for ROADMAP (Radiology Ontology for AI Models, Datasets and Projects).
+
+EXTRACTION INSTRUCTIONS:
+1. First determine if this describes a MODEL (AI/ML algorithm) or DATASET (collection of medical images/data)
+2. Extract ALL relevant information systematically - do NOT summarize or skip details
+3. For tables: Provide complete table contents, not summaries
+4. For figures: Describe what they show and their relevance${processingMode === 'multimodal' ? ' (visual content will be provided)' : ''}
+5. Include specific metrics, numbers, dates, and technical details
+6. Capture author information, affiliations, and publication details
+7. Extract performance metrics, evaluation methods, and statistical results
+8. Note any limitations, ethical considerations, or usage restrictions mentioned
+
+OUTPUT STRUCTURE:
+Organize your findings into these sections:
+
+DOCUMENT TYPE: [MODEL or DATASET]
+
+IDENTIFICATION:
+- Name/Title: [Full name or title]
+- Authors: [Complete author list with affiliations]
+- Publication: [Journal, conference, date, DOI if available]
+- Version/Release: [Any version information]
+
+CORE DESCRIPTION:
+- Purpose: [What it's designed for]
+- Target Domain: [Specific medical imaging area]
+- Key Innovation: [What makes it novel or significant]
+
+TECHNICAL DETAILS:
+- Architecture/Methodology: [Detailed technical approach]
+- Data Requirements: [Input specifications, format requirements]
+- Performance Metrics: [Complete results from all tables and evaluations]
+- Validation Methods: [How it was tested/validated]
+
+DATASETS USED/PROVIDED:
+- Training Data: [Complete details of datasets used]
+- Test Data: [Evaluation datasets]
+- Data Characteristics: [Size, demographics, imaging modalities, etc.]
+
+IMPLEMENTATION:
+- Software/Frameworks: [Technical implementation details]
+- Hardware Requirements: [Computational requirements]
+- Availability: [Where to access, licensing, etc.]
+
+EVALUATION RESULTS:
+- Primary Results: [Main performance findings]
+- Detailed Table Data: [Complete extraction of all numerical results]
+- Comparative Analysis: [How it compares to other methods]
+- Statistical Analysis: [P-values, confidence intervals, etc.]
+
+LIMITATIONS & CONSIDERATIONS:
+- Known Limitations: [Acknowledged weaknesses]
+- Ethical Considerations: [Bias, fairness, privacy concerns]
+- Usage Guidelines: [Recommended and prohibited uses]
+
+ADDITIONAL INFORMATION:
+- Funding Sources: [Grant information, support]
+- Code/Data Availability: [GitHub links, data repositories]
+- Related Work: [Key references, prior work]
+
+DOCUMENT CONTENT TO ANALYZE:
+
+TEXT CONTENT:
+"""${documentData.text.substring(0, processingMode === 'text-only' ? 20000 : 15000)}${documentData.text.length > (processingMode === 'text-only' ? 20000 : 15000) ? '\n\n... [text continues but truncated for processing]' : ''}"""
+
+STRUCTURED TABLES (${documentData.tables.length} tables found):
+${documentData.tables.length > 0 ? 
+  documentData.tables.map((table, idx) => 
+    `TABLE ${idx + 1} (Page ${table.page}):\nHeaders: ${JSON.stringify(table.headers)}\nRows: ${JSON.stringify(table.rows)}`
+  ).join('\n\n') : 'No tables found in document'}
+
+${processingMode === 'multimodal' ? `
+REFERENCED FIGURES (${documentData.images.length} selected):
+${documentData.images.length > 0 ? 
+  documentData.images.map(img => `- Figure ${img.figureNumber} (Page ${img.page}) - ${img.referenced ? 'Referenced in text' : 'Available'}`).join('\n') 
+  : 'No figures available'}
+
+Note: Visual content (charts, diagrams, images) will be provided as additional input for analysis.
+` : `
+PROCESSING MODE: Text-only (images excluded)
+`}
+
+METADATA:
+- Filename: ${documentData.metadata.filename}
+- Text length: ${documentData.metadata.text_length} characters
+- Tables extracted: ${documentData.metadata.tables_count}
+${processingMode === 'multimodal' ? `- Images selected: ${documentData.metadata.images_count}` : ''}
+
+IMPORTANT: Extract ALL information thoroughly. Do not summarize tables - provide complete data. This structured summary will be used in a second step to create the final ROADMAP JSON format.
+
+OUTPUT (Structured text summary):`;
+}
+
+// STEP 2: Function to create formatting prompt - focuses solely on JSON formatting
+function createFormattingPrompt(extractedInformation, schemas) {
+  const modelStructure = extractSchemaStructure(schemas.model, 'model');
+  const datasetStructure = extractSchemaStructure(schemas.dataset, 'dataset');
+  
+  return `You are an expert JSON formatting specialist. Your task is to take a pre-extracted structured summary of information and format it perfectly into the ROADMAP JSON schema format.
+
+FORMATTING TASK:
+Take the provided structured information summary and convert it into a valid ROADMAP JSON object following the exact schema specifications.
+
+FORMATTING INSTRUCTIONS:
+1. Use the document type identified in the summary (MODEL or DATASET)
+2. Map ALL extracted information to the appropriate schema fields
+3. Follow exact field names and data types as specified in the schema
+4. Use proper JSON formatting with correct nesting structure
+5. Fill in as many fields as possible from the extracted information
+6. Set empty strings "" for text fields without information
+7. Set empty arrays [] for array fields without information
+8. Use appropriate default values for required fields
+9. Maintain all numerical precision from the extracted data
+10. Preserve all technical details and performance metrics
+
+SCHEMA STRUCTURES:
+
+MODEL SCHEMA:
+${JSON.stringify(modelStructure, null, 2)}
+
+DATASET SCHEMA:
+${JSON.stringify(datasetStructure, null, 2)}
+
+CRITICAL FORMATTING REQUIREMENTS:
+- Return ONLY valid JSON (no markdown, no explanations, no additional text)
+- Use exact field names from schema (case-sensitive)
+- Follow proper nesting structure exactly as shown
+- Include required fields even if empty
+- Use appropriate data types (string, number, array, object)
+- For arrays of strings: ["item1", "item2"]
+- For arrays of objects: [{"field": "value"}]
+- For nested objects: {"field": {"nested": "value"}}
+
+EXTRACTED INFORMATION TO FORMAT:
+
+${extractedInformation}
+
+OUTPUT (Valid JSON only):`;
+}
+
 // Function to create text-only prompt (without images/figures)
 function createTextOnlyPrompt(documentData, schemas) {
   const modelStructure = extractSchemaStructure(schemas.model, 'model');
@@ -946,17 +1091,16 @@ export default async function handler(req, res) {
       }
     };
     
-    let geminiResult;
+    // STEP 1: Extract structured information from document
+    console.log('🔍 Step 1: Extracting structured information...');
+    const extractionPrompt = createExtractionPrompt(documentData, processingMode);
     
+    let extractionResult;
     if (processingMode === 'text-only') {
-      // Create text-only prompt (without image references)
-      const textOnlyPrompt = createTextOnlyPrompt(documentData, schemas);
-      console.log('📝 Using text-only processing mode');
-      
-      // Call Gemini API with text content only
-      geminiResult = await callGeminiAPI(geminiApiUrl, textOnlyPrompt, {
-        temperature: 0.2,
-        maxOutputTokens: 4096,
+      console.log('📝 Using text-only extraction mode');
+      extractionResult = await callGeminiAPI(geminiApiUrl, extractionPrompt, {
+        temperature: 0.1,  // Lower temperature for better extraction accuracy
+        maxOutputTokens: 8192,  // More tokens for detailed extraction
         safetySettings: [
           {
             category: "HARM_CATEGORY_HARASSMENT",
@@ -969,14 +1113,10 @@ export default async function handler(req, res) {
         ]
       });
     } else {
-      // Default multimodal processing
-      const multimodalPrompt = createMultimodalPrompt(documentData, schemas);
-      console.log('🖼️ Using multimodal processing mode');
-      
-      // Call Gemini API with multimodal content (text + images)
-      geminiResult = await callGeminiAPIMultimodal(geminiApiUrl, multimodalPrompt, documentData, {
-        temperature: 0.2,
-        maxOutputTokens: 4096,
+      console.log('🖼️ Using multimodal extraction mode');
+      extractionResult = await callGeminiAPIMultimodal(geminiApiUrl, extractionPrompt, documentData, {
+        temperature: 0.1,  // Lower temperature for better extraction accuracy
+        maxOutputTokens: 8192,  // More tokens for detailed extraction
         safetySettings: [
           {
             category: "HARM_CATEGORY_HARASSMENT",
@@ -990,27 +1130,64 @@ export default async function handler(req, res) {
       });
     }
 
-    // Handle retry function errors
-    if (geminiResult.error) {
-      console.error('Gemini API failed after retries:', geminiResult.message);
+    // Handle extraction errors
+    if (extractionResult.error) {
+      console.error('Step 1 extraction failed after retries:', extractionResult.message);
       return res.status(500).json({ 
-        error: 'Gemini API request failed after retries',
-        details: geminiResult.message?.substring(0, 200)
+        error: 'Information extraction failed after retries',
+        details: extractionResult.message?.substring(0, 200)
       });
     }
 
-    console.log('Received response from Gemini API');
-    
-    if (!geminiResult.candidates || !geminiResult.candidates[0] || !geminiResult.candidates[0].content) {
-      console.error('Invalid Gemini response structure:', geminiResult);
-      return res.status(500).json({ error: 'Invalid response from Gemini API' });
+    if (!extractionResult.candidates || !extractionResult.candidates[0] || !extractionResult.candidates[0].content) {
+      console.error('Invalid extraction response structure:', extractionResult);
+      return res.status(500).json({ error: 'Invalid response from extraction step' });
     }
 
-    // Parse the Gemini response
+    const extractedInformation = extractionResult.candidates[0].content.parts[0].text.trim();
+    console.log('✅ Step 1 complete - Information extracted (', extractedInformation.length, 'characters)');
+
+    // STEP 2: Format extracted information into ROADMAP JSON
+    console.log('📋 Step 2: Formatting into ROADMAP JSON structure...');
+    const formattingPrompt = createFormattingPrompt(extractedInformation, schemas);
+    
+    const formattingResult = await callGeminiAPI(geminiApiUrl, formattingPrompt, {
+      temperature: 0.0,  // Zero temperature for precise formatting
+      maxOutputTokens: 4096,  // Standard tokens for JSON output
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        }
+      ]
+    });
+
+    // Handle formatting errors
+    if (formattingResult.error) {
+      console.error('Step 2 formatting failed after retries:', formattingResult.message);
+      return res.status(500).json({ 
+        error: 'JSON formatting failed after retries',
+        details: formattingResult.message?.substring(0, 200),
+        extractedInformation: extractedInformation.substring(0, 1000) // Include partial extraction for debugging
+      });
+    }
+
+    if (!formattingResult.candidates || !formattingResult.candidates[0] || !formattingResult.candidates[0].content) {
+      console.error('Invalid formatting response structure:', formattingResult);
+      return res.status(500).json({ error: 'Invalid response from formatting step' });
+    }
+
+    console.log('✅ Step 2 complete - JSON formatting done');
+
+    // Parse the final JSON response
     let structuredJson;
     try {
-      const responseContent = geminiResult.candidates[0].content.parts[0].text.trim();
-      console.log('Raw Gemini response length:', responseContent.length);
+      const responseContent = formattingResult.candidates[0].content.parts[0].text.trim();
+      console.log('Raw JSON formatting response length:', responseContent.length);
       
       // Clean up the response (remove any markdown formatting)
       const cleanResponse = responseContent
@@ -1019,14 +1196,15 @@ export default async function handler(req, res) {
         .trim();
       
       structuredJson = JSON.parse(cleanResponse);
-      console.log('Successfully parsed JSON response');
+      console.log('🎯 Successfully parsed final JSON response');
       
     } catch (parseError) {
-      console.error('Failed to parse Gemini response:', geminiResult.candidates[0].content.parts[0].text.substring(0, 500));
+      console.error('Failed to parse JSON formatting response:', formattingResult.candidates[0].content.parts[0].text.substring(0, 500));
       return res.status(500).json({ 
-        error: 'Failed to parse Gemini response as JSON',
-        geminiResponse: geminiResult.candidates[0].content.parts[0].text.substring(0, 500),
-        parseError: parseError.message
+        error: 'Failed to parse formatted JSON response',
+        formattingResponse: formattingResult.candidates[0].content.parts[0].text.substring(0, 500),
+        parseError: parseError.message,
+        extractedInformation: extractedInformation.substring(0, 1000) // Include partial extraction for debugging
       });
     }
 
@@ -1035,7 +1213,8 @@ export default async function handler(req, res) {
       console.error('Invalid structure - no Model or Dataset key found');
       return res.status(500).json({ 
         error: 'Invalid response structure - missing Model or Dataset key',
-        response: structuredJson
+        response: structuredJson,
+        extractedInformation: extractedInformation.substring(0, 1000) // Include partial extraction for debugging
       });
     }
 
