@@ -369,24 +369,28 @@ export default async function handler(req, res) {
         });
       }
 
-      const structuredData = pdfcoResult.body || pdfcoResult.url || pdfcoResult;
-      console.log('Step 2 complete: JSON extraction completed, data length:', 
-                  typeof structuredData === 'string' ? structuredData.length : 'object');
-      console.log('PDF.co result keys:', Object.keys(pdfcoResult));
+      const structuredData = pdfcoResult.body;
+      console.log('Step 2 complete: JSON extraction completed');
+      console.log('Data type:', typeof structuredData);
+      console.log('Page count:', pdfcoResult.pageCount);
       
       // Convert structured JSON to text for Gemini processing
       let extractedText = '';
       try {
-        if (typeof structuredData === 'string') {
-          const jsonData = JSON.parse(structuredData);
-          extractedText = JSON.stringify(jsonData, null, 2);
-        } else {
-          extractedText = JSON.stringify(structuredData, null, 2);
+        if (!structuredData) {
+          throw new Error('No structured data received from PDF.co');
         }
+        
+        // Convert object to formatted JSON string
+        extractedText = JSON.stringify(structuredData, null, 2);
         console.log('Converted JSON to formatted text, length:', extractedText.length);
+        
       } catch (jsonError) {
-        console.error('Error parsing JSON data:', jsonError);
-        extractedText = String(structuredData);
+        console.error('Error processing JSON data:', jsonError);
+        return res.status(500).json({ 
+          error: 'Failed to process extracted JSON data',
+          details: jsonError.message 
+        });
       }
 
     } catch (pdfError) {
