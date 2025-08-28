@@ -441,6 +441,12 @@ async function callGeminiAPIMultimodal(url, textPrompt, documentData, config = {
     // Build multimodal content parts
     const contentParts = [];
     
+    // Validate text prompt
+    if (!textPrompt || typeof textPrompt !== 'string' || textPrompt.trim().length === 0) {
+      console.error('❌ Invalid textPrompt for multimodal request:', { textPrompt, type: typeof textPrompt });
+      throw new Error('Invalid textPrompt: must be a non-empty string');
+    }
+    
     // Add the main text prompt
     contentParts.push({ text: textPrompt });
     
@@ -715,6 +721,8 @@ ${processingMode === 'multimodal' ? `- Images selected: ${documentData.metadata.
 IMPORTANT: Extract ALL information thoroughly. Do not summarize tables - provide complete data. This structured summary will be used in a second step to create the final ROADMAP JSON format.
 
 OUTPUT (Structured text summary):`;
+
+  return basePrompt;
 }
 
 // STEP 2: Function to create formatting prompt - focuses solely on JSON formatting
@@ -1094,6 +1102,8 @@ export default async function handler(req, res) {
     // STEP 1: Extract structured information from document
     console.log('🔍 Step 1: Extracting structured information...');
     const extractionPrompt = createExtractionPrompt(documentData, processingMode);
+    console.log('🔍 DEBUG: extractionPrompt type:', typeof extractionPrompt);
+    console.log('🔍 DEBUG: extractionPrompt length:', extractionPrompt?.length || 'undefined');
     
     let extractionResult;
     if (processingMode === 'text-only') {
