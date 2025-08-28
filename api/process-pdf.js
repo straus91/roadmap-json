@@ -27,6 +27,51 @@ function getText(textAnchor, text) {
   return extractedText.trim();
 }
 
+// Function to find images referenced in the text
+function findReferencedImages(text, images) {
+  const referencedImages = [];
+  
+  // Common figure reference patterns
+  const figurePatterns = [
+    /Figure\s+(\d+)/gi,
+    /Fig\.\s*(\d+)/gi,
+    /Chart\s+(\d+)/gi,
+    /Graph\s+(\d+)/gi,
+    /Diagram\s+(\d+)/gi,
+    /Image\s+(\d+)/gi
+  ];
+  
+  const referencedNumbers = new Set();
+  
+  // Find all figure numbers mentioned in text
+  figurePatterns.forEach(pattern => {
+    const matches = text.matchAll(pattern);
+    for (const match of matches) {
+      referencedNumbers.add(parseInt(match[1]));
+    }
+  });
+  
+  console.log('📊 Figure references found in text:', Array.from(referencedNumbers).sort());
+  
+  // Match referenced numbers to available images
+  // For now, select first few images as most papers start with Figure 1, 2, etc.
+  const maxImages = Math.min(3, images.length); // Limit to 3 images max
+  
+  images.slice(0, maxImages).forEach((image, index) => {
+    // Assign figure numbers based on order if not detected
+    const figureNumber = index + 1;
+    if (referencedNumbers.has(figureNumber) || referencedNumbers.size === 0) {
+      referencedImages.push({
+        ...image,
+        figureNumber: figureNumber,
+        referenced: referencedNumbers.has(figureNumber)
+      });
+    }
+  });
+  
+  return referencedImages;
+}
+
 // Function to load and parse schema files
 async function loadSchemas() {
   try {
@@ -310,22 +355,109 @@ async function callGeminiAPI(url, prompt, config = {}, retryCount = 0) {
   }
 }
 
-// Function to create intelligent prompt with full schema reference and table data
-function createEnhancedPromptWithTables(documentData, schemas) {
+// Helper function to call Gemini API with multimodal content (text + images)
+async function callGeminiAPIMultimodal(url, textPrompt, documentData, config = {}, retryCount = 0) {
+  const maxRetries = 3;
+  const baseDelay = 1000;
+  
+  try {
+    // Build multimodal content parts
+    const contentParts = [];
+    
+    // Add the main text prompt
+    contentParts.push({ text: textPrompt });
+    
+    // Add referenced images
+    if (documentData.images && documentData.images.length > 0) {
+      documentData.images.forEach(image => {
+        if (image.base64) {
+          contentParts.push({
+            text: `\n\nFigure ${image.figureNumber} (Page ${image.page}):`
+          });
+          contentParts.push({
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: image.base64
+            }
+          });
+        }
+      });
+    }
+
+    const requestBody = {
+      contents: [{ parts: contentParts }],
+      generationConfig: {
+        temperature: config.temperature || 0.2,
+        maxOutputTokens: config.maxOutputTokens || 4096,
+        topK: 40,
+        topP: 0.95
+      },
+      safetySettings: config.safetySettings || []
+    };
+
+    console.log(`📤 Sending multimodal request to Gemini API (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+    console.log('📝 Text parts:', contentParts.filter(p => p.text).length);
+    console.log('🖼️ Image parts:', contentParts.filter(p => p.inlineData).length);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'No error details');
+      console.error('❌ Gemini Multimodal API error:', response.status, response.statusText);
+      console.error('❌ Error details:', errorText.substring(0, 500));
+      
+      // Retry for 503 (Service Unavailable) and 429 (Rate Limited) errors
+      if ((response.status === 503 || response.status === 429) && retryCount < maxRetries) {
+        const delay = baseDelay * Math.pow(2, retryCount);
+        console.log(`🔄 Retrying multimodal request in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return await callGeminiAPIMultimodal(url, textPrompt, documentData, config, retryCount + 1);
+      }
+      
+      return { error: true, status: response.status, message: errorText };
+    }
+
+    const result = await response.json();
+    console.log('✅ Gemini Multimodal API call successful');
+    return result;
+
+  } catch (error) {
+    console.error('❌ Gemini Multimodal API call failed:', error.message);
+    
+    if (retryCount < maxRetries && (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT')) {
+      const delay = baseDelay * Math.pow(2, retryCount);
+      console.log(`🔄 Network error, retrying multimodal request in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return await callGeminiAPIMultimodal(url, textPrompt, documentData, config, retryCount + 1);
+    }
+    
+    return { error: true, message: error.message };
+  }
+}
+
+// Function to create multimodal prompt with text, tables, and images
+function createMultimodalPrompt(documentData, schemas) {
   const modelStructure = extractSchemaStructure(schemas.model, 'model');
   const datasetStructure = extractSchemaStructure(schemas.dataset, 'dataset');
   
   return `You are an expert AI system specialized in extracting structured information from medical imaging research papers and documents to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
 
-TASK: Analyze the following extracted document content (text + structured tables) from a research paper PDF and determine if it describes an AI MODEL or a DATASET, then extract structured information according to the exact ROADMAP schema format.
+TASK: Analyze the following multimodal document content (text + tables + images) from a research paper PDF and determine if it describes an AI MODEL or a DATASET, then extract structured information according to the exact ROADMAP schema format.
 
 DOCUMENT CONTENT INCLUDES:
 - Full text content from the PDF
-- Structured table data extracted from the document
+- Structured table data extracted from the document  
+- Referenced figures, charts, and diagrams as images
 - Document metadata
 
 INSTRUCTIONS:
-1. READ the text content AND examine the structured table data carefully
+1. ANALYZE the text content, structured tables, AND visual figures/charts provided
 2. DETERMINE if this describes a MODEL (AI/ML algorithm) or DATASET (collection of medical images/data)
 3. EXTRACT information following the exact schema structure provided below
 4. RETURN a valid JSON object with either "Model" or "Dataset" key
@@ -394,10 +526,18 @@ TEXT CONTENT:
 STRUCTURED TABLES (${documentData.tables.length} tables found):
 ${documentData.tables.length > 0 ? JSON.stringify(documentData.tables, null, 2) : 'No tables found in document'}
 
+REFERENCED FIGURES:
+${documentData.images.length > 0 ? 
+  documentData.images.map(img => `- Figure ${img.figureNumber} (Page ${img.page}) - ${img.referenced ? 'Referenced in text' : 'Available'}`).join('\n') 
+  : 'No figures available'}
+
+Note: Visual content (charts, diagrams, images) will be provided as additional input for analysis.
+
 METADATA:
 - Filename: ${documentData.metadata.filename}
 - Text length: ${documentData.metadata.text_length} characters
 - Tables extracted: ${documentData.metadata.tables_count}
+- Images selected: ${documentData.metadata.images_count}
 
 OUTPUT (JSON only):`;
 }
@@ -483,9 +623,12 @@ export default async function handler(req, res) {
         console.log('📝 Text extracted, length:', extractedText.length);
       }
 
-      // Extract tables with structure
+      // Extract tables and images with structure
+      let extractedImages = [];
+      
       if (document.pages) {
         document.pages.forEach((page, pageIndex) => {
+          // Extract tables
           if (page.tables) {
             page.tables.forEach((table, tableIndex) => {
               const tableData = {
@@ -519,11 +662,55 @@ export default async function handler(req, res) {
               }
             });
           }
+
+          // Extract images/figures
+          if (page.images) {
+            page.images.forEach((image, imageIndex) => {
+              const imageData = {
+                page: pageIndex + 1,
+                imageIndex: imageIndex + 1,
+                bounds: image.layout?.boundingPoly,
+                base64: null,
+                caption: null,
+                figureNumber: null
+              };
+
+              // Try to extract image content if available
+              if (image.image && image.image.content) {
+                imageData.base64 = image.image.content;
+              }
+
+              extractedImages.push(imageData);
+            });
+          }
+
+          // Extract visual elements (figures, charts)
+          if (page.visualElements) {
+            page.visualElements.forEach((element, elementIndex) => {
+              if (element.layout) {
+                const visualData = {
+                  page: pageIndex + 1,
+                  elementIndex: elementIndex + 1,
+                  type: element.type || 'visual_element',
+                  bounds: element.layout.boundingPoly,
+                  text: element.layout.textAnchor ? getText(element.layout.textAnchor, document.text) : null
+                };
+
+                extractedImages.push(visualData);
+              }
+            });
+          }
         });
       }
 
       console.log('📋 Tables extracted:', extractedTables.length);
-      console.log('🎯 Document AI processing complete - text + structured tables extracted');
+      console.log('🖼️ Images found:', extractedImages.length);
+      
+      // Find figure references in text and match to extracted images
+      const referencedImages = findReferencedImages(extractedText, extractedImages);
+      console.log('🎯 Referenced images selected:', referencedImages.length);
+      
+      console.log('✅ Document AI processing complete - text + tables + selective images extracted');
 
     } catch (pdfError) {
       console.error('PDF processing failed:', pdfError);
@@ -555,21 +742,23 @@ export default async function handler(req, res) {
 
     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
     
-    // Create enhanced prompt with text and structured table data
+    // Create enhanced prompt with text, tables, and images
     const documentData = {
       text: extractedText,
       tables: extractedTables,
+      images: referencedImages,
       metadata: {
         filename: pdfFile.originalFilename,
         text_length: extractedText.length,
-        tables_count: extractedTables.length
+        tables_count: extractedTables.length,
+        images_count: referencedImages.length
       }
     };
     
-    const enhancedPrompt = createEnhancedPromptWithTables(documentData, schemas);
+    const multimodalPrompt = createMultimodalPrompt(documentData, schemas);
     
-    // Call Gemini API with retry logic
-    const geminiResult = await callGeminiAPI(geminiApiUrl, enhancedPrompt, {
+    // Call Gemini API with multimodal content (text + images)
+    const geminiResult = await callGeminiAPIMultimodal(geminiApiUrl, multimodalPrompt, documentData, {
       temperature: 0.2,
       maxOutputTokens: 4096,
       safetySettings: [
