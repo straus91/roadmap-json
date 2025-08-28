@@ -220,7 +220,8 @@ ${JSON.stringify(documentData.tables, null, 2)}
 **OUTPUT (Valid JSON only):**`;
 }
 
-// Legacy function for backwards compatibility  
+// DEPRECATED: Legacy two-step extraction function - no longer used
+// The system now uses createEnhancedDebugPrompt for single-step extraction
 function createExtractionPromptDebug(documentData, processingMode = 'multimodal') {
   const basePrompt = `You are an expert data extraction specialist for medical imaging research papers. Your task is to thoroughly analyze the provided document content and extract ALL key information in a structured, human-readable format.
 
@@ -320,6 +321,8 @@ OUTPUT (Structured text summary):`;
   return basePrompt;
 }
 
+// DEPRECATED: Legacy two-step formatting function - no longer used
+// The system now uses single-step extraction with createEnhancedDebugPrompt
 function createFormattingPromptDebug(extractedInformation) {
   return `You are an expert JSON formatting specialist. Your task is to take a pre-extracted structured summary of information and format it perfectly into the ROADMAP JSON schema format.
 
@@ -534,18 +537,18 @@ export default async function handler(req, res) {
     // Create the enhanced single prompt that would be sent to Gemini
     const enhancedPrompt = createEnhancedDebugPrompt(documentData, cardType, processingMode);
 
-    console.log('✅ Debug processing complete - Two-step workflow analysis ready');
+    console.log('✅ Debug processing complete - Single-step enhanced extraction ready');
     
-    // Return comprehensive debug information showing both steps
+    // Return comprehensive debug information
     res.status(200).json({
-      // Document extraction results (same as before)
+      // Document extraction results
       extractedText,
       extractedTables,
       referencedImages,
       allImagesFound: extractedImages,
       figureReferences: allReferences,
       
-      // Enhanced single-step workflow prompt  
+      // Enhanced single-step prompt that would be sent to Gemini
       enhanced_prompt: enhancedPrompt,
       
       // Enhanced metadata
@@ -558,7 +561,7 @@ export default async function handler(req, res) {
         referenced_images_selected: referencedImages.length,
         processing_mode: processingMode,
         card_type: cardType,
-        workflow_type: 'enhanced_single_step_chain_of_thought',
+        workflow_type: 'enhanced_single_step_extraction',
         enhanced_prompt_length: enhancedPrompt.length
       }
     });
