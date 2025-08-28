@@ -68,6 +68,17 @@
                                 </div>
                                 <h4 class="card-title">Create from PDF</h4>
                                 <p class="card-text">Upload a PDF document and let AI extract the information to pre-fill the form for you.</p>
+                                
+                                <!-- Processing Mode Toggle -->
+                                <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Processing mode">
+                                    <button type="button" class="btn btn-outline-secondary active" id="pdf-multimodal-btn" onclick="setPdfProcessingMode('multimodal')">
+                                        <i class="fa fa-image mr-1"></i>Multimodal
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" id="pdf-text-only-btn" onclick="setPdfProcessingMode('text-only')">
+                                        <i class="fa fa-file-text mr-1"></i>Text Only
+                                    </button>
+                                </div>
+                                
                                 <input type="file" id="pdf-file-input" accept=".pdf" style="display: none;" onchange="handlePdfUpload(event)">
                                 <button class="btn btn-danger btn-lg" onclick="document.getElementById('pdf-file-input').click()">
                                     Upload PDF
@@ -85,6 +96,17 @@
                                 </div>
                                 <h4 class="card-title">Debug PDF Processing</h4>
                                 <p class="card-text">Upload a PDF to see extracted text, tables, and images before sending to AI.</p>
+                                
+                                <!-- Processing Mode Toggle -->
+                                <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Processing mode">
+                                    <button type="button" class="btn btn-outline-secondary active" id="debug-multimodal-btn" onclick="setDebugProcessingMode('multimodal')">
+                                        <i class="fa fa-image mr-1"></i>Multimodal
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" id="debug-text-only-btn" onclick="setDebugProcessingMode('text-only')">
+                                        <i class="fa fa-file-text mr-1"></i>Text Only
+                                    </button>
+                                </div>
+                                
                                 <input type="file" id="debug-pdf-input" accept=".pdf" style="display: none;" onchange="handleDebugPdfUpload(event)">
                                 <button class="btn btn-warning btn-lg" onclick="document.getElementById('debug-pdf-input').click()">
                                     Debug PDF

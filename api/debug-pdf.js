@@ -67,8 +67,31 @@ function findReferencedImages(text, images) {
   };
 }
 
-function createDebugPrompt(documentData) {
-  return `ROADMAP extraction from research paper PDF.
+function createDebugPrompt(documentData, processingMode = 'multimodal') {
+  if (processingMode === 'text-only') {
+    return `ROADMAP extraction from research paper PDF.
+
+PROCESSING MODE: Text-only (images excluded)
+
+DOCUMENT CONTENT:
+
+TEXT CONTENT (${documentData.text.length} characters):
+"""${documentData.text.substring(0, 10000)}${documentData.text.length > 10000 ? '\n\n... [text truncated for display]' : ''}"""
+
+STRUCTURED TABLES (${documentData.tables.length} tables found):
+${documentData.tables.length > 0 ? JSON.stringify(documentData.tables, null, 2) : 'No tables found in document'}
+
+METADATA:
+- Filename: ${documentData.metadata.filename}
+- Text length: ${documentData.metadata.text_length} characters
+- Tables extracted: ${documentData.metadata.tables_count}
+- Processing mode: Text-only
+
+[Note: This is a debug view showing text-only processing - images are not included]`;
+  } else {
+    return `ROADMAP extraction from research paper PDF.
+
+PROCESSING MODE: Multimodal (text + tables + images)
 
 DOCUMENT CONTENT:
 
@@ -88,8 +111,10 @@ METADATA:
 - Text length: ${documentData.metadata.text_length} characters
 - Tables extracted: ${documentData.metadata.tables_count}
 - Images selected: ${documentData.metadata.images_count}
+- Processing mode: Multimodal
 
 [Note: This is a debug view - in actual processing, images are included as base64 data]`;
+  }
 }
 
 export default async function handler(req, res) {
@@ -102,12 +127,16 @@ export default async function handler(req, res) {
 
     // Parse the PDF file
     const form = new IncomingForm();
-    const { files } = await new Promise((resolve, reject) => {
+    const { files, fields } = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
         if (err) return reject(err);
-        resolve({ files });
+        resolve({ files, fields });
       });
     });
+
+    // Get processing mode (default to multimodal for backward compatibility)
+    const processingMode = fields.mode?.[0] || 'multimodal';
+    console.log('🔍 DEBUG: Processing mode:', processingMode);
 
     const pdfFile = files.pdf[0];
     if (!pdfFile) {
@@ -224,8 +253,8 @@ export default async function handler(req, res) {
       }
     };
 
-    // Create the multimodal prompt that would be sent to Gemini
-    const multimodalPrompt = createDebugPrompt(documentData);
+    // Create the prompt that would be sent to Gemini (based on processing mode)
+    const promptForGemini = createDebugPrompt(documentData, processingMode);
 
     console.log('✅ Debug processing complete');
     
@@ -236,7 +265,7 @@ export default async function handler(req, res) {
       referencedImages,
       allImagesFound: extractedImages,
       figureReferences: allReferences,
-      multimodalPrompt,
+      multimodalPrompt: promptForGemini,
       metadata: documentData.metadata,
       processing_summary: {
         pages_processed: document.pages?.length || 0,
@@ -244,7 +273,8 @@ export default async function handler(req, res) {
         tables_extracted: extractedTables.length,
         total_images_found: extractedImages.length,
         referenced_images_selected: referencedImages.length,
-        prompt_length: multimodalPrompt.length
+        prompt_length: promptForGemini.length,
+        processing_mode: processingMode
       }
     });
 

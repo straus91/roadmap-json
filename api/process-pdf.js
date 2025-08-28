@@ -542,6 +542,94 @@ METADATA:
 OUTPUT (JSON only):`;
 }
 
+// Function to create text-only prompt (without images/figures)
+function createTextOnlyPrompt(documentData, schemas) {
+  const modelStructure = extractSchemaStructure(schemas.model, 'model');
+  const datasetStructure = extractSchemaStructure(schemas.dataset, 'dataset');
+  
+  return `You are an expert AI system specialized in extracting structured information from medical imaging research papers and documents to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
+
+TASK: Analyze the following document content (text + tables) from a research paper PDF and determine if it describes an AI MODEL or a DATASET, then extract structured information according to the exact ROADMAP schema format.
+
+DOCUMENT CONTENT INCLUDES:
+- Full text content from the PDF
+- Structured table data extracted from the document  
+- Document metadata
+
+INSTRUCTIONS:
+1. ANALYZE the text content and structured tables provided
+2. DETERMINE if this describes a MODEL (AI/ML algorithm) or DATASET (collection of medical images/data)
+3. EXTRACT information following the exact schema structure provided below
+4. RETURN a valid JSON object with either "Model" or "Dataset" key
+5. USE proper data types (strings, arrays, objects, numbers) as specified
+6. INCLUDE as many relevant fields as possible from the schema
+7. SET empty strings "" for text fields you cannot find information for
+8. SET empty arrays [] for array fields you cannot find information for
+9. SET appropriate default values for required fields
+
+MODEL SCHEMA STRUCTURE:
+${JSON.stringify(modelStructure, null, 2)}
+
+DATASET SCHEMA STRUCTURE:
+${JSON.stringify(datasetStructure, null, 2)}
+
+CRITICAL REQUIREMENTS:
+- Return ONLY valid JSON (no markdown, no explanations)
+- Use exact field names from schema (case-sensitive)
+- Follow proper nesting structure
+- Include required fields even if empty
+- Use appropriate data types (string, number, array, object)
+- For arrays of strings: ["item1", "item2"]
+- For arrays of objects: [{"field": "value"}]
+- For nested objects: {"field": {"nested": "value"}}
+
+EXAMPLE OUTPUT FORMAT:
+For a MODEL:
+{
+  "Model": {
+    "Name": "extracted model name",
+    "Use": {
+      "Intended": ["use case 1", "use case 2"]
+    },
+    "Performance": {
+      "Metrics": [
+        {
+          "Metric": "AUC",
+          "Value": "0.95"
+        }
+      ]
+    }
+  }
+}
+
+For a DATASET:
+{
+  "Dataset": {
+    "Name": "extracted dataset name",
+    "Format": ["DICOM", "NIfTI"],
+    "Content": {
+      "Annotation": "ground truth labels"
+    }
+  }
+}
+
+DOCUMENT CONTENT:
+
+TEXT CONTENT:
+"""${documentData.text.substring(0, 15000)}${documentData.text.length > 15000 ? '\n\n... [text truncated]' : ''}"""
+
+STRUCTURED TABLES (${documentData.tables.length} tables found):
+${documentData.tables.length > 0 ? JSON.stringify(documentData.tables, null, 2) : 'No tables found in document'}
+
+METADATA:
+- Filename: ${documentData.metadata.filename}
+- Text length: ${documentData.metadata.text_length} characters
+- Tables extracted: ${documentData.metadata.tables_count}
+- Processing mode: Text-only (images excluded)
+
+OUTPUT (JSON only):`;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -555,12 +643,16 @@ export default async function handler(req, res) {
 
     // 2. Parse the incoming PDF file
     const form = new IncomingForm();
-    const { files } = await new Promise((resolve, reject) => {
+    const { files, fields } = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
         if (err) return reject(err);
-        resolve({ files });
+        resolve({ files, fields });
       });
     });
+
+    // Get processing mode (default to multimodal for backward compatibility)
+    const processingMode = fields.mode?.[0] || 'multimodal';
+    console.log('🎛️ Processing mode:', processingMode);
 
     const pdfFile = files.pdf[0];
     if (!pdfFile) {
@@ -756,23 +848,49 @@ export default async function handler(req, res) {
       }
     };
     
-    const multimodalPrompt = createMultimodalPrompt(documentData, schemas);
+    let geminiResult;
     
-    // Call Gemini API with multimodal content (text + images)
-    const geminiResult = await callGeminiAPIMultimodal(geminiApiUrl, multimodalPrompt, documentData, {
-      temperature: 0.2,
-      maxOutputTokens: 4096,
-      safetySettings: [
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        }
-      ]
-    });
+    if (processingMode === 'text-only') {
+      // Create text-only prompt (without image references)
+      const textOnlyPrompt = createTextOnlyPrompt(documentData, schemas);
+      console.log('📝 Using text-only processing mode');
+      
+      // Call Gemini API with text content only
+      geminiResult = await callGeminiAPI(geminiApiUrl, textOnlyPrompt, {
+        temperature: 0.2,
+        maxOutputTokens: 4096,
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          }
+        ]
+      });
+    } else {
+      // Default multimodal processing
+      const multimodalPrompt = createMultimodalPrompt(documentData, schemas);
+      console.log('🖼️ Using multimodal processing mode');
+      
+      // Call Gemini API with multimodal content (text + images)
+      geminiResult = await callGeminiAPIMultimodal(geminiApiUrl, multimodalPrompt, documentData, {
+        temperature: 0.2,
+        maxOutputTokens: 4096,
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          }
+        ]
+      });
+    }
 
     // Handle retry function errors
     if (geminiResult.error) {

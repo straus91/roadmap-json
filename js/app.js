@@ -5,6 +5,8 @@ let editor = null;
 let currentCardType = null;
 let isJsonPreviewVisible = false;
 let schemaProcessor = null;
+let pdfProcessingMode = 'multimodal'; // Default to multimodal
+let debugProcessingMode = 'multimodal'; // Default to multimodal
 
 // Application initialization
 document.addEventListener('DOMContentLoaded', function() {
@@ -1410,6 +1412,39 @@ window.debugExamples = function() {
     addExamplesToFields();
 };
 
+// Processing mode functions
+function setPdfProcessingMode(mode) {
+    pdfProcessingMode = mode;
+    
+    // Update button states
+    const multimodalBtn = document.getElementById('pdf-multimodal-btn');
+    const textOnlyBtn = document.getElementById('pdf-text-only-btn');
+    
+    if (mode === 'multimodal') {
+        multimodalBtn.classList.add('active');
+        textOnlyBtn.classList.remove('active');
+    } else {
+        multimodalBtn.classList.remove('active');
+        textOnlyBtn.classList.add('active');
+    }
+}
+
+function setDebugProcessingMode(mode) {
+    debugProcessingMode = mode;
+    
+    // Update button states
+    const multimodalBtn = document.getElementById('debug-multimodal-btn');
+    const textOnlyBtn = document.getElementById('debug-text-only-btn');
+    
+    if (mode === 'multimodal') {
+        multimodalBtn.classList.add('active');
+        textOnlyBtn.classList.remove('active');
+    } else {
+        multimodalBtn.classList.remove('active');
+        textOnlyBtn.classList.add('active');
+    }
+}
+
 // PDF Upload Handler
 async function handlePdfUpload(event) {
     const file = event.target.files[0];
@@ -1433,6 +1468,7 @@ async function handlePdfUpload(event) {
 
     const formData = new FormData();
     formData.append('pdf', file);
+    formData.append('mode', pdfProcessingMode);
 
     try {
         // Send the file to your new serverless function
@@ -1871,6 +1907,7 @@ async function handleDebugPdfUpload(event) {
     try {
         const formData = new FormData();
         formData.append('pdf', file);
+        formData.append('mode', debugProcessingMode);
 
         // Call debug API endpoint
         const response = await fetch('/api/debug-pdf', {
