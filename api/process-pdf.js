@@ -736,16 +736,17 @@ FORMATTING TASK:
 Take the provided structured information summary and convert it into a valid ROADMAP JSON object following the exact schema specifications.
 
 FORMATTING INSTRUCTIONS:
-1. Use the document type identified in the summary (MODEL or DATASET)
-2. Map ALL extracted information to the appropriate schema fields
-3. Follow exact field names and data types as specified in the schema
-4. Use proper JSON formatting with correct nesting structure
-5. Fill in as many fields as possible from the extracted information
-6. Set empty strings "" for text fields without information
-7. Set empty arrays [] for array fields without information
-8. Use appropriate default values for required fields
-9. Maintain all numerical precision from the extracted data
-10. Preserve all technical details and performance metrics
+1. CRITICAL: The JSON MUST have either "Model" or "Dataset" as the TOP-LEVEL key based on the document type
+2. Use the document type identified in the summary (MODEL or DATASET) 
+3. Map ALL extracted information to the appropriate schema fields
+4. Follow exact field names and data types as specified in the schema
+5. Use proper JSON formatting with correct nesting structure
+6. Fill in as many fields as possible from the extracted information
+7. Set empty strings "" for text fields without information
+8. Set empty arrays [] for array fields without information
+9. Use appropriate default values for required fields
+10. Maintain all numerical precision from the extracted data
+11. Preserve all technical details and performance metrics
 
 SCHEMA STRUCTURES:
 
@@ -757,6 +758,7 @@ ${JSON.stringify(datasetStructure, null, 2)}
 
 CRITICAL FORMATTING REQUIREMENTS:
 - Return ONLY valid JSON (no markdown, no explanations, no additional text)
+- MUST start with either {"Model": {...}} or {"Dataset": {...}} as the root structure
 - Use exact field names from schema (case-sensitive)
 - Follow proper nesting structure exactly as shown
 - Include required fields even if empty
@@ -764,6 +766,25 @@ CRITICAL FORMATTING REQUIREMENTS:
 - For arrays of strings: ["item1", "item2"]
 - For arrays of objects: [{"field": "value"}]
 - For nested objects: {"field": {"nested": "value"}}
+
+REQUIRED JSON ROOT STRUCTURE:
+For a MODEL document:
+{
+  "Model": {
+    "Name": "extracted name",
+    "Description": "extracted description",
+    ... (all other model fields)
+  }
+}
+
+For a DATASET document:
+{
+  "Dataset": {
+    "Name": "extracted name", 
+    "Description": "extracted description",
+    ... (all other dataset fields)
+  }
+}
 
 EXTRACTED INFORMATION TO FORMAT:
 
@@ -1278,9 +1299,12 @@ export default async function handler(req, res) {
     // Validate response structure
     if (!structuredJson.Model && !structuredJson.Dataset) {
       console.error('Invalid structure - no Model or Dataset key found');
+      console.error('Response keys found:', Object.keys(structuredJson));
+      console.error('Full response preview:', JSON.stringify(structuredJson, null, 2).substring(0, 1000));
       return res.status(500).json({ 
         error: 'Invalid response structure - missing Model or Dataset key',
         response: structuredJson,
+        responseKeys: Object.keys(structuredJson),
         extractedInformation: extractedInformation.substring(0, 1000) // Include partial extraction for debugging
       });
     }
