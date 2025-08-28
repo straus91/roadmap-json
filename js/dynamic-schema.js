@@ -210,6 +210,16 @@ class DynamicSchemaProcessor {
         if (prop.type === 'array' && prop.items) {
             processed.items = this.processProperty(prop.items, defs, visited, depth);
             
+            // Add headerTemplate for arrays of objects that have a "Name" property
+            if (prop.items.type === 'object') {
+                // Check if the object has a "Name" property (directly or through $ref)
+                const hasNameProperty = this.checkForNameProperty(prop.items, defs, visited);
+                if (hasNameProperty) {
+                    processed.items.headerTemplate = '{{self.Name}}';
+                    console.log('✅ Added headerTemplate for array with Name property');
+                }
+            }
+            
             // Convert enum arrays to checkbox format for better UX
             if (prop.items.enum && prop.items.enum.length > 5) {
                 processed.format = 'checkbox';
@@ -250,6 +260,35 @@ class DynamicSchemaProcessor {
         
         // Skip properties with additional properties of complex type
         if (prop.additionalProperties && typeof prop.additionalProperties === 'object') return true;
+        
+        return false;
+    }
+
+    // Helper method to check if an object schema has a "Name" property
+    checkForNameProperty(itemSchema, defs, visited = new Set()) {
+        // Handle $ref references
+        if (itemSchema.$ref) {
+            const refPath = itemSchema.$ref.replace('#/$defs/', '');
+            
+            // Prevent circular references
+            if (visited.has(refPath)) {
+                return false;
+            }
+            
+            const refDef = defs[refPath];
+            if (refDef) {
+                const newVisited = new Set(visited);
+                newVisited.add(refPath);
+                return this.checkForNameProperty(refDef, defs, newVisited);
+            }
+            return false;
+        }
+        
+        // Check if the object has properties and specifically has a "Name" property
+        if (itemSchema.type === 'object' && itemSchema.properties) {
+            return itemSchema.properties.hasOwnProperty('Name') || 
+                   itemSchema.properties.hasOwnProperty('name');
+        }
         
         return false;
     }
