@@ -156,7 +156,10 @@ function createEnhancedDebugPrompt(documentData, cardType, processingMode) {
 **CRITICAL INSTRUCTIONS:**
 • Extract ALL authors with affiliations - do not summarize
 • For datasets: Convert patient demographics/characteristics tables into detailed Subset objects
-• Extract exact numerical values and statistical measures
+• **TABLE DATA PRIORITY**: Look specifically for labels, classifications, metrics, performance data, demographic breakdowns, and statistical measures in ALL tables
+• **METRICS EXTRACTION**: Extract accuracy, sensitivity, specificity, AUC, F1-scores, sample sizes, age ranges, gender distributions, and any classification categories
+• **LABEL MAPPING**: If tables contain label categories, class distributions, or annotation schemes, extract these comprehensively
+• Extract exact numerical values and statistical measures - never summarize or approximate
 • Include publication details, performance metrics, and technical specifications
 • Output must be valid JSON with proper ROADMAP structure
 
@@ -173,17 +176,33 @@ function createEnhancedDebugPrompt(documentData, cardType, processingMode) {
         "Description": "string", 
         "Criteria": ["string"],
         "Size": number,
-        "Demographics": {"Age": "string", "Sex": "string"}
+        "Demographics": {"Age": "string", "Sex": "string"},
+        "Labels": ["string"],
+        "Classifications": {"Category": "string", "Count": number}
       }
     ],
     "Imaging": {
       "Modality": ["string"],
       "Body Region": ["string"],
       "Number of Images": number
+    },
+    "Performance Metrics": {
+      "Accuracy": "string",
+      "Sensitivity": "string", 
+      "Specificity": "string",
+      "AUC": "string",
+      "F1-Score": "string"
     }` : `
     "Performance": {
       "Metrics": [{"Metric": "string", "Value": "string"}],
-      "Validation": "string"
+      "Validation": "string",
+      "Test Results": {
+        "Accuracy": "string",
+        "Sensitivity": "string",
+        "Specificity": "string", 
+        "AUC": "string",
+        "F1-Score": "string"
+      }
     },
     "Implementation": {
       "Framework": "string",
