@@ -487,7 +487,7 @@ export default async function handler(req, res) {
         });
       }
 
-      const extractedText = pdfcoResult.body || '';
+      extractedText = pdfcoResult.body || '';
       console.log('Step 2 complete: AI-enhanced text extraction completed');
       console.log('Raw text length:', extractedText.length);
       console.log('Page count:', pdfcoResult.pageCount);
@@ -501,9 +501,16 @@ export default async function handler(req, res) {
       });
     }
 
+    console.log('🔍 DEBUG: About to validate extracted text');
+    console.log('🔍 DEBUG: extractedText defined?', typeof extractedText);
+    console.log('🔍 DEBUG: extractedText length:', extractedText?.length || 'undefined');
+
     if (!extractedText || extractedText.trim().length === 0) {
+      console.log('❌ Text validation failed - no text extracted');
       return res.status(400).json({ error: 'No text could be extracted from the PDF' });
     }
+
+    console.log('✅ Text validation passed - proceeding to Gemini API');
 
     console.log('Extracted text length:', extractedText.length, 'characters');
 
