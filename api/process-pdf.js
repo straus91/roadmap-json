@@ -827,6 +827,15 @@ Now, begin your process. First, perform your internal analysis of the text and t
 **OUTPUT (Valid JSON only):**`;
 }
 
+// Helper function to create the enhanced single prompt based on processing mode
+function createEnhancedSinglePrompt(documentData, schemas, processingMode) {
+  if (processingMode === 'text-only') {
+    return createTextOnlyPrompt(documentData, schemas);
+  } else {
+    return createMultimodalPrompt(documentData, schemas);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -1101,14 +1110,15 @@ export default async function handler(req, res) {
 
     console.log('Extracted text length:', extractedText.length, 'characters');
 
-    // 4. Call Gemini API with enhanced prompt and retry logic
+    // 4. Call Gemini API with streaming for large responses
     const apiKey = process.env.GEMINI_API_KEY || process.env.LLM_API_KEY;
     
     if (!apiKey) {
       return res.status(500).json({ error: 'Gemini API key not configured' });
     }
 
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
+    // *** IMPORTANT: Using streaming endpoint to handle large responses ***
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse&key=${apiKey}`;
     
     // Create enhanced prompt with text, tables, and images
     const documentData = {
@@ -1123,33 +1133,58 @@ export default async function handler(req, res) {
       }
     };
     
-    // Single API call with enhanced chain-of-thought prompt
-    console.log('🎯 Processing document with enhanced chain-of-thought prompt...');
+    const prompt = createEnhancedSinglePrompt(documentData, schemas, processingMode);
     
-    let result;
+    console.log('🚀 Processing document with STREAMING and enhanced chain-of-thought prompt...');
+    console.log('📝 Processing mode:', processingMode);
+
+    // Build request body based on processing mode
+    let requestBody;
     if (processingMode === 'text-only') {
-      console.log('📝 Using text-only processing mode');
-      const textOnlyPrompt = createTextOnlyPrompt(documentData, schemas);
-      result = await callGeminiAPI(geminiApiUrl, textOnlyPrompt, {
-        temperature: 0.2,  // Optimal temperature for extraction + formatting
-        maxOutputTokens: 8192,  // More tokens for detailed output
+      requestBody = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 8192,
+        },
         safetySettings: [
           {
             category: "HARM_CATEGORY_HARASSMENT",
             threshold: "BLOCK_MEDIUM_AND_ABOVE"
           },
           {
-            category: "HARM_CATEGORY_HATE_SPEECH",
+            category: "HARM_CATEGORY_HATE_SPEECH", 
             threshold: "BLOCK_MEDIUM_AND_ABOVE"
           }
         ]
-      });
+      };
     } else {
-      console.log('🖼️ Using multimodal processing mode');
-      const multimodalPrompt = createMultimodalPrompt(documentData, schemas);
-      result = await callGeminiAPIMultimodal(geminiApiUrl, multimodalPrompt, documentData, {
-        temperature: 0.2,  // Optimal temperature for extraction + formatting
-        maxOutputTokens: 8192,  // More tokens for detailed output
+      // Multimodal request with images
+      const contentParts = [{ text: prompt }];
+      
+      // Add referenced images
+      if (documentData.images && documentData.images.length > 0) {
+        documentData.images.forEach(image => {
+          if (image.base64) {
+            contentParts.push({
+              text: `\n\nFigure ${image.figureNumber} (Page ${image.page}):`
+            });
+            contentParts.push({
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: image.base64
+              }
+            });
+          }
+        });
+      }
+
+      requestBody = {
+        contents: [{ parts: contentParts }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 8192,
+        },
         safetySettings: [
           {
             category: "HARM_CATEGORY_HARASSMENT",
@@ -1160,71 +1195,53 @@ export default async function handler(req, res) {
             threshold: "BLOCK_MEDIUM_AND_ABOVE"
           }
         ]
-      });
+      };
     }
 
-    // Handle API errors
-    if (result.error) {
-      console.error('Gemini API call failed after retries:', result.message);
-      return res.status(500).json({ 
-        error: 'Document processing failed after retries',
-        details: result.message?.substring(0, 200)
-      });
+    const geminiResponse = await fetch(geminiApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text();
+      console.error('❌ Gemini API streaming error:', errorText);
+      return res.status(500).json({ error: 'Failed to connect to Gemini streaming endpoint', details: errorText.substring(0, 200) });
     }
 
-    if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
-      console.error('Invalid API response structure:', result);
-      return res.status(500).json({ error: 'Invalid response from Gemini API' });
-    }
+    // Set headers for streaming response
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Transfer-Encoding': 'chunked',
+    });
 
-    console.log('✅ Single-pass processing complete');
+    let accumulatedResponse = '';
+    const reader = geminiResponse.body.getReader();
+    const decoder = new TextDecoder();
 
-    // Parse the JSON response
-    let structuredJson;
     try {
-      const responseContent = result.candidates[0].content.parts[0].text.trim();
-      console.log('Raw API response length:', responseContent.length);
-      
-      // Clean up the response (remove any markdown formatting)
-      const cleanResponse = responseContent
-        .replace(/```json\n?|\n?```/g, '')
-        .replace(/```\n?|\n?```/g, '')
-        .trim();
-      
-      structuredJson = JSON.parse(cleanResponse);
-      console.log('🎯 Successfully parsed JSON response');
-      
-      // Sanitize any stringified JSON objects in the response
-      console.log('🧹 Sanitizing stringified JSON objects...');
-      structuredJson = sanitizeStringifiedJson(structuredJson);
-      console.log('✅ JSON sanitization complete');
-      
-    } catch (parseError) {
-      console.error('Failed to parse JSON response:', result.candidates[0].content.parts[0].text.substring(0, 500));
-      return res.status(500).json({ 
-        error: 'Failed to parse JSON response',
-        apiResponse: result.candidates[0].content.parts[0].text.substring(0, 500),
-        parseError: parseError.message
-      });
-    }
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    // Validate response structure
-    if (!structuredJson.Model && !structuredJson.Dataset) {
-      console.error('Invalid structure - no Model or Dataset key found');
-      console.error('Response keys found:', Object.keys(structuredJson));
-      console.error('Full response preview:', JSON.stringify(structuredJson, null, 2).substring(0, 1000));
-      return res.status(500).json({ 
-        error: 'Invalid response structure - missing Model or Dataset key',
-        response: structuredJson,
-        responseKeys: Object.keys(structuredJson),
-        apiResponse: result.candidates[0].content.parts[0].text.substring(0, 1000)
-      });
+        const chunk = decoder.decode(value, { stream: true });
+        accumulatedResponse += chunk;
+        
+        // Stream the chunk to the client
+        res.write(chunk);
+      }
+      
+      res.end();
+      console.log('✅ Streaming complete, total response length:', accumulatedResponse.length);
+      
+    } catch (streamError) {
+      console.error('❌ Streaming error:', streamError);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: 'Streaming failed', details: streamError.message });
+      }
+      res.end();
     }
-
-    console.log('PDF processing completed successfully');
-    
-    // 5. Send the structured JSON back to the frontend
-    res.status(200).json(structuredJson);
 
   } catch (error) {
     console.error('Backend error:', error);
