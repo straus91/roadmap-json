@@ -79,6 +79,16 @@
                                     </button>
                                 </div>
                                 
+                                <!-- Card Type Selection -->
+                                <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Card type">
+                                    <button type="button" class="btn btn-outline-primary active" id="pdf-model-btn" onclick="setPdfCardType('model')">
+                                        <i class="fa fa-cog mr-1"></i>Model Card
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success" id="pdf-dataset-btn" onclick="setPdfCardType('dataset')">
+                                        <i class="fa fa-database mr-1"></i>Dataset Card
+                                    </button>
+                                </div>
+                                
                                 <input type="file" id="pdf-file-input" accept=".pdf" style="display: none;" onchange="handlePdfUpload(event)">
                                 <button class="btn btn-danger btn-lg" onclick="document.getElementById('pdf-file-input').click()">
                                     Upload PDF
@@ -104,6 +114,16 @@
                                     </button>
                                     <button type="button" class="btn btn-outline-secondary" id="debug-text-only-btn" onclick="setDebugProcessingMode('text-only')">
                                         <i class="fa fa-file-text mr-1"></i>Text Only
+                                    </button>
+                                </div>
+                                
+                                <!-- Card Type Selection -->
+                                <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Card type">
+                                    <button type="button" class="btn btn-outline-primary active" id="debug-model-btn" onclick="setDebugCardType('model')">
+                                        <i class="fa fa-cog mr-1"></i>Model Card
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success" id="debug-dataset-btn" onclick="setDebugCardType('dataset')">
+                                        <i class="fa fa-database mr-1"></i>Dataset Card
                                     </button>
                                 </div>
                                 

@@ -7,6 +7,8 @@ let isJsonPreviewVisible = false;
 let schemaProcessor = null;
 let pdfProcessingMode = 'multimodal'; // Default to multimodal
 let debugProcessingMode = 'multimodal'; // Default to multimodal
+let pdfCardType = 'model'; // Default to model card
+let debugCardType = 'model'; // Default to model card
 
 // Application initialization
 document.addEventListener('DOMContentLoaded', function() {
@@ -1445,6 +1447,39 @@ function setDebugProcessingMode(mode) {
     }
 }
 
+// Card type selection functions
+function setPdfCardType(cardType) {
+    pdfCardType = cardType;
+    
+    // Update button states
+    const modelBtn = document.getElementById('pdf-model-btn');
+    const datasetBtn = document.getElementById('pdf-dataset-btn');
+    
+    if (cardType === 'model') {
+        modelBtn.classList.add('active');
+        datasetBtn.classList.remove('active');
+    } else {
+        modelBtn.classList.remove('active');
+        datasetBtn.classList.add('active');
+    }
+}
+
+function setDebugCardType(cardType) {
+    debugCardType = cardType;
+    
+    // Update button states
+    const modelBtn = document.getElementById('debug-model-btn');
+    const datasetBtn = document.getElementById('debug-dataset-btn');
+    
+    if (cardType === 'model') {
+        modelBtn.classList.add('active');
+        datasetBtn.classList.remove('active');
+    } else {
+        modelBtn.classList.remove('active');
+        datasetBtn.classList.add('active');
+    }
+}
+
 // PDF Upload Handler
 async function handlePdfUpload(event) {
     const file = event.target.files[0];
@@ -1469,6 +1504,7 @@ async function handlePdfUpload(event) {
     const formData = new FormData();
     formData.append('pdf', file);
     formData.append('mode', pdfProcessingMode);
+    formData.append('cardType', pdfCardType);
 
     try {
         // Send the file to the streaming serverless function
@@ -1954,6 +1990,7 @@ async function handleDebugPdfUpload(event) {
         const formData = new FormData();
         formData.append('pdf', file);
         formData.append('mode', debugProcessingMode);
+        formData.append('cardType', debugCardType);
 
         // Call debug API endpoint
         const response = await fetch('/api/debug-pdf', {

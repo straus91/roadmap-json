@@ -590,13 +590,12 @@ async function callGeminiAPIMultimodal(url, textPrompt, documentData, config = {
 }
 
 // Function to create multimodal prompt with text, tables, and images
-function createMultimodalPrompt(documentData, schemas) {
-  const modelStructure = extractSchemaStructure(schemas.model, 'model');
-  const datasetStructure = extractSchemaStructure(schemas.dataset, 'dataset');
+function createMultimodalPrompt(documentData, schemas, cardType) {
+  const targetStructure = extractSchemaStructure(schemas[cardType], cardType);
   
   return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
 
-**Your task is to perform a two-step process in a single pass:**
+**Your task is to extract information for a ${cardType.toUpperCase()} card and perform a two-step process in a single pass:**
 1.  **Internal Analysis (Chain of Thought):** First, you will mentally scan the entire document and extract all key entities, relationships, and data points. You will pay special attention to lists of people, organizations, and detailed data subsets.
 2.  **JSON Formatting:** Second, using your internal analysis, you will meticulously construct the final JSON output, ensuring every possible field from the schema is populated with the information you found.
 
@@ -607,11 +606,8 @@ function createMultimodalPrompt(documentData, schemas) {
 * **Do Not Summarize Data:** Extract exact numerical values, statistical measures (like age ± standard deviation), and full descriptions.
 * **Follow the Schema Exactly:** The final output must be ONLY a valid JSON object that strictly adheres to the provided schema structure.
 
-**MODEL SCHEMA STRUCTURE:**
-${JSON.stringify(modelStructure, null, 2)}
-
-**DATASET SCHEMA STRUCTURE:**
-${JSON.stringify(datasetStructure, null, 2)}
+**TARGET ${cardType.toUpperCase()} SCHEMA STRUCTURE:**
+${JSON.stringify(targetStructure, null, 2)}
 
 **DOCUMENT CONTENT TO ANALYZE:**
 """${documentData.text.substring(0, 15000)}"""
@@ -793,13 +789,12 @@ OUTPUT (Valid JSON only):`;
 }
 
 // Function to create text-only prompt (without images/figures)
-function createTextOnlyPrompt(documentData, schemas) {
-  const modelStructure = extractSchemaStructure(schemas.model, 'model');
-  const datasetStructure = extractSchemaStructure(schemas.dataset, 'dataset');
+function createTextOnlyPrompt(documentData, schemas, cardType) {
+  const targetStructure = extractSchemaStructure(schemas[cardType], cardType);
   
   return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
 
-**Your task is to perform a two-step process in a single pass:**
+**Your task is to extract information for a ${cardType.toUpperCase()} card and perform a two-step process in a single pass:**
 1.  **Internal Analysis (Chain of Thought):** First, you will mentally scan the entire document and extract all key entities, relationships, and data points. You will pay special attention to lists of people, organizations, and detailed data subsets.
 2.  **JSON Formatting:** Second, using your internal analysis, you will meticulously construct the final JSON output, ensuring every possible field from the schema is populated with the information you found.
 
@@ -810,11 +805,8 @@ function createTextOnlyPrompt(documentData, schemas) {
 * **Do Not Summarize Data:** Extract exact numerical values, statistical measures (like age ± standard deviation), and full descriptions.
 * **Follow the Schema Exactly:** The final output must be ONLY a valid JSON object that strictly adheres to the provided schema structure.
 
-**MODEL SCHEMA STRUCTURE:**
-${JSON.stringify(modelStructure, null, 2)}
-
-**DATASET SCHEMA STRUCTURE:**
-${JSON.stringify(datasetStructure, null, 2)}
+**TARGET ${cardType.toUpperCase()} SCHEMA STRUCTURE:**
+${JSON.stringify(targetStructure, null, 2)}
 
 **DOCUMENT CONTENT TO ANALYZE:**
 """${documentData.text.substring(0, 15000)}"""
@@ -827,12 +819,12 @@ Now, begin your process. First, perform your internal analysis of the text and t
 **OUTPUT (Valid JSON only):**`;
 }
 
-// Helper function to create the enhanced single prompt based on processing mode
-function createEnhancedSinglePrompt(documentData, schemas, processingMode) {
+// Helper function to create the enhanced single prompt based on processing mode and card type
+function createEnhancedSinglePrompt(documentData, schemas, processingMode, cardType) {
   if (processingMode === 'text-only') {
-    return createTextOnlyPrompt(documentData, schemas);
+    return createTextOnlyPrompt(documentData, schemas, cardType);
   } else {
-    return createMultimodalPrompt(documentData, schemas);
+    return createMultimodalPrompt(documentData, schemas, cardType);
   }
 }
 
@@ -859,6 +851,10 @@ export default async function handler(req, res) {
     // Get processing mode (default to multimodal for backward compatibility)
     const processingMode = fields.mode?.[0] || 'multimodal';
     console.log('🎛️ Processing mode:', processingMode);
+
+    // Get card type (default to model for backward compatibility) 
+    const cardType = fields.cardType?.[0] || 'model';
+    console.log('🎯 Card type:', cardType);
 
     const pdfFile = files.pdf[0];
     if (!pdfFile) {
@@ -1133,7 +1129,7 @@ export default async function handler(req, res) {
       }
     };
     
-    const prompt = createEnhancedSinglePrompt(documentData, schemas, processingMode);
+    const prompt = createEnhancedSinglePrompt(documentData, schemas, processingMode, cardType);
     
     console.log('🚀 Processing document with STREAMING and enhanced chain-of-thought prompt...');
     console.log('📝 Processing mode:', processingMode);
