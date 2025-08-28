@@ -1162,7 +1162,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Gemini API key not configured' });
     }
 
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
     
     // Create enhanced prompt with text, tables, and images
     const documentData = {
