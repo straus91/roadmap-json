@@ -585,6 +585,7 @@ export default async function handler(req, res) {
 
     let extractedText = '';
     let extractedTables = [];
+    let referencedImages = [];
     
     try {
       console.log('🤖 Step 1: Initializing Google Document AI...');
@@ -706,7 +707,7 @@ export default async function handler(req, res) {
       console.log('🖼️ Images found:', extractedImages.length);
       
       // Find figure references in text and match to extracted images
-      const referencedImages = findReferencedImages(extractedText, extractedImages);
+      referencedImages = findReferencedImages(extractedText, extractedImages);
       console.log('🎯 Referenced images selected:', referencedImages.length);
       
       console.log('✅ Document AI processing complete - text + tables + selective images extracted');
