@@ -1523,45 +1523,9 @@ async function handlePdfUpload(event) {
             throw new Error(errorData.error || `Server error: ${response.status}`);
         }
 
-        // *** NEW STREAM HANDLING LOGIC ***
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let completeResponse = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            const chunk = decoder.decode(value, { stream: true });
-            // Process Server-Sent Events (SSE) formatted chunks
-            const lines = chunk.split('\n');
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const jsonChunk = line.substring(6); // Remove "data: "
-                    if (jsonChunk.trim()) {
-                       // Accumulate the text part of the AI's response
-                       try {
-                           const parsedChunk = JSON.parse(jsonChunk);
-                           if (parsedChunk.candidates && parsedChunk.candidates[0] && parsedChunk.candidates[0].content && parsedChunk.candidates[0].content.parts) {
-                               completeResponse += parsedChunk.candidates[0].content.parts[0].text;
-                           }
-                       } catch(e) {
-                           // This chunk may not be a full JSON object, which is expected in a stream.
-                           // We will continue accumulating.
-                           console.debug('Chunk parsing (expected in streaming):', e.message);
-                       }
-                    }
-                } else if (line.trim()) {
-                    // Handle any non-SSE formatted response (fallback)
-                    completeResponse += line;
-                }
-            }
-        }
-        
-        // Clean up the accumulated response and parse as JSON
-        const cleanResponse = completeResponse.replace(/```json\n?|\n?```/g, '').trim();
-        const structuredJson = JSON.parse(cleanResponse);
-        // *** END OF NEW STREAM HANDLING LOGIC ***
+        // Get the complete JSON response from backend
+        const structuredJson = await response.json();
+        console.log('✅ Received clean JSON response from backend');
 
         // Store PDF metadata for potential saving
         if (structuredJson._metadata) {
@@ -1986,7 +1950,6 @@ async function handleDebugPdfUpload(event) {
     document.getElementById('debug-text-preview').textContent = 'Processing...';
     document.getElementById('debug-tables-preview').textContent = 'Processing...';
     document.getElementById('debug-images-preview').textContent = 'Processing...';
-    document.getElementById('debug-prompt-preview').textContent = 'Waiting for processing...';
     document.getElementById('debug-results-preview').textContent = 'Waiting for processing...';
 
     try {

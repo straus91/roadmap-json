@@ -146,23 +146,56 @@ function findReferencedImages(text, images) {
 
 // Create enhanced debug prompt matching the production version
 function createEnhancedDebugPrompt(documentData, cardType, processingMode) {
-  return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
+  const cardTypeUpper = cardType.toUpperCase();
+  const isDataset = cardType === 'dataset';
+  
+  return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards.
 
-**Your task is to extract information for a ${cardType.toUpperCase()} card and perform a two-step process in a single pass:**
-1.  **Internal Analysis (Chain of Thought):** First, you will mentally scan the entire document and extract all key entities, relationships, and data points. You will pay special attention to lists of people, organizations, and detailed data subsets.
-2.  **JSON Formatting:** Second, using your internal analysis, you will meticulously construct the final JSON output, ensuring every possible field from the schema is populated with the information you found.
+**TASK:** Extract information for a ${cardTypeUpper} card in valid JSON format (${processingMode} debug analysis).
 
-**CRITICAL INSTRUCTIONS FOR MAXIMUM DETAIL:**
+**CRITICAL INSTRUCTIONS:**
+• Extract ALL authors with affiliations - do not summarize
+• For datasets: Convert patient demographics/characteristics tables into detailed Subset objects
+• Extract exact numerical values and statistical measures
+• Include publication details, performance metrics, and technical specifications
+• Output must be valid JSON with proper ROADMAP structure
 
-* **Extract ALL Authors and Organizations:** Do not summarize. If there are 30 authors listed, extract all 30. For each, extract their name and any listed affiliation.
-* **Deeply Nested Subsets:** For datasets, pay close attention to tables describing patient demographics or clinical characteristics. Each distinct group or subgroup mentioned (e.g., "Female," "Age 50-60," "Stage I lung cancer") must be converted into a separate, complete object within the "Subset" array, as seen in the examples.
-* **Do Not Summarize Data:** Extract exact numerical values, statistical measures (like age ± standard deviation), and full descriptions.
-* **Follow the Schema Exactly:** The final output must be ONLY a valid JSON object that strictly adheres to the provided schema structure.
+**REQUIRED JSON STRUCTURE:**
+{
+  "${cardTypeUpper.charAt(0) + cardTypeUpper.slice(1).toLowerCase()}": {
+    "Name": "string",
+    "Description": "string", 
+    "Authors": [{"Name": "string", "Affiliation": "string"}],
+    "Publication": {"Journal": "string", "Date": "string", "DOI": "string"},${isDataset ? `
+    "Subset": [
+      {
+        "Name": "string",
+        "Description": "string", 
+        "Criteria": ["string"],
+        "Size": number,
+        "Demographics": {"Age": "string", "Sex": "string"}
+      }
+    ],
+    "Imaging": {
+      "Modality": ["string"],
+      "Body Region": ["string"],
+      "Number of Images": number
+    }` : `
+    "Performance": {
+      "Metrics": [{"Metric": "string", "Value": "string"}],
+      "Validation": "string"
+    },
+    "Implementation": {
+      "Framework": "string",
+      "Architecture": "string"
+    }`}
+  }
+}
 
-**DOCUMENT CONTENT TO ANALYZE:**
+**DOCUMENT TEXT:**
 """${documentData.text.substring(0, processingMode === 'text-only' ? 8000 : 6000)}${documentData.text.length > (processingMode === 'text-only' ? 8000 : 6000) ? '\n\n... [text continues but truncated for debug display]' : ''}"""
 
-**STRUCTURED TABLES:**
+**TABLES:**
 ${JSON.stringify(documentData.tables, null, 2)}
 
 **OUTPUT (Valid JSON only):**`;

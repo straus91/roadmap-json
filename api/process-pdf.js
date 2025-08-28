@@ -605,32 +605,58 @@ async function callGeminiAPIMultimodal(url, textPrompt, documentData, config = {
 // Function to create multimodal prompt with text, tables, and images
 function createMultimodalPrompt(documentData, schemas, cardType) {
   console.log('🔍 createMultimodalPrompt called with cardType:', cardType);
-  const targetStructure = extractSchemaStructure(schemas[cardType], cardType);
-  console.log('📋 Target structure keys:', Object.keys(targetStructure || {}));
   
-  return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
+  const cardTypeUpper = cardType.toUpperCase();
+  const isDataset = cardType === 'dataset';
+  
+  return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards.
 
-**Your task is to extract information for a ${cardType.toUpperCase()} card and perform a two-step process in a single pass:**
-1.  **Internal Analysis (Chain of Thought):** First, you will mentally scan the entire document and extract all key entities, relationships, and data points. You will pay special attention to lists of people, organizations, and detailed data subsets.
-2.  **JSON Formatting:** Second, using your internal analysis, you will meticulously construct the final JSON output, ensuring every possible field from the schema is populated with the information you found.
+**TASK:** Extract information for a ${cardTypeUpper} card in valid JSON format.
 
-**CRITICAL INSTRUCTIONS FOR MAXIMUM DETAIL:**
+**CRITICAL INSTRUCTIONS:**
+• Extract ALL authors with affiliations - do not summarize
+• For datasets: Convert patient demographics/characteristics tables into detailed Subset objects
+• Extract exact numerical values and statistical measures
+• Include publication details, performance metrics, and technical specifications
+• Output must be valid JSON with proper ROADMAP structure
 
-* **Extract ALL Authors and Organizations:** Do not summarize. If there are 30 authors listed, extract all 30. For each, extract their name and any listed affiliation.
-* **Deeply Nested Subsets:** For datasets, pay close attention to tables describing patient demographics or clinical characteristics. Each distinct group or subgroup mentioned (e.g., "Female," "Age 50-60," "Stage I lung cancer") must be converted into a separate, complete object within the "Subset" array, as seen in the examples.
-* **Do Not Summarize Data:** Extract exact numerical values, statistical measures (like age ± standard deviation), and full descriptions.
-* **Follow the Schema Exactly:** The final output must be ONLY a valid JSON object that strictly adheres to the provided schema structure.
+**REQUIRED JSON STRUCTURE:**
+{
+  "${cardTypeUpper.charAt(0) + cardTypeUpper.slice(1).toLowerCase()}": {
+    "Name": "string",
+    "Description": "string", 
+    "Authors": [{"Name": "string", "Affiliation": "string"}],
+    "Publication": {"Journal": "string", "Date": "string", "DOI": "string"},${isDataset ? `
+    "Subset": [
+      {
+        "Name": "string",
+        "Description": "string", 
+        "Criteria": ["string"],
+        "Size": number,
+        "Demographics": {"Age": "string", "Sex": "string"}
+      }
+    ],
+    "Imaging": {
+      "Modality": ["string"],
+      "Body Region": ["string"],
+      "Number of Images": number
+    }` : `
+    "Performance": {
+      "Metrics": [{"Metric": "string", "Value": "string"}],
+      "Validation": "string"
+    },
+    "Implementation": {
+      "Framework": "string",
+      "Architecture": "string"
+    }`}
+  }
+}
 
-**TARGET ${cardType.toUpperCase()} SCHEMA STRUCTURE:**
-${JSON.stringify(targetStructure, null, 2)}
-
-**DOCUMENT CONTENT TO ANALYZE:**
+**DOCUMENT TEXT:**
 """${documentData.text.substring(0, 15000)}"""
 
-**STRUCTURED TABLES:**
+**TABLES:**
 ${JSON.stringify(documentData.tables, null, 2)}
-
-Now, begin your process. First, perform your internal analysis of the text and tables. Then, use that analysis to generate the complete and detailed JSON output below.
 
 **OUTPUT (Valid JSON only):**`;
 }
@@ -806,32 +832,58 @@ OUTPUT (Valid JSON only):`;
 // Function to create text-only prompt (without images/figures)
 function createTextOnlyPrompt(documentData, schemas, cardType) {
   console.log('🔍 createTextOnlyPrompt called with cardType:', cardType);
-  const targetStructure = extractSchemaStructure(schemas[cardType], cardType);
-  console.log('📋 Target structure keys:', Object.keys(targetStructure || {}));
   
-  return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
+  const cardTypeUpper = cardType.toUpperCase();
+  const isDataset = cardType === 'dataset';
+  
+  return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards.
 
-**Your task is to extract information for a ${cardType.toUpperCase()} card and perform a two-step process in a single pass:**
-1.  **Internal Analysis (Chain of Thought):** First, you will mentally scan the entire document and extract all key entities, relationships, and data points. You will pay special attention to lists of people, organizations, and detailed data subsets.
-2.  **JSON Formatting:** Second, using your internal analysis, you will meticulously construct the final JSON output, ensuring every possible field from the schema is populated with the information you found.
+**TASK:** Extract information for a ${cardTypeUpper} card in valid JSON format (text-only analysis).
 
-**CRITICAL INSTRUCTIONS FOR MAXIMUM DETAIL:**
+**CRITICAL INSTRUCTIONS:**
+• Extract ALL authors with affiliations - do not summarize
+• For datasets: Convert patient demographics/characteristics tables into detailed Subset objects
+• Extract exact numerical values and statistical measures
+• Include publication details, performance metrics, and technical specifications
+• Output must be valid JSON with proper ROADMAP structure
 
-* **Extract ALL Authors and Organizations:** Do not summarize. If there are 30 authors listed, extract all 30. For each, extract their name and any listed affiliation.
-* **Deeply Nested Subsets:** For datasets, pay close attention to tables describing patient demographics or clinical characteristics. Each distinct group or subgroup mentioned (e.g., "Female," "Age 50-60," "Stage I lung cancer") must be converted into a separate, complete object within the "Subset" array, as seen in the examples.
-* **Do Not Summarize Data:** Extract exact numerical values, statistical measures (like age ± standard deviation), and full descriptions.
-* **Follow the Schema Exactly:** The final output must be ONLY a valid JSON object that strictly adheres to the provided schema structure.
+**REQUIRED JSON STRUCTURE:**
+{
+  "${cardTypeUpper.charAt(0) + cardTypeUpper.slice(1).toLowerCase()}": {
+    "Name": "string",
+    "Description": "string", 
+    "Authors": [{"Name": "string", "Affiliation": "string"}],
+    "Publication": {"Journal": "string", "Date": "string", "DOI": "string"},${isDataset ? `
+    "Subset": [
+      {
+        "Name": "string",
+        "Description": "string", 
+        "Criteria": ["string"],
+        "Size": number,
+        "Demographics": {"Age": "string", "Sex": "string"}
+      }
+    ],
+    "Imaging": {
+      "Modality": ["string"],
+      "Body Region": ["string"],
+      "Number of Images": number
+    }` : `
+    "Performance": {
+      "Metrics": [{"Metric": "string", "Value": "string"}],
+      "Validation": "string"
+    },
+    "Implementation": {
+      "Framework": "string",
+      "Architecture": "string"
+    }`}
+  }
+}
 
-**TARGET ${cardType.toUpperCase()} SCHEMA STRUCTURE:**
-${JSON.stringify(targetStructure, null, 2)}
-
-**DOCUMENT CONTENT TO ANALYZE:**
+**DOCUMENT TEXT:**
 """${documentData.text.substring(0, 15000)}"""
 
-**STRUCTURED TABLES:**
+**TABLES:**
 ${JSON.stringify(documentData.tables, null, 2)}
-
-Now, begin your process. First, perform your internal analysis of the text and tables. Then, use that analysis to generate the complete and detailed JSON output below.
 
 **OUTPUT (Valid JSON only):**`;
 }
@@ -842,6 +894,78 @@ function createEnhancedSinglePrompt(documentData, schemas, processingMode, cardT
     return createTextOnlyPrompt(documentData, schemas, cardType);
   } else {
     return createMultimodalPrompt(documentData, schemas, cardType);
+  }
+}
+
+// Parse and clean Gemini response to extract valid JSON
+async function parseAndCleanGeminiResponse(response, cardType) {
+  try {
+    console.log('🔧 Parsing Gemini response...');
+    
+    // Parse the Gemini API response format
+    const parsedResponse = JSON.parse(response);
+    
+    // Extract text content from Gemini's response structure
+    let textContent = '';
+    if (parsedResponse.candidates?.[0]?.content?.parts?.[0]?.text) {
+      textContent = parsedResponse.candidates[0].content.parts[0].text;
+    } else {
+      console.error('❌ Unexpected Gemini response structure');
+      return null;
+    }
+    
+    console.log('📝 Extracted text content length:', textContent.length);
+    
+    // Clean the text content to extract JSON
+    const cleanedJson = extractJsonFromText(textContent, cardType);
+    
+    if (cleanedJson) {
+      console.log('✅ Successfully parsed and validated JSON');
+      return cleanedJson;
+    }
+    
+    console.error('❌ No valid JSON found in response');
+    return null;
+    
+  } catch (error) {
+    console.error('❌ Error parsing Gemini response:', error);
+    return null;
+  }
+}
+
+// Extract and validate JSON from text content
+function extractJsonFromText(text, cardType) {
+  try {
+    // Remove markdown code blocks if present
+    let cleanText = text.replace(/```json\s*\n?/g, '').replace(/```\s*$/g, '');
+    
+    // Find JSON object boundaries
+    const startIndex = cleanText.indexOf('{');
+    const lastIndex = cleanText.lastIndexOf('}');
+    
+    if (startIndex === -1 || lastIndex === -1) {
+      console.error('❌ No JSON object boundaries found');
+      return null;
+    }
+    
+    const jsonText = cleanText.slice(startIndex, lastIndex + 1);
+    
+    // Parse and validate the JSON
+    const parsedJson = JSON.parse(jsonText);
+    
+    // Validate it has the expected structure
+    const expectedKey = cardType.charAt(0).toUpperCase() + cardType.slice(1).toLowerCase();
+    if (!parsedJson[expectedKey]) {
+      console.error(`❌ JSON missing expected key: ${expectedKey}`);
+      return null;
+    }
+    
+    console.log('✅ JSON validation successful');
+    return parsedJson;
+    
+  } catch (error) {
+    console.error('❌ JSON parsing error:', error);
+    return null;
   }
 }
 
@@ -1221,42 +1345,25 @@ export default async function handler(req, res) {
 
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
-      console.error('❌ Gemini API streaming error:', errorText);
-      return res.status(500).json({ error: 'Failed to connect to Gemini streaming endpoint', details: errorText.substring(0, 200) });
+      console.error('❌ Gemini API error:', errorText);
+      return res.status(500).json({ error: 'Failed to connect to Gemini endpoint', details: errorText.substring(0, 200) });
     }
 
-    // Set headers for streaming response
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Transfer-Encoding': 'chunked',
-    });
+    // Get the complete response from Gemini
+    const fullResponse = await geminiResponse.text();
+    console.log('✅ Full response received, length:', fullResponse.length);
 
-    let accumulatedResponse = '';
-    const reader = geminiResponse.body.getReader();
-    const decoder = new TextDecoder();
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        accumulatedResponse += chunk;
-        
-        // Stream the chunk to the client
-        res.write(chunk);
-      }
-      
-      res.end();
-      console.log('✅ Streaming complete, total response length:', accumulatedResponse.length);
-      
-    } catch (streamError) {
-      console.error('❌ Streaming error:', streamError);
-      if (!res.headersSent) {
-        return res.status(500).json({ error: 'Streaming failed', details: streamError.message });
-      }
-      res.end();
+    // Parse and clean the Gemini response
+    const cleanedJson = await parseAndCleanGeminiResponse(fullResponse, cardType);
+    
+    if (!cleanedJson) {
+      console.error('❌ Failed to parse valid JSON from Gemini response');
+      return res.status(500).json({ error: 'Failed to generate valid JSON from AI response' });
     }
+
+    // Return the clean, validated JSON response
+    console.log('✅ Sending clean JSON response');
+    res.status(200).json(cleanedJson);
 
   } catch (error) {
     console.error('Backend error:', error);
