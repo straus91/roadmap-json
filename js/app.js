@@ -1874,6 +1874,14 @@ initializeEditor = function(data) {
     setTimeout(updateEditorButtons, 100);
 };
 
+// Navigation functions
+function showInitialScreen() {
+    document.getElementById('initial-screen').style.display = 'block';
+    document.getElementById('debug-screen').style.display = 'none';
+    document.getElementById('card-type-selection').style.display = 'none';
+    document.getElementById('editor-screen').style.display = 'none';
+}
+
 // Debug PDF processing functions
 function showDebugScreen() {
     document.getElementById('initial-screen').style.display = 'none';
@@ -1958,7 +1966,7 @@ function updateDebugDisplays(debugData) {
     // Prompt preview
     if (debugData.multimodalPrompt) {
         document.getElementById('gemini-status').innerHTML = '<span class="badge badge-success">Sent to Gemini</span>';
-        document.getElementById('debug-prompt-preview').textContent = debugData.multimodalPrompt.substring(0, 5000) + '...';
+        document.getElementById('debug-prompt-preview').textContent = debugData.multimodalPrompt;
     }
     
     // Results preview
