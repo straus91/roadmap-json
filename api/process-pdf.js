@@ -109,6 +109,118 @@ function extractSchemaStructure(schema, schemaType) {
   return extractProperties(mainDef.properties || {});
 }
 
+// Function to extract meaningful content from PDF.co JSON response
+function extractContentFromPdfJson(pdfData) {
+  const result = {
+    metadata: {},
+    pages: [],
+    text_content: "",
+    document_structure: []
+  };
+
+  try {
+    // Extract basic metadata if available
+    if (pdfData.info) {
+      result.metadata = {
+        title: pdfData.info.Title || "",
+        author: pdfData.info.Author || "",
+        creator: pdfData.info.Creator || "",
+        pages: pdfData.pageCount || pdfData.pages?.length || 0
+      };
+    }
+
+    // Extract text content from pages
+    if (pdfData.pages && Array.isArray(pdfData.pages)) {
+      pdfData.pages.forEach((page, pageIndex) => {
+        const pageContent = {
+          page_number: pageIndex + 1,
+          text_blocks: [],
+          tables: []
+        };
+
+        // Extract text blocks (looking for common text properties)
+        if (page.text || page.content || page.elements) {
+          const textSource = page.text || page.content || page.elements;
+          
+          if (Array.isArray(textSource)) {
+            textSource.forEach(element => {
+              if (element.text || element.content || element.str) {
+                const text = element.text || element.content || element.str;
+                if (text && text.trim().length > 0) {
+                  pageContent.text_blocks.push({
+                    text: text.trim(),
+                    font_size: element.fontSize || element.size || null,
+                    font_weight: element.fontWeight || element.bold || null
+                  });
+                  result.text_content += text.trim() + " ";
+                }
+              }
+            });
+          } else if (typeof textSource === 'string') {
+            pageContent.text_blocks.push({ text: textSource.trim() });
+            result.text_content += textSource.trim() + " ";
+          }
+        }
+
+        // Extract tables if present
+        if (page.tables && Array.isArray(page.tables)) {
+          page.tables.forEach(table => {
+            if (table.rows) {
+              pageContent.tables.push({
+                rows: table.rows.map(row => 
+                  row.cells ? row.cells.map(cell => cell.text || cell.content || "") : []
+                )
+              });
+            }
+          });
+        }
+
+        if (pageContent.text_blocks.length > 0 || pageContent.tables.length > 0) {
+          result.pages.push(pageContent);
+        }
+      });
+    }
+
+    // If no pages structure, try to extract from root level
+    if (result.text_content.trim().length === 0 && pdfData.text) {
+      result.text_content = pdfData.text;
+    }
+
+    // Create document structure analysis
+    const textLines = result.text_content.split('\n').filter(line => line.trim().length > 0);
+    textLines.forEach((line, index) => {
+      const trimmed = line.trim();
+      // Identify potential headers (short lines, all caps, or numbered sections)
+      if (trimmed.length < 100 && 
+          (trimmed === trimmed.toUpperCase() || 
+           /^\d+\.\s/.test(trimmed) || 
+           /^[A-Z][A-Z\s]+$/.test(trimmed))) {
+        result.document_structure.push({
+          type: "potential_header",
+          text: trimmed,
+          position: index
+        });
+      }
+    });
+
+    console.log('Extracted text blocks:', result.pages.reduce((sum, p) => sum + p.text_blocks.length, 0));
+    console.log('Extracted tables:', result.pages.reduce((sum, p) => sum + p.tables.length, 0));
+    console.log('Text content length:', result.text_content.length);
+
+    return result;
+
+  } catch (error) {
+    console.error('Error extracting content from PDF JSON:', error);
+    // Fallback: return the original data but remove obvious bloat
+    return {
+      text_content: JSON.stringify(pdfData).replace(/("x":\d+\.?\d*)|("y":\d+\.?\d*)|("width":\d+\.?\d*)|("height":\d+\.?\d*)/g, ''),
+      metadata: { pages: pdfData.pageCount || 0 },
+      pages: [],
+      document_structure: []
+    };
+  }
+}
+
 // Helper function to call Gemini API with retry logic
 async function callGeminiAPI(url, prompt, config = {}, retryCount = 0) {
   const maxRetries = 3;
@@ -381,19 +493,16 @@ export default async function handler(req, res) {
           throw new Error('No structured data received from PDF.co');
         }
         
-        // Convert object to formatted JSON string
-        const fullJson = JSON.stringify(structuredData, null, 2);
-        console.log('Full JSON length:', fullJson.length);
+        // Extract meaningful content from PDF.co JSON structure
+        console.log('Full JSON length:', JSON.stringify(structuredData).length);
         
-        // Truncate to manageable size for Gemini (max ~100k characters)
-        const maxLength = 100000;
-        if (fullJson.length > maxLength) {
-          extractedText = fullJson.substring(0, maxLength) + '\n\n... [JSON truncated due to size]';
-          console.log('JSON truncated from', fullJson.length, 'to', extractedText.length, 'characters');
-        } else {
-          extractedText = fullJson;
-          console.log('Using full JSON, length:', extractedText.length);
-        }
+        const extractedContent = extractContentFromPdfJson(structuredData);
+        extractedText = JSON.stringify(extractedContent, null, 2);
+        
+        console.log('Processed content length:', extractedText.length);
+        console.log('Content reduction:', 
+                   ((JSON.stringify(structuredData).length - extractedText.length) / 
+                    JSON.stringify(structuredData).length * 100).toFixed(1) + '%');
         
       } catch (jsonError) {
         console.error('Error processing JSON data:', jsonError);
