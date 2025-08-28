@@ -604,7 +604,9 @@ async function callGeminiAPIMultimodal(url, textPrompt, documentData, config = {
 
 // Function to create multimodal prompt with text, tables, and images
 function createMultimodalPrompt(documentData, schemas, cardType) {
+  console.log('🔍 createMultimodalPrompt called with cardType:', cardType);
   const targetStructure = extractSchemaStructure(schemas[cardType], cardType);
+  console.log('📋 Target structure keys:', Object.keys(targetStructure || {}));
   
   return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
 
@@ -803,7 +805,9 @@ OUTPUT (Valid JSON only):`;
 
 // Function to create text-only prompt (without images/figures)
 function createTextOnlyPrompt(documentData, schemas, cardType) {
+  console.log('🔍 createTextOnlyPrompt called with cardType:', cardType);
   const targetStructure = extractSchemaStructure(schemas[cardType], cardType);
+  console.log('📋 Target structure keys:', Object.keys(targetStructure || {}));
   
   return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
 
@@ -867,7 +871,8 @@ export default async function handler(req, res) {
 
     // Get card type (default to model for backward compatibility) 
     const cardType = fields.cardType?.[0] || 'model';
-    console.log('🎯 Card type:', cardType);
+    console.log('🎯 Card type received:', cardType);
+    console.log('🔍 DEBUG fields.cardType:', fields.cardType);
 
     const pdfFile = files.pdf[0];
     if (!pdfFile) {
@@ -1146,6 +1151,7 @@ export default async function handler(req, res) {
     
     console.log('🚀 Processing document with STREAMING and enhanced chain-of-thought prompt...');
     console.log('📝 Processing mode:', processingMode);
+    console.log('🎯 Using cardType for prompt generation:', cardType);
 
     // Build request body based on processing mode
     let requestBody;

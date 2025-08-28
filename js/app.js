@@ -1505,6 +1505,11 @@ async function handlePdfUpload(event) {
     formData.append('pdf', file);
     formData.append('mode', pdfProcessingMode);
     formData.append('cardType', pdfCardType);
+    
+    console.log('🔍 DEBUG: Sending to backend:', { 
+        mode: pdfProcessingMode, 
+        cardType: pdfCardType 
+    });
 
     try {
         // Send the file to the streaming serverless function
