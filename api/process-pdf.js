@@ -369,8 +369,10 @@ export default async function handler(req, res) {
         });
       }
 
-      const structuredData = pdfcoResult.body || '';
-      console.log('Step 2 complete: JSON extraction completed, data length:', structuredData.length);
+      const structuredData = pdfcoResult.body || pdfcoResult.url || pdfcoResult;
+      console.log('Step 2 complete: JSON extraction completed, data length:', 
+                  typeof structuredData === 'string' ? structuredData.length : 'object');
+      console.log('PDF.co result keys:', Object.keys(pdfcoResult));
       
       // Convert structured JSON to text for Gemini processing
       let extractedText = '';
