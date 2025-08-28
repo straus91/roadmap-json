@@ -174,7 +174,6 @@ class DynamicSchemaProcessor {
         if (prop.$ref) {
             const refPath = prop.$ref.replace('#/$defs/', '');
             
-            // Prevent circular references
             if (visited.has(refPath)) {
                 console.warn(`Circular reference detected: ${refPath}`);
                 return {
@@ -193,7 +192,6 @@ class DynamicSchemaProcessor {
             }
         }
 
-        // Skip overly complex properties that cause issues
         if (this.isComplexProperty(prop)) {
             return {
                 type: "string", 
@@ -203,42 +201,47 @@ class DynamicSchemaProcessor {
             };
         }
 
-        // Process based on type
         const processed = { ...prop };
 
-        // Handle arrays
         if (prop.type === 'array' && prop.items) {
             processed.items = this.processProperty(prop.items, defs, visited, depth);
             
-            // Add headerTemplate for arrays of objects
-            if (prop.items.type === 'object') {
-                const headerTemplate = this.getArrayHeaderTemplate(prop.items, defs, visited);
-                if (headerTemplate) {
-                    processed.items.headerTemplate = headerTemplate;
-                    console.log('✅ Added headerTemplate:', headerTemplate);
+            // *** FINAL, MORE INTELLIGENT HEADER LOGIC ***
+            if (processed.items.type === 'object' && processed.items.properties) {
+                const props = processed.items.properties;
+                if (props.Name) {
+                    processed.items.headerTemplate = "{{self.Name}}";
+                } else if (props['Partition name']) {
+                    processed.items.headerTemplate = "{{self['Partition name']}}";
+                } else {
+                    const titleCandidates = ['Criterion', 'Sex', 'Demographic', 'Title'];
+                    const titleProps = titleCandidates.filter(p => props[p]);
+                    if (titleProps.length > 0) {
+                        processed.items.headerTemplate = titleProps.map(p => `{{self.${p}}}`).join(' - ');
+                    } else {
+                        // Final fallback to ensure no "item" labels
+                        processed.items.headerTemplate = "item {{i}}";
+                    }
                 }
             }
-            
-            // Convert enum arrays to checkbox format for better UX
+            // *** END OF FINAL LOGIC ***
+
             if (prop.items.enum && prop.items.enum.length > 5) {
                 processed.format = 'checkbox';
                 processed.uniqueItems = true;
             }
         }
 
-        // Handle objects
         if (prop.type === 'object' && prop.properties) {
             processed.properties = this.processProperties(prop.properties, defs, visited, depth);
         }
 
-        // Add default values where missing
         if (!processed.default) {
             if (prop.type === 'string') processed.default = '';
             if (prop.type === 'array') processed.default = [];
             if (prop.type === 'object') processed.default = {};
         }
 
-        // Handle special formats
         if (prop.format === 'email') processed.format = 'email';
         if (prop.format === 'date') processed.format = 'date';
         if (prop.format === 'uri') processed.format = 'uri';
