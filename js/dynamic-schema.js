@@ -210,13 +210,12 @@ class DynamicSchemaProcessor {
         if (prop.type === 'array' && prop.items) {
             processed.items = this.processProperty(prop.items, defs, visited, depth);
             
-            // Add headerTemplate for arrays of objects that have a "Name" property
+            // Add headerTemplate for arrays of objects
             if (prop.items.type === 'object') {
-                // Check if the object has a "Name" property (directly or through $ref)
-                const hasNameProperty = this.checkForNameProperty(prop.items, defs, visited);
-                if (hasNameProperty) {
-                    processed.items.headerTemplate = '{{self.Name}}';
-                    console.log('✅ Added headerTemplate for array with Name property');
+                const headerTemplate = this.getArrayHeaderTemplate(prop.items, defs, visited);
+                if (headerTemplate) {
+                    processed.items.headerTemplate = headerTemplate;
+                    console.log('✅ Added headerTemplate:', headerTemplate);
                 }
             }
             
@@ -264,33 +263,64 @@ class DynamicSchemaProcessor {
         return false;
     }
 
-    // Helper method to check if an object schema has a "Name" property
-    checkForNameProperty(itemSchema, defs, visited = new Set()) {
+    // Helper method to generate intelligent headerTemplate for array objects
+    getArrayHeaderTemplate(itemSchema, defs, visited = new Set()) {
         // Handle $ref references
         if (itemSchema.$ref) {
             const refPath = itemSchema.$ref.replace('#/$defs/', '');
             
             // Prevent circular references
             if (visited.has(refPath)) {
-                return false;
+                return null;
             }
             
             const refDef = defs[refPath];
             if (refDef) {
                 const newVisited = new Set(visited);
                 newVisited.add(refPath);
-                return this.checkForNameProperty(refDef, defs, newVisited);
+                return this.getArrayHeaderTemplate(refDef, defs, newVisited);
             }
-            return false;
+            return null;
         }
         
-        // Check if the object has properties and specifically has a "Name" property
+        // Check if the object has properties
         if (itemSchema.type === 'object' && itemSchema.properties) {
-            return itemSchema.properties.hasOwnProperty('Name') || 
-                   itemSchema.properties.hasOwnProperty('name');
+            const properties = itemSchema.properties;
+            
+            // First check for Name property (most common)
+            if (properties.Name || properties.name) {
+                return '{{self.Name}}';
+            }
+            
+            // Special case for Partition arrays
+            if (properties['Partition name']) {
+                return '{{self.Partition name}}';
+            }
+            
+            // For other cases, look for common descriptive properties
+            const titleCandidates = ['Criterion', 'Sex', 'Demographic', 'Title'];
+            const foundCandidates = [];
+            
+            for (const candidate of titleCandidates) {
+                if (properties[candidate]) {
+                    foundCandidates.push(`{{self.${candidate}}}`);
+                }
+            }
+            
+            // If we found descriptive properties, combine them
+            if (foundCandidates.length > 0) {
+                return foundCandidates.join(' - ');
+            }
+            
+            // Fallback: use the first string property we can find
+            for (const [propName, propDef] of Object.entries(properties)) {
+                if (propDef.type === 'string') {
+                    return `{{self.${propName}}}`;
+                }
+            }
         }
         
-        return false;
+        return null;
     }
 
     // Get current schema info

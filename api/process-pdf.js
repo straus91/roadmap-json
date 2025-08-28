@@ -594,100 +594,34 @@ function createMultimodalPrompt(documentData, schemas) {
   const modelStructure = extractSchemaStructure(schemas.model, 'model');
   const datasetStructure = extractSchemaStructure(schemas.dataset, 'dataset');
   
-  return `You are an expert AI system specialized in extracting structured information from medical imaging research papers and documents to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
+  return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
 
-TASK: Analyze the following multimodal document content (text + tables + images) from a research paper PDF and determine if it describes an AI MODEL or a DATASET, then extract structured information according to the exact ROADMAP schema format.
+**Your task is to perform a two-step process in a single pass:**
+1.  **Internal Analysis (Chain of Thought):** First, you will mentally scan the entire document and extract all key entities, relationships, and data points. You will pay special attention to lists of people, organizations, and detailed data subsets.
+2.  **JSON Formatting:** Second, using your internal analysis, you will meticulously construct the final JSON output, ensuring every possible field from the schema is populated with the information you found.
 
-DOCUMENT CONTENT INCLUDES:
-- Full text content from the PDF
-- Structured table data extracted from the document  
-- Referenced figures, charts, and diagrams as images
-- Document metadata
+**CRITICAL INSTRUCTIONS FOR MAXIMUM DETAIL:**
 
-INSTRUCTIONS:
-1. ANALYZE the text content, structured tables, AND visual figures/charts provided
-2. DETERMINE if this describes a MODEL (AI/ML algorithm) or DATASET (collection of medical images/data)
-3. EXTRACT information following the exact schema structure provided below
-4. RETURN a valid JSON object with either "Model" or "Dataset" key
-5. USE proper data types (strings, arrays, objects, numbers) as specified
-6. INCLUDE as many relevant fields as possible from the schema
-7. SET empty strings "" for text fields you cannot find information for
-8. SET empty arrays [] for array fields you cannot find information for
-9. SET appropriate default values for required fields
+* **Extract ALL Authors and Organizations:** Do not summarize. If there are 30 authors listed, extract all 30. For each, extract their name and any listed affiliation.
+* **Deeply Nested Subsets:** For datasets, pay close attention to tables describing patient demographics or clinical characteristics. Each distinct group or subgroup mentioned (e.g., "Female," "Age 50-60," "Stage I lung cancer") must be converted into a separate, complete object within the "Subset" array, as seen in the examples.
+* **Do Not Summarize Data:** Extract exact numerical values, statistical measures (like age ± standard deviation), and full descriptions.
+* **Follow the Schema Exactly:** The final output must be ONLY a valid JSON object that strictly adheres to the provided schema structure.
 
-MODEL SCHEMA STRUCTURE:
+**MODEL SCHEMA STRUCTURE:**
 ${JSON.stringify(modelStructure, null, 2)}
 
-DATASET SCHEMA STRUCTURE:
+**DATASET SCHEMA STRUCTURE:**
 ${JSON.stringify(datasetStructure, null, 2)}
 
-CRITICAL REQUIREMENTS:
-- Return ONLY valid JSON (no markdown, no explanations)
-- Use exact field names from schema (case-sensitive)
-- Follow proper nesting structure
-- Include required fields even if empty
-- Use appropriate data types (string, number, array, object)
-- For arrays of strings: ["item1", "item2"]
-- For arrays of objects: [{"field": "value"}]
-- For nested objects: {"field": {"nested": "value"}}
+**DOCUMENT CONTENT TO ANALYZE:**
+"""${documentData.text.substring(0, 15000)}"""
 
-EXAMPLE OUTPUT FORMAT:
-For a MODEL:
-{
-  "Model": {
-    "Name": "extracted model name",
-    "Use": {
-      "Intended": ["use case 1", "use case 2"]
-    },
-    "Results": [
-      {
-        "Metric": ["accuracy", "sensitivity"],
-        "Value": "0.95",
-        "Result Information": "description of result"
-      }
-    ],
-    ...other fields
-  }
-}
+**STRUCTURED TABLES:**
+${JSON.stringify(documentData.tables, null, 2)}
 
-For a DATASET:
-{
-  "Dataset": {
-    "Name": "extracted dataset name",
-    "Composition": {
-      "Number of instances": 1000,
-      "Data type": ["Image"]
-    },
-    "Imaging": {
-      "File format": ["DICOM"],
-      "Resolution": "512x512"
-    },
-    ...other fields
-  }
-}
+Now, begin your process. First, perform your internal analysis of the text and tables. Then, use that analysis to generate the complete and detailed JSON output below.
 
-DOCUMENT CONTENT:
-
-TEXT CONTENT:
-"""${documentData.text.substring(0, 12000)}${documentData.text.length > 12000 ? '\n\n... [text truncated]' : ''}"""
-
-STRUCTURED TABLES (${documentData.tables.length} tables found):
-${documentData.tables.length > 0 ? JSON.stringify(documentData.tables, null, 2) : 'No tables found in document'}
-
-REFERENCED FIGURES:
-${documentData.images.length > 0 ? 
-  documentData.images.map(img => `- Figure ${img.figureNumber} (Page ${img.page}) - ${img.referenced ? 'Referenced in text' : 'Available'}`).join('\n') 
-  : 'No figures available'}
-
-Note: Visual content (charts, diagrams, images) will be provided as additional input for analysis.
-
-METADATA:
-- Filename: ${documentData.metadata.filename}
-- Text length: ${documentData.metadata.text_length} characters
-- Tables extracted: ${documentData.metadata.tables_count}
-- Images selected: ${documentData.metadata.images_count}
-
-OUTPUT (JSON only):`;
+**OUTPUT (Valid JSON only):**`;
 }
 
 // STEP 1: Function to create extraction prompt - focuses solely on extracting information
@@ -863,87 +797,34 @@ function createTextOnlyPrompt(documentData, schemas) {
   const modelStructure = extractSchemaStructure(schemas.model, 'model');
   const datasetStructure = extractSchemaStructure(schemas.dataset, 'dataset');
   
-  return `You are an expert AI system specialized in extracting structured information from medical imaging research papers and documents to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
+  return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
 
-TASK: Analyze the following document content (text + tables) from a research paper PDF and determine if it describes an AI MODEL or a DATASET, then extract structured information according to the exact ROADMAP schema format.
+**Your task is to perform a two-step process in a single pass:**
+1.  **Internal Analysis (Chain of Thought):** First, you will mentally scan the entire document and extract all key entities, relationships, and data points. You will pay special attention to lists of people, organizations, and detailed data subsets.
+2.  **JSON Formatting:** Second, using your internal analysis, you will meticulously construct the final JSON output, ensuring every possible field from the schema is populated with the information you found.
 
-DOCUMENT CONTENT INCLUDES:
-- Full text content from the PDF
-- Structured table data extracted from the document  
-- Document metadata
+**CRITICAL INSTRUCTIONS FOR MAXIMUM DETAIL:**
 
-INSTRUCTIONS:
-1. ANALYZE the text content and structured tables provided
-2. DETERMINE if this describes a MODEL (AI/ML algorithm) or DATASET (collection of medical images/data)
-3. EXTRACT information following the exact schema structure provided below
-4. RETURN a valid JSON object with either "Model" or "Dataset" key
-5. USE proper data types (strings, arrays, objects, numbers) as specified
-6. INCLUDE as many relevant fields as possible from the schema
-7. SET empty strings "" for text fields you cannot find information for
-8. SET empty arrays [] for array fields you cannot find information for
-9. SET appropriate default values for required fields
+* **Extract ALL Authors and Organizations:** Do not summarize. If there are 30 authors listed, extract all 30. For each, extract their name and any listed affiliation.
+* **Deeply Nested Subsets:** For datasets, pay close attention to tables describing patient demographics or clinical characteristics. Each distinct group or subgroup mentioned (e.g., "Female," "Age 50-60," "Stage I lung cancer") must be converted into a separate, complete object within the "Subset" array, as seen in the examples.
+* **Do Not Summarize Data:** Extract exact numerical values, statistical measures (like age ± standard deviation), and full descriptions.
+* **Follow the Schema Exactly:** The final output must be ONLY a valid JSON object that strictly adheres to the provided schema structure.
 
-MODEL SCHEMA STRUCTURE:
+**MODEL SCHEMA STRUCTURE:**
 ${JSON.stringify(modelStructure, null, 2)}
 
-DATASET SCHEMA STRUCTURE:
+**DATASET SCHEMA STRUCTURE:**
 ${JSON.stringify(datasetStructure, null, 2)}
 
-CRITICAL REQUIREMENTS:
-- Return ONLY valid JSON (no markdown, no explanations)
-- Use exact field names from schema (case-sensitive)
-- Follow proper nesting structure
-- Include required fields even if empty
-- Use appropriate data types (string, number, array, object)
-- For arrays of strings: ["item1", "item2"]
-- For arrays of objects: [{"field": "value"}]
-- For nested objects: {"field": {"nested": "value"}}
+**DOCUMENT CONTENT TO ANALYZE:**
+"""${documentData.text.substring(0, 15000)}"""
 
-EXAMPLE OUTPUT FORMAT:
-For a MODEL:
-{
-  "Model": {
-    "Name": "extracted model name",
-    "Use": {
-      "Intended": ["use case 1", "use case 2"]
-    },
-    "Performance": {
-      "Metrics": [
-        {
-          "Metric": "AUC",
-          "Value": "0.95"
-        }
-      ]
-    }
-  }
-}
+**STRUCTURED TABLES:**
+${JSON.stringify(documentData.tables, null, 2)}
 
-For a DATASET:
-{
-  "Dataset": {
-    "Name": "extracted dataset name",
-    "Format": ["DICOM", "NIfTI"],
-    "Content": {
-      "Annotation": "ground truth labels"
-    }
-  }
-}
+Now, begin your process. First, perform your internal analysis of the text and tables. Then, use that analysis to generate the complete and detailed JSON output below.
 
-DOCUMENT CONTENT:
-
-TEXT CONTENT:
-"""${documentData.text.substring(0, 15000)}${documentData.text.length > 15000 ? '\n\n... [text truncated]' : ''}"""
-
-STRUCTURED TABLES (${documentData.tables.length} tables found):
-${documentData.tables.length > 0 ? JSON.stringify(documentData.tables, null, 2) : 'No tables found in document'}
-
-METADATA:
-- Filename: ${documentData.metadata.filename}
-- Text length: ${documentData.metadata.text_length} characters
-- Tables extracted: ${documentData.metadata.tables_count}
-- Processing mode: Text-only (images excluded)
-
-OUTPUT (JSON only):`;
+**OUTPUT (Valid JSON only):**`;
 }
 
 export default async function handler(req, res) {
@@ -1242,18 +1123,16 @@ export default async function handler(req, res) {
       }
     };
     
-    // STEP 1: Extract structured information from document
-    console.log('🔍 Step 1: Extracting structured information...');
-    const extractionPrompt = createExtractionPrompt(documentData, processingMode);
-    console.log('🔍 DEBUG: extractionPrompt type:', typeof extractionPrompt);
-    console.log('🔍 DEBUG: extractionPrompt length:', extractionPrompt?.length || 'undefined');
+    // Single API call with enhanced chain-of-thought prompt
+    console.log('🎯 Processing document with enhanced chain-of-thought prompt...');
     
-    let extractionResult;
+    let result;
     if (processingMode === 'text-only') {
-      console.log('📝 Using text-only extraction mode');
-      extractionResult = await callGeminiAPI(geminiApiUrl, extractionPrompt, {
-        temperature: 0.1,  // Lower temperature for better extraction accuracy
-        maxOutputTokens: 8192,  // More tokens for detailed extraction
+      console.log('📝 Using text-only processing mode');
+      const textOnlyPrompt = createTextOnlyPrompt(documentData, schemas);
+      result = await callGeminiAPI(geminiApiUrl, textOnlyPrompt, {
+        temperature: 0.2,  // Optimal temperature for extraction + formatting
+        maxOutputTokens: 8192,  // More tokens for detailed output
         safetySettings: [
           {
             category: "HARM_CATEGORY_HARASSMENT",
@@ -1266,10 +1145,11 @@ export default async function handler(req, res) {
         ]
       });
     } else {
-      console.log('🖼️ Using multimodal extraction mode');
-      extractionResult = await callGeminiAPIMultimodal(geminiApiUrl, extractionPrompt, documentData, {
-        temperature: 0.1,  // Lower temperature for better extraction accuracy
-        maxOutputTokens: 8192,  // More tokens for detailed extraction
+      console.log('🖼️ Using multimodal processing mode');
+      const multimodalPrompt = createMultimodalPrompt(documentData, schemas);
+      result = await callGeminiAPIMultimodal(geminiApiUrl, multimodalPrompt, documentData, {
+        temperature: 0.2,  // Optimal temperature for extraction + formatting
+        maxOutputTokens: 8192,  // More tokens for detailed output
         safetySettings: [
           {
             category: "HARM_CATEGORY_HARASSMENT",
@@ -1283,64 +1163,27 @@ export default async function handler(req, res) {
       });
     }
 
-    // Handle extraction errors
-    if (extractionResult.error) {
-      console.error('Step 1 extraction failed after retries:', extractionResult.message);
+    // Handle API errors
+    if (result.error) {
+      console.error('Gemini API call failed after retries:', result.message);
       return res.status(500).json({ 
-        error: 'Information extraction failed after retries',
-        details: extractionResult.message?.substring(0, 200)
+        error: 'Document processing failed after retries',
+        details: result.message?.substring(0, 200)
       });
     }
 
-    if (!extractionResult.candidates || !extractionResult.candidates[0] || !extractionResult.candidates[0].content) {
-      console.error('Invalid extraction response structure:', extractionResult);
-      return res.status(500).json({ error: 'Invalid response from extraction step' });
+    if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
+      console.error('Invalid API response structure:', result);
+      return res.status(500).json({ error: 'Invalid response from Gemini API' });
     }
 
-    const extractedInformation = extractionResult.candidates[0].content.parts[0].text.trim();
-    console.log('✅ Step 1 complete - Information extracted (', extractedInformation.length, 'characters)');
+    console.log('✅ Single-pass processing complete');
 
-    // STEP 2: Format extracted information into ROADMAP JSON
-    console.log('📋 Step 2: Formatting into ROADMAP JSON structure...');
-    const formattingPrompt = createFormattingPrompt(extractedInformation, schemas);
-    
-    const formattingResult = await callGeminiAPI(geminiApiUrl, formattingPrompt, {
-      temperature: 0.0,  // Zero temperature for precise formatting
-      maxOutputTokens: 4096,  // Standard tokens for JSON output
-      safetySettings: [
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        },
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE"
-        }
-      ]
-    });
-
-    // Handle formatting errors
-    if (formattingResult.error) {
-      console.error('Step 2 formatting failed after retries:', formattingResult.message);
-      return res.status(500).json({ 
-        error: 'JSON formatting failed after retries',
-        details: formattingResult.message?.substring(0, 200),
-        extractedInformation: extractedInformation.substring(0, 1000) // Include partial extraction for debugging
-      });
-    }
-
-    if (!formattingResult.candidates || !formattingResult.candidates[0] || !formattingResult.candidates[0].content) {
-      console.error('Invalid formatting response structure:', formattingResult);
-      return res.status(500).json({ error: 'Invalid response from formatting step' });
-    }
-
-    console.log('✅ Step 2 complete - JSON formatting done');
-
-    // Parse the final JSON response
+    // Parse the JSON response
     let structuredJson;
     try {
-      const responseContent = formattingResult.candidates[0].content.parts[0].text.trim();
-      console.log('Raw JSON formatting response length:', responseContent.length);
+      const responseContent = result.candidates[0].content.parts[0].text.trim();
+      console.log('Raw API response length:', responseContent.length);
       
       // Clean up the response (remove any markdown formatting)
       const cleanResponse = responseContent
@@ -1349,7 +1192,7 @@ export default async function handler(req, res) {
         .trim();
       
       structuredJson = JSON.parse(cleanResponse);
-      console.log('🎯 Successfully parsed final JSON response');
+      console.log('🎯 Successfully parsed JSON response');
       
       // Sanitize any stringified JSON objects in the response
       console.log('🧹 Sanitizing stringified JSON objects...');
@@ -1357,12 +1200,11 @@ export default async function handler(req, res) {
       console.log('✅ JSON sanitization complete');
       
     } catch (parseError) {
-      console.error('Failed to parse JSON formatting response:', formattingResult.candidates[0].content.parts[0].text.substring(0, 500));
+      console.error('Failed to parse JSON response:', result.candidates[0].content.parts[0].text.substring(0, 500));
       return res.status(500).json({ 
-        error: 'Failed to parse formatted JSON response',
-        formattingResponse: formattingResult.candidates[0].content.parts[0].text.substring(0, 500),
-        parseError: parseError.message,
-        extractedInformation: extractedInformation.substring(0, 1000) // Include partial extraction for debugging
+        error: 'Failed to parse JSON response',
+        apiResponse: result.candidates[0].content.parts[0].text.substring(0, 500),
+        parseError: parseError.message
       });
     }
 
@@ -1375,7 +1217,7 @@ export default async function handler(req, res) {
         error: 'Invalid response structure - missing Model or Dataset key',
         response: structuredJson,
         responseKeys: Object.keys(structuredJson),
-        extractedInformation: extractedInformation.substring(0, 1000) // Include partial extraction for debugging
+        apiResponse: result.candidates[0].content.parts[0].text.substring(0, 1000)
       });
     }
 
