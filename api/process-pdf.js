@@ -956,7 +956,17 @@ export default async function handler(req, res) {
           
           // First pass: Extract all images from this page
           if (page.images) {
+            console.log(`🔍 DEBUG: Page ${pageIndex + 1} has ${page.images.length} images`);
             page.images.forEach((image, imageIndex) => {
+              console.log(`🔍 DEBUG: Image ${imageIndex + 1} structure:`, {
+                hasImage: !!image.image,
+                hasContent: !!image.image?.content,
+                hasData: !!image.image?.data,
+                hasInlineData: !!image.inlineData,
+                keys: Object.keys(image),
+                imageKeys: image.image ? Object.keys(image.image) : null
+              });
+              
               const imageData = {
                 page: pageIndex + 1,
                 imageIndex: imageIndex + 1,
@@ -966,9 +976,18 @@ export default async function handler(req, res) {
                 figureNumber: null
               };
 
-              // Try to extract image content if available
-              if (image.image && image.image.content) {
+              // Try to extract image content - check multiple possible locations
+              if (image.image?.content) {
                 imageData.base64 = image.image.content;
+                console.log(`✅ Found image content in image.image.content (${image.image.content.length} chars)`);
+              } else if (image.image?.data) {
+                imageData.base64 = image.image.data;
+                console.log(`✅ Found image content in image.image.data (${image.image.data.length} chars)`);
+              } else if (image.inlineData?.data) {
+                imageData.base64 = image.inlineData.data;
+                console.log(`✅ Found image content in image.inlineData.data (${image.inlineData.data.length} chars)`);
+              } else {
+                console.log(`❌ No image content found for image ${imageIndex + 1} on page ${pageIndex + 1}`);
               }
 
               pageImages.push(imageData);
