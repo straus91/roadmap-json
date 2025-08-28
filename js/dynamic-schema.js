@@ -218,10 +218,8 @@ class DynamicSchemaProcessor {
                     const titleProps = titleCandidates.filter(p => props[p]);
                     if (titleProps.length > 0) {
                         processed.items.headerTemplate = titleProps.map(p => `{{self.${p}}}`).join(' - ');
-                    } else {
-                        // Final fallback to ensure no "item" labels
-                        processed.items.headerTemplate = "item {{i}}";
                     }
+                    // No fallback - let JSON Editor use default behavior for arrays without meaningful properties
                 }
             }
             // *** END OF FINAL LOGIC ***
