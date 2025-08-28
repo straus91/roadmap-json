@@ -444,10 +444,10 @@ export default async function handler(req, res) {
       const uploadedFileUrl = uploadResult.url;
       console.log('Step 1 complete: PDF uploaded, URL:', uploadedFileUrl.substring(0, 50) + '...');
       
-      // Step 2: Extract structured JSON from uploaded PDF
-      console.log('Step 2: Extracting structured JSON from uploaded PDF...');
+      // Step 2: Extract AI-enhanced text from uploaded PDF
+      console.log('Step 2: Extracting AI-enhanced text from uploaded PDF...');
       
-      const pdfcoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/json2', {
+      const pdfcoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -457,67 +457,41 @@ export default async function handler(req, res) {
           url: uploadedFileUrl,
           inline: true,
           pages: "0-",
-          async: false
+          async: false,
+          lang: "eng",
+          ocrAccuracy: "balanced",
+          unwrap: true,
+          removeTextShadows: true,
+          detectTables: true,
+          cleanupAndEnhanceText: true
         })
       });
 
       if (!pdfcoResponse.ok) {
         const errorData = await pdfcoResponse.text();
-        console.error('PDF.co JSON Extraction Error:', errorData);
+        console.error('PDF.co AI Text Extraction Error:', errorData);
         return res.status(500).json({ 
-          error: `PDF.co JSON extraction failed with status ${pdfcoResponse.status}`,
+          error: `PDF.co AI text extraction failed with status ${pdfcoResponse.status}`,
           details: errorData.substring(0, 200)
         });
       }
 
       const pdfcoResult = await pdfcoResponse.json();
-      console.log('PDF.co JSON extraction response received');
+      console.log('PDF.co AI text extraction response received');
 
       if (pdfcoResult.error) {
-        console.error('PDF.co JSON extraction error:', pdfcoResult.message);
+        console.error('PDF.co AI text extraction error:', pdfcoResult.message);
         return res.status(500).json({ 
-          error: 'PDF.co JSON extraction failed',
+          error: 'PDF.co AI text extraction failed',
           details: pdfcoResult.message
         });
       }
 
-      const structuredData = pdfcoResult.body;
-      console.log('Step 2 complete: JSON extraction completed');
-      console.log('Data type:', typeof structuredData);
+      const extractedText = pdfcoResult.body || '';
+      console.log('Step 2 complete: AI-enhanced text extraction completed');
+      console.log('Raw text length:', extractedText.length);
       console.log('Page count:', pdfcoResult.pageCount);
-      
-      // Convert structured JSON to text for Gemini processing
-      let extractedText = '';
-      try {
-        if (!structuredData) {
-          throw new Error('No structured data received from PDF.co');
-        }
-        
-        // Extract meaningful content from PDF.co JSON structure
-        console.log('Full JSON length:', JSON.stringify(structuredData).length);
-        
-        // Debug: Log the actual JSON structure to understand format
-        console.log('JSON structure keys:', Object.keys(structuredData));
-        if (structuredData.pages && structuredData.pages[0]) {
-          console.log('First page keys:', Object.keys(structuredData.pages[0]));
-          console.log('First page sample:', JSON.stringify(structuredData.pages[0]).substring(0, 500));
-        }
-
-        const extractedContent = extractContentFromPdfJson(structuredData);
-        extractedText = JSON.stringify(extractedContent, null, 2);
-        
-        console.log('Processed content length:', extractedText.length);
-        console.log('Content reduction:', 
-                   ((JSON.stringify(structuredData).length - extractedText.length) / 
-                    JSON.stringify(structuredData).length * 100).toFixed(1) + '%');
-        
-      } catch (jsonError) {
-        console.error('Error processing JSON data:', jsonError);
-        return res.status(500).json({ 
-          error: 'Failed to process extracted JSON data',
-          details: jsonError.message 
-        });
-      }
+      console.log('AI enhancements applied: unwrap, cleanup, table detection');
 
     } catch (pdfError) {
       console.error('PDF processing failed:', pdfError);
