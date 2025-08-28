@@ -1,7 +1,10 @@
 {
   "functions": {
     "api/process-pdf.js": {
-      "maxDuration": 30
+      "maxDuration": 60
+    },
+    "api/debug-pdf.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [
