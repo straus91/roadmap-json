@@ -1,11 +1,11 @@
 # 🏥 ROADMAP Model Card Editor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Vercel](https://img.shields.io/badge/demo-live-green.svg)](https://roadmap-json.vercel.app/)
+[![Vercel](https://img.shields.io/badge/demo-live-green.svg)](https://roadmap-json-extractor-e8vlz5526.vercel.app/)
 
 > **A user-friendly web application for creating and editing ROADMAP-compliant JSON files for AI models and datasets in medical imaging.**
 
-🌟 **[Try the Live Demo](https://roadmap-json.vercel.app/)** | 📖 **[Documentation](https://github.com/straus91/roadmap-json/wiki)** | 🐛 **[Report Issues](https://github.com/straus91/roadmap-json/issues)**
+🌟 **[Try the Live Demo](https://roadmap-json-extractor-e8vlz5526.vercel.app/)** | 📖 **[Documentation](https://github.com/straus91/roadmap-json/wiki)** | 🐛 **[Report Issues](https://github.com/straus91/roadmap-json/issues)**
 
 ## ✨ Key Features
 
@@ -37,7 +37,7 @@
 ## 🚀 Quick Start
 
 ### **Option 1: Use Online (Recommended)**
-Visit the live demo: **[https://roadmap-json.vercel.app/](https://roadmap-json.vercel.app/)**
+Visit the live demo: **[https://roadmap-json-extractor-e8vlz5526.vercel.app/](https://roadmap-json-extractor-e8vlz5526.vercel.app/)**
 
 ### **Option 2: Run Locally**
 
