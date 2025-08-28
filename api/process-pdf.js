@@ -1118,7 +1118,7 @@ export default async function handler(req, res) {
     }
 
     // *** IMPORTANT: Using streaming endpoint to handle large responses ***
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse&key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`;
     
     // Create enhanced prompt with text, tables, and images
     const documentData = {
