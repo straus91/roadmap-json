@@ -144,7 +144,31 @@ function findReferencedImages(text, images) {
   };
 }
 
-// Import the new prompt functions from process-pdf.js logic
+// Create enhanced debug prompt matching the production version
+function createEnhancedDebugPrompt(documentData, cardType, processingMode) {
+  return `You are an expert AI system specializing in high-detail, structured information extraction from medical imaging research papers to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.
+
+**Your task is to extract information for a ${cardType.toUpperCase()} card and perform a two-step process in a single pass:**
+1.  **Internal Analysis (Chain of Thought):** First, you will mentally scan the entire document and extract all key entities, relationships, and data points. You will pay special attention to lists of people, organizations, and detailed data subsets.
+2.  **JSON Formatting:** Second, using your internal analysis, you will meticulously construct the final JSON output, ensuring every possible field from the schema is populated with the information you found.
+
+**CRITICAL INSTRUCTIONS FOR MAXIMUM DETAIL:**
+
+* **Extract ALL Authors and Organizations:** Do not summarize. If there are 30 authors listed, extract all 30. For each, extract their name and any listed affiliation.
+* **Deeply Nested Subsets:** For datasets, pay close attention to tables describing patient demographics or clinical characteristics. Each distinct group or subgroup mentioned (e.g., "Female," "Age 50-60," "Stage I lung cancer") must be converted into a separate, complete object within the "Subset" array, as seen in the examples.
+* **Do Not Summarize Data:** Extract exact numerical values, statistical measures (like age ± standard deviation), and full descriptions.
+* **Follow the Schema Exactly:** The final output must be ONLY a valid JSON object that strictly adheres to the provided schema structure.
+
+**DOCUMENT CONTENT TO ANALYZE:**
+"""${documentData.text.substring(0, processingMode === 'text-only' ? 8000 : 6000)}${documentData.text.length > (processingMode === 'text-only' ? 8000 : 6000) ? '\n\n... [text continues but truncated for debug display]' : ''}"""
+
+**STRUCTURED TABLES:**
+${JSON.stringify(documentData.tables, null, 2)}
+
+**OUTPUT (Valid JSON only):**`;
+}
+
+// Legacy function for backwards compatibility  
 function createExtractionPromptDebug(documentData, processingMode = 'multimodal') {
   const basePrompt = `You are an expert data extraction specialist for medical imaging research papers. Your task is to thoroughly analyze the provided document content and extract ALL key information in a structured, human-readable format.
 
@@ -299,6 +323,10 @@ export default async function handler(req, res) {
     // Get processing mode (default to multimodal for backward compatibility)
     const processingMode = fields.mode?.[0] || 'multimodal';
     console.log('🔍 DEBUG: Processing mode:', processingMode);
+    
+    // Get card type (default to model for backward compatibility)
+    const cardType = fields.cardType?.[0] || 'model';
+    console.log('🔍 DEBUG: Card type:', cardType);
 
     const pdfFile = files.pdf[0];
     if (!pdfFile) {
@@ -451,9 +479,8 @@ export default async function handler(req, res) {
       }
     };
 
-    // Create the two-step prompts that would be sent to Gemini
-    const step1ExtractionPrompt = createExtractionPromptDebug(documentData, processingMode);
-    const step2FormattingPrompt = createFormattingPromptDebug('[EXTRACTED INFORMATION FROM STEP 1 WOULD GO HERE]');
+    // Create the enhanced single prompt that would be sent to Gemini
+    const enhancedPrompt = createEnhancedDebugPrompt(documentData, cardType, processingMode);
 
     console.log('✅ Debug processing complete - Two-step workflow analysis ready');
     
@@ -466,12 +493,8 @@ export default async function handler(req, res) {
       allImagesFound: extractedImages,
       figureReferences: allReferences,
       
-      // Two-step workflow prompts
-      step1_extraction_prompt: step1ExtractionPrompt,
-      step2_formatting_prompt: step2FormattingPrompt,
-      
-      // Legacy field for backward compatibility (shows Step 1 prompt)
-      multimodalPrompt: step1ExtractionPrompt,
+      // Enhanced single-step workflow prompt  
+      enhanced_prompt: enhancedPrompt,
       
       // Enhanced metadata
       metadata: documentData.metadata,
@@ -482,10 +505,9 @@ export default async function handler(req, res) {
         total_images_found: extractedImages.length,
         referenced_images_selected: referencedImages.length,
         processing_mode: processingMode,
-        workflow_type: 'two_step_extract_then_format',
-        step1_prompt_length: step1ExtractionPrompt.length,
-        step2_prompt_length: step2FormattingPrompt.length,
-        total_prompt_length: step1ExtractionPrompt.length + step2FormattingPrompt.length
+        card_type: cardType,
+        workflow_type: 'enhanced_single_step_chain_of_thought',
+        enhanced_prompt_length: enhancedPrompt.length
       }
     });
 
