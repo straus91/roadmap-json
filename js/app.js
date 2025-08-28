@@ -1837,3 +1837,106 @@ initializeEditor = function(data) {
     // Update button states after editor is initialized
     setTimeout(updateEditorButtons, 100);
 };
+
+// Debug PDF processing functions
+function showDebugScreen() {
+    document.getElementById('initial-screen').style.display = 'none';
+    document.getElementById('debug-screen').style.display = 'block';
+}
+
+async function handleDebugPdfUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    console.log('🔍 Debug: Starting PDF analysis for', file.name);
+    
+    // Show debug screen and processing steps
+    showDebugScreen();
+    document.getElementById('debug-steps').style.display = 'block';
+    
+    // Update status
+    document.getElementById('debug-status').innerHTML = `
+        <div class="alert alert-primary">
+            <i class="fa fa-spinner fa-spin mr-2"></i>Processing: ${file.name} (${Math.round(file.size / 1024)} KB)
+        </div>
+    `;
+
+    // Reset all preview areas
+    document.getElementById('debug-text-preview').textContent = 'Processing...';
+    document.getElementById('debug-tables-preview').textContent = 'Processing...';
+    document.getElementById('debug-images-preview').textContent = 'Processing...';
+    document.getElementById('debug-prompt-preview').textContent = 'Waiting for processing...';
+    document.getElementById('debug-results-preview').textContent = 'Waiting for processing...';
+
+    try {
+        const formData = new FormData();
+        formData.append('pdf', file);
+
+        // Call debug API endpoint
+        const response = await fetch('/api/debug-pdf', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const debugData = await response.json();
+        console.log('🔍 Debug data received:', debugData);
+
+        // Update debug displays
+        updateDebugDisplays(debugData);
+
+    } catch (error) {
+        console.error('Debug processing error:', error);
+        document.getElementById('debug-status').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fa fa-exclamation-circle mr-2"></i>Error: ${error.message}
+            </div>
+        `;
+    }
+}
+
+function updateDebugDisplays(debugData) {
+    // Update Document AI section
+    document.getElementById('docai-status').innerHTML = '<span class="badge badge-success">Complete</span>';
+    
+    // Text preview
+    const textPreview = debugData.extractedText ? debugData.extractedText.substring(0, 2000) + '...' : 'No text extracted';
+    document.getElementById('debug-text-preview').textContent = textPreview;
+    
+    // Tables preview
+    const tablesText = debugData.extractedTables && debugData.extractedTables.length > 0 
+        ? JSON.stringify(debugData.extractedTables, null, 2)
+        : 'No tables found';
+    document.getElementById('debug-tables-preview').textContent = tablesText;
+    
+    // Images preview
+    const imagesText = debugData.referencedImages && debugData.referencedImages.length > 0
+        ? debugData.referencedImages.map(img => `Figure ${img.figureNumber} (Page ${img.page}) - ${img.referenced ? 'Referenced' : 'Available'}`).join('\n')
+        : 'No images found';
+    document.getElementById('debug-images-preview').textContent = imagesText;
+    
+    // Prompt preview
+    if (debugData.multimodalPrompt) {
+        document.getElementById('gemini-status').innerHTML = '<span class="badge badge-success">Sent to Gemini</span>';
+        document.getElementById('debug-prompt-preview').textContent = debugData.multimodalPrompt.substring(0, 5000) + '...';
+    }
+    
+    // Results preview
+    if (debugData.roadmapResults) {
+        document.getElementById('results-status').innerHTML = '<span class="badge badge-success">Complete</span>';
+        document.getElementById('debug-results-preview').textContent = JSON.stringify(debugData.roadmapResults, null, 2);
+    }
+    
+    // Update overall status
+    document.getElementById('debug-status').innerHTML = `
+        <div class="alert alert-success">
+            <i class="fa fa-check-circle mr-2"></i>Processing complete! 
+            Text: ${debugData.extractedText?.length || 0} chars, 
+            Tables: ${debugData.extractedTables?.length || 0}, 
+            Images: ${debugData.referencedImages?.length || 0}
+        </div>
+    `;
+}

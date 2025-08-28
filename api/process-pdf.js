@@ -586,6 +586,7 @@ export default async function handler(req, res) {
     let extractedText = '';
     let extractedTables = [];
     let referencedImages = [];
+    let extractedImages = [];
     
     try {
       console.log('🤖 Step 1: Initializing Google Document AI...');
@@ -624,7 +625,7 @@ export default async function handler(req, res) {
       }
 
       // Extract tables and images with structure
-      let extractedImages = [];
+      extractedImages = [];
       
       if (document.pages) {
         document.pages.forEach((page, pageIndex) => {

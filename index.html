@@ -28,7 +28,7 @@
             <div class="col-12">
                 <div class="row mb-4">
                     <!-- Create New Card -->
-                    <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="col-lg-3 col-md-6 mb-4">
                         <div class="card shadow-sm hover-card h-100" id="create-new-card">
                             <div class="card-body text-center p-4">
                                 <div class="mb-3">
@@ -44,7 +44,7 @@
                     </div>
 
                     <!-- Load & Edit Card -->
-                    <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="col-lg-3 col-md-6 mb-4">
                         <div class="card shadow-sm hover-card h-100" id="load-edit-card">
                             <div class="card-body text-center p-4">
                                 <div class="mb-3">
@@ -60,7 +60,7 @@
                     </div>
 
                     <!-- Create from PDF Card -->
-                    <div class="col-lg-4 col-md-12 mb-4">
+                    <div class="col-lg-3 col-md-6 mb-4">
                         <div class="card shadow-sm hover-card h-100" id="process-pdf-card">
                             <div class="card-body text-center p-4">
                                 <div class="mb-3">
@@ -71,6 +71,23 @@
                                 <input type="file" id="pdf-file-input" accept=".pdf" style="display: none;" onchange="handlePdfUpload(event)">
                                 <button class="btn btn-danger btn-lg" onclick="document.getElementById('pdf-file-input').click()">
                                     Upload PDF
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Debug PDF Processing Card -->
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <div class="card shadow-sm hover-card h-100" id="debug-pdf-card">
+                            <div class="card-body text-center p-4">
+                                <div class="mb-3">
+                                    <i class="fa fa-bug fa-3x text-warning"></i>
+                                </div>
+                                <h4 class="card-title">Debug PDF Processing</h4>
+                                <p class="card-text">Upload a PDF to see extracted text, tables, and images before sending to AI.</p>
+                                <input type="file" id="debug-pdf-input" accept=".pdf" style="display: none;" onchange="handleDebugPdfUpload(event)">
+                                <button class="btn btn-warning btn-lg" onclick="document.getElementById('debug-pdf-input').click()">
+                                    Debug PDF
                                 </button>
                             </div>
                         </div>
@@ -323,6 +340,105 @@
                                 <li><strong>Required:</strong> All fields are optional (fill in what you have)</li>
                                 <li><strong>Download:</strong> Creates complete ROADMAP JSON</li>
                             </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug PDF Processing Screen -->
+    <div id="debug-screen" class="container-fluid" style="display: none;">
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">
+                            <i class="fa fa-bug mr-2"></i>PDF Processing Debug View
+                            <button class="btn btn-sm btn-outline-dark float-right" onclick="showInitialScreen()">
+                                <i class="fa fa-arrow-left mr-1"></i>Back to Home
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="debug-status" class="mb-3">
+                            <div class="alert alert-info">
+                                <i class="fa fa-info-circle mr-2"></i>Upload a PDF to see the complete extraction and processing pipeline.
+                            </div>
+                        </div>
+
+                        <!-- Processing Steps -->
+                        <div id="debug-steps" style="display: none;">
+                            <!-- Step 1: Document AI -->
+                            <div class="card mb-3">
+                                <div class="card-header bg-primary text-white">
+                                    <h6 class="mb-0"><i class="fa fa-google mr-2"></i>Google Document AI Extraction</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="docai-status" class="mb-2">
+                                        <span class="badge badge-info">Processing...</span>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <strong>Text Content:</strong>
+                                            <div id="debug-text-preview" class="border p-2 mt-2" style="height: 200px; overflow-y: auto; font-size: 12px; background: #f8f9fa;">
+                                                Processing...
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <strong>Tables Found:</strong>
+                                            <div id="debug-tables-preview" class="border p-2 mt-2" style="height: 200px; overflow-y: auto; font-size: 12px; background: #f8f9fa;">
+                                                Processing...
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <strong>Images & Figures:</strong>
+                                            <div id="debug-images-preview" class="border p-2 mt-2" style="height: 200px; overflow-y: auto; font-size: 12px; background: #f8f9fa;">
+                                                Processing...
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Step 2: Multimodal Prompt -->
+                            <div class="card mb-3">
+                                <div class="card-header bg-info text-white">
+                                    <h6 class="mb-0"><i class="fa fa-edit mr-2"></i>Multimodal Prompt Sent to Gemini</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="gemini-status" class="mb-2">
+                                        <span class="badge badge-info">Waiting for Document AI...</span>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <strong>Complete Prompt Structure:</strong>
+                                            <div id="debug-prompt-preview" class="border p-2 mt-2" style="height: 300px; overflow-y: auto; font-size: 11px; background: #f8f9fa;">
+                                                Waiting for processing...
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Step 3: Final Results -->
+                            <div class="card mb-3">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0"><i class="fa fa-check-circle mr-2"></i>Extracted ROADMAP Data</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="results-status" class="mb-2">
+                                        <span class="badge badge-info">Waiting for Gemini...</span>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div id="debug-results-preview" class="border p-2" style="height: 300px; overflow-y: auto; font-size: 12px; background: #f8f9fa;">
+                                                Waiting for processing...
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
