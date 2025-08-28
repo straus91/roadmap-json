@@ -1579,26 +1579,24 @@ async function handlePdfUpload(event) {
             throw new Error('Invalid response format from PDF processing');
         }
 
-        // Determine the card type from the LLM's output
-        let cardType = 'unknown';
+        // Use the user-selected card type instead of trying to detect from response
+        const cardType = pdfCardType;
         let editorData = {};
 
-        if (structuredJson.Model) {
-            cardType = 'model';
-            editorData = structuredJson.Model;
-        } else if (structuredJson.Dataset) {
-            cardType = 'dataset';
-            editorData = structuredJson.Dataset;
-        } else {
-            // Try to infer from the structure
-            if (structuredJson.Name || structuredJson.Input || structuredJson.Output || structuredJson.Results) {
-                cardType = 'model';
-                editorData = structuredJson;
-            } else if (structuredJson.Composition || structuredJson.Imaging || structuredJson.Labeling) {
-                cardType = 'dataset';
-                editorData = structuredJson;
+        // Extract data based on user selection
+        if (cardType === 'model') {
+            if (structuredJson.Model) {
+                editorData = structuredJson.Model;
             } else {
-                throw new Error('Could not determine if this describes a model or dataset from the PDF content');
+                // Fallback: use root level data if no nested Model key
+                editorData = structuredJson;
+            }
+        } else if (cardType === 'dataset') {
+            if (structuredJson.Dataset) {
+                editorData = structuredJson.Dataset;
+            } else {
+                // Fallback: use root level data if no nested Dataset key
+                editorData = structuredJson;
             }
         }
 
