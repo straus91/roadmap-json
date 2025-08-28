@@ -1255,8 +1255,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Gemini API key not configured' });
     }
 
-    // *** IMPORTANT: Using streaming endpoint to handle large responses ***
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`;
+    // Use standard generateContent endpoint for single clean JSON response
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     // Create enhanced prompt with text, tables, and images
     const documentData = {
