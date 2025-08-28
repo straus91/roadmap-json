@@ -431,12 +431,10 @@ export default async function handler(req, res) {
     const fileContent = await fs.readFile(pdfFile.filepath);
 
     // 3. Process PDF with Google Document AI
-    const googleCloudKey = process.env.GOOGLE_CLOUD_KEY;
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'your-project-id';
-    const location = 'us';
+    const googleCloudCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
     const processorId = process.env.DOCUMENT_AI_PROCESSOR_ID;
     
-    if (!googleCloudKey) {
+    if (!googleCloudCredentials) {
       return res.status(500).json({ error: 'Google Cloud credentials not configured' });
     }
 
@@ -450,8 +448,8 @@ export default async function handler(req, res) {
     try {
       console.log('🤖 Step 1: Initializing Google Document AI...');
       
-      // Initialize Document AI client with credentials
-      const credentials = JSON.parse(Buffer.from(googleCloudKey, 'base64').toString());
+      // Parse credentials directly from JSON string
+      const credentials = JSON.parse(googleCloudCredentials);
       const client = new DocumentProcessorServiceClient({
         credentials,
         projectId: credentials.project_id
