@@ -927,18 +927,56 @@ export default async function handler(req, res) {
       console.log('Processing PDF file:', pdfFile.originalFilename);
       console.log('File size:', Math.round(fileContent.length / 1024), 'KB');
 
-      // Process the document
+      // Process the document with explicit request for images
+      console.log('🔍 DEBUG: Processor name:', name);
       const [result] = await client.processDocument({
         name,
         rawDocument: {
           content: fileContent.toString('base64'),
           mimeType: 'application/pdf',
         },
+        // Request specific features including images
+        processOptions: {
+          layoutConfig: {
+            chunkingConfig: {
+              chunkSize: 500,
+              includeAncestorHeadings: true,
+            },
+          },
+        },
+        // Explicitly request image extraction
+        fieldMask: {
+          paths: ['text', 'pages.layout', 'pages.tables', 'pages.images', 'pages.visualElements']
+        }
       });
 
       const { document } = result;
       console.log('✅ Document AI processing completed');
       console.log('📊 Pages processed:', document.pages?.length || 0);
+      
+      // Debug: Log the complete structure of the first page if it exists
+      if (document.pages && document.pages[0]) {
+        const firstPage = document.pages[0];
+        console.log('🔍 DEBUG: First page structure:', {
+          hasImages: !!firstPage.images,
+          imageCount: firstPage.images?.length || 0,
+          hasVisualElements: !!firstPage.visualElements,
+          visualElementCount: firstPage.visualElements?.length || 0,
+          hasTables: !!firstPage.tables,
+          tableCount: firstPage.tables?.length || 0,
+          pageKeys: Object.keys(firstPage)
+        });
+        
+        // If there are images, log the first image structure completely
+        if (firstPage.images && firstPage.images[0]) {
+          console.log('🔍 DEBUG: First image complete structure:', JSON.stringify(firstPage.images[0], null, 2));
+        }
+        
+        // If there are visual elements, log the first one
+        if (firstPage.visualElements && firstPage.visualElements[0]) {
+          console.log('🔍 DEBUG: First visual element structure:', JSON.stringify(firstPage.visualElements[0], null, 2));
+        }
+      }
 
       // Extract text content
       if (document.text) {
