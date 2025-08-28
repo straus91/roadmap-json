@@ -496,6 +496,13 @@ export default async function handler(req, res) {
         // Extract meaningful content from PDF.co JSON structure
         console.log('Full JSON length:', JSON.stringify(structuredData).length);
         
+        // Debug: Log the actual JSON structure to understand format
+        console.log('JSON structure keys:', Object.keys(structuredData));
+        if (structuredData.pages && structuredData.pages[0]) {
+          console.log('First page keys:', Object.keys(structuredData.pages[0]));
+          console.log('First page sample:', JSON.stringify(structuredData.pages[0]).substring(0, 500));
+        }
+
         const extractedContent = extractContentFromPdfJson(structuredData);
         extractedText = JSON.stringify(extractedContent, null, 2);
         
