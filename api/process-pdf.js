@@ -572,9 +572,8 @@ export default async function handler(req, res) {
 
     // 3. Process PDF with Google Document AI
     const googleCloudKey = process.env.GOOGLE_CLOUD_KEY;
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'your-project-id';
-    const location = 'us';
     const processorId = process.env.DOCUMENT_AI_PROCESSOR_ID;
+    const location = 'us';
     
     if (!googleCloudKey) {
       return res.status(500).json({ error: 'Google Cloud credentials not configured' });
