@@ -1013,12 +1013,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Load ROADMAP schemas
-    console.log('Loading ROADMAP schemas...');
-    const schemas = await loadSchemas();
-    console.log('Schemas loaded successfully');
-
-    // 2. Parse the incoming PDF file
+    // 1. Parse the incoming PDF file first to get custom schema
     const form = new IncomingForm();
     const { files, fields } = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
@@ -1031,10 +1026,43 @@ export default async function handler(req, res) {
     const processingMode = fields.mode?.[0] || 'multimodal';
     console.log('🎛️ Processing mode:', processingMode);
 
-    // Get card type (default to model for backward compatibility) 
+    // Get card type (default to model for backward compatibility)
     const cardType = fields.cardType?.[0] || 'model';
     console.log('🎯 Card type received:', cardType);
     console.log('🔍 DEBUG fields.cardType:', fields.cardType);
+
+    // Check for custom schema
+    let schemas;
+    if (fields.customSchema && fields.customSchema[0]) {
+      try {
+        console.log('📦 Using custom schema from frontend');
+        const customSchemaData = JSON.parse(fields.customSchema[0]);
+
+        // Determine if custom schema is for model or dataset
+        schemas = {
+          model: customSchemaData.Model || customSchemaData,
+          dataset: customSchemaData.Dataset || customSchemaData
+        };
+
+        // If the custom schema is specifically for one type, use it for both to simplify
+        // The cardType will determine which is actually used
+        if (cardType === 'model' && !schemas.model.Model) {
+          schemas.model = customSchemaData;
+        } else if (cardType === 'dataset' && !schemas.dataset.Dataset) {
+          schemas.dataset = customSchemaData;
+        }
+
+        console.log('✅ Custom schema loaded');
+      } catch (error) {
+        console.error('❌ Error parsing custom schema, falling back to local schemas:', error);
+        schemas = await loadSchemas();
+      }
+    } else {
+      // Load default local schemas
+      console.log('📂 Loading local ROADMAP schemas...');
+      schemas = await loadSchemas();
+      console.log('✅ Schemas loaded successfully');
+    }
 
     const pdfFile = files.pdf[0];
     if (!pdfFile) {

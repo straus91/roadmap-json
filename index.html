@@ -11,7 +11,14 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <!-- JSON Editor -->
     <script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@2.8.0/dist/jsoneditor.min.js"></script>
-    
+
+    <!-- PDF.js for client-side PDF parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Configure PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
     <!-- Custom CSS -->
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -106,7 +113,28 @@
                                         <i class="fa fa-database mr-1"></i>Dataset Card
                                     </button>
                                 </div>
-                                
+
+                                <!-- Schema Source Selection -->
+                                <div class="mb-3">
+                                    <div class="btn-group btn-group-sm mb-2" role="group" aria-label="Schema source">
+                                        <button type="button" class="btn btn-outline-info active" id="pdf-github-schema-btn" onclick="setPdfSchemaSource('github')">
+                                            <i class="fa fa-github mr-1"></i>Latest (GitHub)
+                                        </button>
+                                        <button type="button" class="btn btn-outline-info" id="pdf-custom-schema-btn" onclick="setPdfSchemaSource('custom')">
+                                            <i class="fa fa-link mr-1"></i>Custom Version
+                                        </button>
+                                    </div>
+                                    <input type="text" id="pdf-custom-schema-url" class="form-control form-control-sm" placeholder="Enter custom schema URL" style="display: none;">
+                                </div>
+
+                                <!-- Auto-detection Display -->
+                                <div id="pdf-schema-detection" class="alert alert-sm alert-info py-2 mb-3" style="display: none;">
+                                    <small>
+                                        <strong>Auto-detected:</strong> <span id="pdf-detected-type"></span>
+                                        <a href="#" id="pdf-toggle-detection" class="ml-2" onclick="togglePdfDetection(event)"></a>
+                                    </small>
+                                </div>
+
                                 <input type="file" id="pdf-file-input" accept=".pdf" style="display: none;" onchange="handlePdfUpload(event)">
                                 <button class="btn btn-danger btn-lg" onclick="document.getElementById('pdf-file-input').click()">
                                     Upload PDF
@@ -144,7 +172,28 @@
                                         <i class="fa fa-database mr-1"></i>Dataset Card
                                     </button>
                                 </div>
-                                
+
+                                <!-- Schema Source Selection -->
+                                <div class="mb-3">
+                                    <div class="btn-group btn-group-sm mb-2" role="group" aria-label="Schema source">
+                                        <button type="button" class="btn btn-outline-info active" id="debug-github-schema-btn" onclick="setDebugSchemaSource('github')">
+                                            <i class="fa fa-github mr-1"></i>Latest (GitHub)
+                                        </button>
+                                        <button type="button" class="btn btn-outline-info" id="debug-custom-schema-btn" onclick="setDebugSchemaSource('custom')">
+                                            <i class="fa fa-link mr-1"></i>Custom Version
+                                        </button>
+                                    </div>
+                                    <input type="text" id="debug-custom-schema-url" class="form-control form-control-sm" placeholder="Enter custom schema URL" style="display: none;">
+                                </div>
+
+                                <!-- Auto-detection Display -->
+                                <div id="debug-schema-detection" class="alert alert-sm alert-info py-2 mb-3" style="display: none;">
+                                    <small>
+                                        <strong>Auto-detected:</strong> <span id="debug-detected-type"></span>
+                                        <a href="#" id="debug-toggle-detection" class="ml-2" onclick="toggleDebugDetection(event)"></a>
+                                    </small>
+                                </div>
+
                                 <input type="file" id="debug-pdf-input" accept=".pdf" style="display: none;" onchange="handleDebugPdfUpload(event)">
                                 <button class="btn btn-warning btn-lg" onclick="document.getElementById('debug-pdf-input').click()">
                                     Debug PDF

@@ -378,10 +378,15 @@ export default async function handler(req, res) {
     // Get processing mode (default to multimodal for backward compatibility)
     const processingMode = fields.mode?.[0] || 'multimodal';
     console.log('🔍 DEBUG: Processing mode:', processingMode);
-    
+
     // Get card type (default to model for backward compatibility)
     const cardType = fields.cardType?.[0] || 'model';
     console.log('🔍 DEBUG: Card type:', cardType);
+
+    // Check for custom schema (for logging purposes)
+    if (fields.customSchema && fields.customSchema[0]) {
+      console.log('📦 Custom schema detected (will be used if debug proceeds to extraction)');
+    }
 
     const pdfFile = files.pdf[0];
     if (!pdfFile) {

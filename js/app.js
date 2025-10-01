@@ -10,6 +10,20 @@ let debugProcessingMode = 'multimodal'; // Default to multimodal
 let pdfCardType = 'model'; // Default to model card
 let debugCardType = 'model'; // Default to model card
 
+// Schema source variables
+let pdfSchemaSource = 'github'; // 'github' or 'custom'
+let debugSchemaSource = 'github'; // 'github' or 'custom'
+let pdfSchemaUrl = null;
+let debugSchemaUrl = null;
+let pdfDetectedType = 'model'; // Auto-detected type from PDF
+let debugDetectedType = 'model'; // Auto-detected type from PDF
+
+// GitHub schema URLs
+const GITHUB_SCHEMAS = {
+    model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.model.json',
+    dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.dataset.json'
+};
+
 // Application initialization
 document.addEventListener('DOMContentLoaded', function() {
     console.log('ROADMAP Model Card Editor initialized');
@@ -1480,6 +1494,188 @@ function setDebugCardType(cardType) {
     }
 }
 
+// Schema source toggle functions
+function setPdfSchemaSource(source) {
+    pdfSchemaSource = source;
+
+    const githubBtn = document.getElementById('pdf-github-schema-btn');
+    const customBtn = document.getElementById('pdf-custom-schema-btn');
+    const customInput = document.getElementById('pdf-custom-schema-url');
+
+    if (source === 'github') {
+        githubBtn.classList.add('active');
+        customBtn.classList.remove('active');
+        customInput.style.display = 'none';
+    } else {
+        githubBtn.classList.remove('active');
+        customBtn.classList.add('active');
+        customInput.style.display = 'block';
+    }
+}
+
+function setDebugSchemaSource(source) {
+    debugSchemaSource = source;
+
+    const githubBtn = document.getElementById('debug-github-schema-btn');
+    const customBtn = document.getElementById('debug-custom-schema-btn');
+    const customInput = document.getElementById('debug-custom-schema-url');
+
+    if (source === 'github') {
+        githubBtn.classList.add('active');
+        customBtn.classList.remove('active');
+        customInput.style.display = 'none';
+    } else {
+        githubBtn.classList.remove('active');
+        customBtn.classList.add('active');
+        customInput.style.display = 'block';
+    }
+}
+
+// PDF analysis and schema detection
+async function analyzeAndSelectSchema(file) {
+    try {
+        console.log('🔍 Analyzing PDF content for schema detection...');
+
+        // Read PDF file as ArrayBuffer
+        const arrayBuffer = await file.arrayBuffer();
+
+        // Load PDF using PDF.js
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        // Extract text from first page
+        const firstPage = await pdf.getPage(1);
+        const textContent = await firstPage.getTextContent();
+        const text = textContent.items.map(item => item.str).join(' ').toLowerCase();
+
+        console.log('📄 Extracted text sample:', text.substring(0, 200));
+
+        // Keywords for model detection
+        const modelKeywords = ['model', 'algorithm', 'neural network', 'training', 'architecture',
+                              'deep learning', 'machine learning', 'prediction', 'classifier',
+                              'convolutional', 'transformer', 'weights', 'layers'];
+
+        // Keywords for dataset detection
+        const datasetKeywords = ['dataset', 'cohort', 'patients', 'subjects', 'collection',
+                                'imaging data', 'data collection', 'retrospective', 'prospective',
+                                'inclusion criteria', 'exclusion criteria', 'annotations'];
+
+        // Count keyword matches
+        let modelScore = 0;
+        let datasetScore = 0;
+
+        modelKeywords.forEach(keyword => {
+            const matches = (text.match(new RegExp(keyword, 'gi')) || []).length;
+            modelScore += matches;
+        });
+
+        datasetKeywords.forEach(keyword => {
+            const matches = (text.match(new RegExp(keyword, 'gi')) || []).length;
+            datasetScore += matches;
+        });
+
+        console.log('📊 Scores - Model:', modelScore, 'Dataset:', datasetScore);
+
+        // Determine type
+        const detectedType = datasetScore > modelScore ? 'dataset' : 'model';
+        console.log('✅ Detected type:', detectedType);
+
+        return detectedType;
+
+    } catch (error) {
+        console.error('❌ Error analyzing PDF:', error);
+        // Default to model on error
+        return 'model';
+    }
+}
+
+// Get schema URL based on source and card type
+function getSchemaUrl(cardType, source, customUrl) {
+    if (source === 'custom' && customUrl && customUrl.trim()) {
+        return customUrl.trim();
+    }
+    return GITHUB_SCHEMAS[cardType];
+}
+
+// Fetch and cache schema
+async function fetchAndCacheSchema(url) {
+    try {
+        // Check sessionStorage cache
+        const cacheKey = `schema_${url}`;
+        const cached = sessionStorage.getItem(cacheKey);
+
+        if (cached) {
+            console.log('✅ Using cached schema from:', url);
+            return JSON.parse(cached);
+        }
+
+        console.log('🌐 Fetching schema from:', url);
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch schema: ${response.status}`);
+        }
+
+        const schema = await response.json();
+
+        // Cache in sessionStorage
+        sessionStorage.setItem(cacheKey, JSON.stringify(schema));
+        console.log('✅ Schema fetched and cached');
+
+        return schema;
+
+    } catch (error) {
+        console.error('❌ Error fetching schema:', error);
+        throw error;
+    }
+}
+
+// Toggle detection between model and dataset
+function togglePdfDetection(event) {
+    event.preventDefault();
+
+    // Toggle between model and dataset
+    pdfCardType = pdfCardType === 'model' ? 'dataset' : 'model';
+
+    // Update button states
+    setPdfCardType(pdfCardType);
+
+    // Update detection display
+    updatePdfDetectionDisplay();
+}
+
+function toggleDebugDetection(event) {
+    event.preventDefault();
+
+    // Toggle between model and dataset
+    debugCardType = debugCardType === 'model' ? 'dataset' : 'model';
+
+    // Update button states
+    setDebugCardType(debugCardType);
+
+    // Update detection display
+    updateDebugDetectionDisplay();
+}
+
+function updatePdfDetectionDisplay() {
+    const detectionDiv = document.getElementById('pdf-schema-detection');
+    const detectedTypeSpan = document.getElementById('pdf-detected-type');
+    const toggleLink = document.getElementById('pdf-toggle-detection');
+
+    detectedTypeSpan.textContent = pdfCardType === 'model' ? 'Model Card' : 'Dataset Card';
+    toggleLink.textContent = `[Switch to ${pdfCardType === 'model' ? 'Dataset' : 'Model'}]`;
+    detectionDiv.style.display = 'block';
+}
+
+function updateDebugDetectionDisplay() {
+    const detectionDiv = document.getElementById('debug-schema-detection');
+    const detectedTypeSpan = document.getElementById('debug-detected-type');
+    const toggleLink = document.getElementById('debug-toggle-detection');
+
+    detectedTypeSpan.textContent = debugCardType === 'model' ? 'Model Card' : 'Dataset Card';
+    toggleLink.textContent = `[Switch to ${debugCardType === 'model' ? 'Dataset' : 'Model'}]`;
+    detectionDiv.style.display = 'block';
+}
+
 // PDF Upload Handler
 async function handlePdfUpload(event) {
     const file = event.target.files[0];
@@ -1498,17 +1694,58 @@ async function handlePdfUpload(event) {
         return;
     }
 
-    // Show a loading indicator
-    showAlert('Processing PDF... This may take a moment.', 'info', 0); // 0 duration = sticky
+    // Step 1: Analyze PDF and auto-detect schema type
+    showAlert('Analyzing PDF content...', 'info', 0);
+    try {
+        pdfDetectedType = await analyzeAndSelectSchema(file);
+        pdfCardType = pdfDetectedType;
+
+        // Update UI to show detection
+        setPdfCardType(pdfCardType);
+        updatePdfDetectionDisplay();
+
+        console.log('✅ Auto-detected card type:', pdfCardType);
+    } catch (error) {
+        console.error('Error during PDF analysis:', error);
+        // Continue with current selection if analysis fails
+    }
+
+    // Step 2: Fetch the schema
+    showAlert('Fetching schema...', 'info', 0);
+    let customSchema = null;
+
+    try {
+        const customUrl = document.getElementById('pdf-custom-schema-url').value;
+        const schemaUrl = getSchemaUrl(pdfCardType, pdfSchemaSource, customUrl);
+        pdfSchemaUrl = schemaUrl;
+
+        customSchema = await fetchAndCacheSchema(schemaUrl);
+        console.log('✅ Schema loaded from:', schemaUrl);
+    } catch (error) {
+        console.error('Error fetching schema:', error);
+        showAlert('Warning: Could not fetch custom schema, using local fallback', 'warning', 3000);
+        // Backend will use local schemas as fallback
+    }
+
+    // Step 3: Upload PDF with schema
+    showAlert('Processing PDF... This may take a moment.', 'info', 0);
 
     const formData = new FormData();
     formData.append('pdf', file);
     formData.append('mode', pdfProcessingMode);
     formData.append('cardType', pdfCardType);
-    
-    console.log('🔍 DEBUG: Sending to backend:', { 
-        mode: pdfProcessingMode, 
-        cardType: pdfCardType 
+
+    // Send schema as JSON string if available
+    if (customSchema) {
+        formData.append('customSchema', JSON.stringify(customSchema));
+    }
+
+    console.log('🔍 DEBUG: Sending to backend:', {
+        mode: pdfProcessingMode,
+        cardType: pdfCardType,
+        schemaSource: pdfSchemaSource,
+        schemaUrl: pdfSchemaUrl,
+        hasCustomSchema: !!customSchema
     });
 
     try {
@@ -1934,11 +2171,48 @@ async function handleDebugPdfUpload(event) {
     if (!file) return;
 
     console.log('🔍 Debug: Starting PDF analysis for', file.name);
-    
+
     // Show debug screen and processing steps
     showDebugScreen();
     document.getElementById('debug-steps').style.display = 'block';
-    
+
+    // Step 1: Analyze PDF and auto-detect schema type
+    document.getElementById('debug-status').innerHTML = `
+        <div class="alert alert-info">
+            <i class="fa fa-spinner fa-spin mr-2"></i>Analyzing PDF content...
+        </div>
+    `;
+
+    try {
+        debugDetectedType = await analyzeAndSelectSchema(file);
+        debugCardType = debugDetectedType;
+
+        // Update UI to show detection
+        setDebugCardType(debugCardType);
+        updateDebugDetectionDisplay();
+
+        console.log('✅ Auto-detected card type:', debugCardType);
+    } catch (error) {
+        console.error('Error during PDF analysis:', error);
+        // Continue with current selection if analysis fails
+    }
+
+    // Step 2: Fetch the schema
+    let customSchema = null;
+
+    try {
+        const customUrl = document.getElementById('debug-custom-schema-url').value;
+        const schemaUrl = getSchemaUrl(debugCardType, debugSchemaSource, customUrl);
+        debugSchemaUrl = schemaUrl;
+
+        customSchema = await fetchAndCacheSchema(schemaUrl);
+        console.log('✅ Schema loaded from:', schemaUrl);
+    } catch (error) {
+        console.error('Error fetching schema:', error);
+        // Backend will use local schemas as fallback
+    }
+
+    // Step 3: Process PDF
     // Update status
     document.getElementById('debug-status').innerHTML = `
         <div class="alert alert-primary">
@@ -1957,6 +2231,19 @@ async function handleDebugPdfUpload(event) {
         formData.append('pdf', file);
         formData.append('mode', debugProcessingMode);
         formData.append('cardType', debugCardType);
+
+        // Send schema as JSON string if available
+        if (customSchema) {
+            formData.append('customSchema', JSON.stringify(customSchema));
+        }
+
+        console.log('🔍 DEBUG: Sending to backend:', {
+            mode: debugProcessingMode,
+            cardType: debugCardType,
+            schemaSource: debugSchemaSource,
+            schemaUrl: debugSchemaUrl,
+            hasCustomSchema: !!customSchema
+        });
 
         // Call debug API endpoint
         const response = await fetch('/api/debug-pdf', {
