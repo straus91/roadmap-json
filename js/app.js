@@ -1596,16 +1596,150 @@ function getSchemaUrl(cardType, source, customUrl) {
     return GITHUB_SCHEMAS[cardType];
 }
 
+// Resolve external $ref references in schema
+async function resolveSchemaRefs(schema, baseUrl) {
+    try {
+        console.log('🔗 Resolving external schema references...');
+
+        // Extract base path from URL
+        const urlParts = baseUrl.split('/');
+        urlParts.pop(); // Remove filename
+        const basePath = urlParts.join('/');
+
+        // Find all external $ref patterns
+        const externalRefs = new Set();
+        const findExternalRefs = (obj) => {
+            if (!obj || typeof obj !== 'object') return;
+
+            if (obj.$ref && typeof obj.$ref === 'string') {
+                // Check if it's an external reference (contains .json)
+                if (obj.$ref.includes('.json')) {
+                    // Extract just the filename
+                    const match = obj.$ref.match(/([^\/]+\.json)/);
+                    if (match) {
+                        externalRefs.add(match[1]);
+                    }
+                }
+            }
+
+            // Recursively search
+            for (const key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    findExternalRefs(obj[key]);
+                }
+            }
+        };
+
+        findExternalRefs(schema);
+
+        if (externalRefs.size === 0) {
+            console.log('✅ No external references found, schema is self-contained');
+            return schema;
+        }
+
+        console.log(`📦 Found ${externalRefs.size} external references:`, Array.from(externalRefs));
+
+        // Fetch all referenced schemas
+        const referencedSchemas = {};
+        await Promise.all(
+            Array.from(externalRefs).map(async (filename) => {
+                try {
+                    const refUrl = `${basePath}/${filename}`;
+                    console.log(`  Fetching: ${filename}`);
+                    const response = await fetch(refUrl);
+                    if (response.ok) {
+                        referencedSchemas[filename] = await response.json();
+                    } else {
+                        console.warn(`⚠️ Could not fetch ${filename}: ${response.status}`);
+                    }
+                } catch (error) {
+                    console.warn(`⚠️ Error fetching ${filename}:`, error.message);
+                }
+            })
+        );
+
+        console.log(`✅ Fetched ${Object.keys(referencedSchemas).length} referenced schemas`);
+
+        // Resolve references by inlining
+        const resolveRefs = (obj, visited = new Set()) => {
+            if (!obj || typeof obj !== 'object') return obj;
+
+            // Prevent circular reference infinite loops
+            if (visited.has(obj)) return obj;
+            visited.add(obj);
+
+            if (obj.$ref && typeof obj.$ref === 'string') {
+                // Check if it's an external reference
+                if (obj.$ref.includes('.json')) {
+                    const match = obj.$ref.match(/([^\/]+\.json)(#.*)?/);
+                    if (match) {
+                        const [, filename, pointer] = match;
+                        const refSchema = referencedSchemas[filename];
+
+                        if (refSchema) {
+                            // If there's a JSON pointer, navigate to it
+                            if (pointer) {
+                                const path = pointer.replace('#/', '').split('/');
+                                let resolved = refSchema;
+                                for (const segment of path) {
+                                    if (resolved && resolved[segment]) {
+                                        resolved = resolved[segment];
+                                    } else {
+                                        console.warn(`⚠️ Could not resolve pointer ${pointer} in ${filename}`);
+                                        return obj; // Return original if can't resolve
+                                    }
+                                }
+                                return resolveRefs(resolved, visited);
+                            } else {
+                                // No pointer, use whole schema
+                                return resolveRefs(refSchema, visited);
+                            }
+                        } else {
+                            console.warn(`⚠️ Referenced schema ${filename} not available`);
+                            return obj; // Keep original ref if not available
+                        }
+                    }
+                }
+                // Internal reference, keep as-is
+                return obj;
+            }
+
+            // Recursively resolve in arrays and objects
+            if (Array.isArray(obj)) {
+                return obj.map(item => resolveRefs(item, visited));
+            }
+
+            const resolved = {};
+            for (const key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    resolved[key] = resolveRefs(obj[key], visited);
+                }
+            }
+            return resolved;
+        };
+
+        const resolvedSchema = resolveRefs(schema);
+        console.log('✅ Schema references resolved');
+
+        return resolvedSchema;
+
+    } catch (error) {
+        console.error('❌ Error resolving schema references:', error);
+        // Return original schema if resolution fails
+        return schema;
+    }
+}
+
 // Fetch and cache schema
 async function fetchAndCacheSchema(url) {
     try {
-        // Check sessionStorage cache
-        const cacheKey = `schema_${url}`;
-        const cached = sessionStorage.getItem(cacheKey);
+        // Check sessionStorage cache for resolved schema
+        const resolvedCacheKey = `schema_resolved_${url}`;
+        const cachedResolved = sessionStorage.getItem(resolvedCacheKey);
 
-        if (cached) {
-            console.log('✅ Using cached schema from:', url);
-            return JSON.parse(cached);
+        if (cachedResolved) {
+            console.log('✅ Using cached resolved schema from:', url);
+            return JSON.parse(cachedResolved);
         }
 
         console.log('🌐 Fetching schema from:', url);
@@ -1616,12 +1750,16 @@ async function fetchAndCacheSchema(url) {
         }
 
         const schema = await response.json();
+        console.log('✅ Schema fetched');
 
-        // Cache in sessionStorage
-        sessionStorage.setItem(cacheKey, JSON.stringify(schema));
-        console.log('✅ Schema fetched and cached');
+        // Resolve external references
+        const resolvedSchema = await resolveSchemaRefs(schema, url);
 
-        return schema;
+        // Cache the resolved version
+        sessionStorage.setItem(resolvedCacheKey, JSON.stringify(resolvedSchema));
+        console.log('✅ Resolved schema cached');
+
+        return resolvedSchema;
 
     } catch (error) {
         console.error('❌ Error fetching schema:', error);
