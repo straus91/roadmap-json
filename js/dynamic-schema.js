@@ -191,77 +191,87 @@ class DynamicSchemaProcessor {
         return sortedCategories;
     }
 
-    // Convert ROADMAP JSON Schema to JSON Editor compatible format
+    // Convert ROADMAP JSON Schema to JSON Editor compatible format with tabs
     convertToJsonEditorSchema(roadmapSchema, cardType) {
         try {
             const sectionName = cardType.charAt(0).toUpperCase() + cardType.slice(1);
             const sectionDef = roadmapSchema.$defs[cardType.toLowerCase()];
 
-            if (!sectionDef) {
-                throw new Error(`No ${cardType} definition found in schema`);
+            if (!sectionDef || !sectionDef.properties) {
+                throw new Error(`No ${cardType} definition or properties found in schema`);
             }
 
-            // Process all properties
-            const allProcessedProps = this.processProperties(sectionDef.properties || {}, roadmapSchema.$defs, new Set(), 0);
+            const allProps = sectionDef.properties;
 
-            // Group properties into logical categories (without restructuring data)
-            const categorizedProps = this.categorizeProperties(allProcessedProps, cardType);
-
-            // If we have multiple categories, use categories format for better organization
-            const useCategories = Object.keys(categorizedProps).length > 1;
+            // Define the structure of our tabs for dataset
+            const tabStructure = {
+                "Core Info": ['Name', 'Author', 'Date', 'Reference', 'License', 'Comments'],
+                "Imaging & Labeling": ['Imaging', 'Labeling', 'Collection process'],
+                "Subsets": ['Subsets']
+            };
 
             const jsonEditorSchema = {
                 type: "object",
-                title: `${sectionName} Information`,
-                properties: allProcessedProps,
-                required: sectionDef.required || []
+                title: sectionName,
+                format: "tabs", // Enable the tabbed interface
+                properties: {}
             };
 
-            // Add categories format if we have logical groupings
-            if (useCategories) {
-                jsonEditorSchema.options = {
-                    categories: categorizedProps
-                };
-                console.log(`✅ Schema converted for ${cardType} with ${Object.keys(categorizedProps).length} categories`);
-            } else {
-                console.log(`✅ Schema converted for ${cardType}`);
-            }
+            // Dynamically build the tabs based on the structure
+            Object.keys(tabStructure).forEach(tabTitle => {
+                const tabKey = tabTitle.toLowerCase().replace(/\s/g, '_').replace(/&/g, 'and');
+                const tabProperties = {};
+                let hasProps = false;
 
+                tabStructure[tabTitle].forEach(propName => {
+                    if (allProps[propName]) {
+                        tabProperties[propName] = this.processProperty(allProps[propName], roadmapSchema.$defs);
+                        hasProps = true;
+                    }
+                });
+
+                if (hasProps) {
+                    jsonEditorSchema.properties[tabKey] = {
+                        title: tabTitle,
+                        type: 'object',
+                        properties: tabProperties
+                    };
+                }
+            });
+
+            console.log(`✅ Schema converted for ${cardType} with tabs`);
             return jsonEditorSchema;
-            
+
         } catch (error) {
-            console.error('❌ Schema conversion failed:', error);
-            // Return a minimal fallback schema
+            console.error(`❌ Schema conversion failed for ${cardType}:`, error);
             return {
                 type: "object",
-                title: `${cardType.charAt(0).toUpperCase() + cardType.slice(1)} Information`,
+                title: "Error",
                 properties: {
-                    "Name": {
+                    "message": {
                         type: "string",
-                        title: `${cardType.charAt(0).toUpperCase() + cardType.slice(1)} Name`,
-                        description: `Enter the name of your ${cardType}`,
-                        default: ""
+                        default: `Failed to process schema: ${error.message}`
                     }
-                },
-                required: ["Name"]
+                }
             };
         }
     }
 
     // Process schema properties recursively
     processProperties(properties, defs, visited = new Set(), depth = 0) {
+        if (!properties || typeof properties !== 'object') return {};
         const processed = {};
         const maxDepth = 10; // Prevent infinite recursion
-        
+
         if (depth > maxDepth) {
             console.warn(`Maximum depth ${maxDepth} exceeded, stopping recursion`);
             return processed;
         }
-        
+
         for (const [key, prop] of Object.entries(properties)) {
             processed[key] = this.processProperty(prop, defs, visited, depth + 1);
         }
-        
+
         return processed;
     }
 
