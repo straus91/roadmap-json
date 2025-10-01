@@ -1294,7 +1294,7 @@ export default async function handler(req, res) {
     }
 
     // Use standard generateContent endpoint for single clean JSON response
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     // Create enhanced prompt with text, tables, and images
     const documentData = {
