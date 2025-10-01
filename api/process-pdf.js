@@ -928,11 +928,50 @@ ${JSON.stringify(documentData.tables, null, 2)}
 
 // Helper function to create the enhanced single prompt based on processing mode and card type
 function createEnhancedSinglePrompt(documentData, schemas, processingMode, cardType) {
-  if (processingMode === 'text-only') {
-    return createTextOnlyPrompt(documentData, schemas, cardType);
-  } else {
-    return createMultimodalPrompt(documentData, schemas, cardType);
-  }
+  const cardTypeUpper = cardType.toUpperCase();
+  const schemaForPrompt = cardType === 'model' ? schemas.model : schemas.dataset;
+
+  // Dynamically extract the structure from the official schema file
+  const dynamicSchemaStructure = extractSchemaStructure(schemaForPrompt, cardType);
+  const modelToUse = processingMode === 'multimodal' ? "gemini-1.5-pro-latest" : "gemini-1.5-flash-latest";
+
+  // This prompt combines detailed instructions with the dynamic schema
+  return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards. Your model is ${modelToUse}.
+
+**TASK:** Analyze the provided document text, tables, and figures to extract comprehensive information for a ${cardTypeUpper} card. Your output MUST be a single, valid JSON object that strictly adheres to the provided ROADMAP schema structure.
+
+**CRITICAL INSTRUCTIONS:**
+1.  **Strict Schema Compliance:** Your entire output must be a single JSON object that perfectly matches the structure, field names, and data types defined in the "REQUIRED JSON STRUCTURE" section below.
+2.  **Comprehensive Extraction:** Extract ALL relevant information. Do not summarize or omit details. If a value is not found, omit the field rather than filling it with placeholder text like "Not specified".
+3.  **Author Details:** Extract ALL authors with their full names and affiliations. Do not summarize the author list.
+4.  **Subset and Classification Priority:** This is the most important part. Convert all patient demographics, characteristics tables, and injury grading tables into detailed Subset objects. For each subset (e.g., "Training Set", "Full Dataset"), you must extract all available 'Classifications' (like 'Liver Injury', 'Spleen Injury', 'Negative Injury') with their corresponding 'Count'.
+5.  **Table Data is Key:** Look specifically for labels, classifications, performance metrics, demographic breakdowns, and statistical measures in ALL tables.
+6.  **Numerical Precision:** Extract exact numerical values, age ranges, and statistical measures (e.g., "47.9 ± 21.0 (18-90)"). Do not approximate.
+
+---
+
+**REQUIRED JSON STRUCTURE (from official ROADMAP schema):**
+\`\`\`json
+{
+  "${cardType.charAt(0).toUpperCase() + cardType.slice(1)}": ${JSON.stringify(dynamicSchemaStructure, null, 2)}
+}
+\`\`\`
+
+---
+
+**DOCUMENT CONTENT TO ANALYZE:**
+
+**TEXT:**
+"""
+${documentData.text.substring(0, 15000)}
+"""
+
+**TABLES:**
+${JSON.stringify(documentData.tables, null, 2)}
+
+---
+
+**FINAL OUTPUT (A single, valid JSON object only):**`;
 }
 
 // Parse and clean Gemini response to extract valid JSON
