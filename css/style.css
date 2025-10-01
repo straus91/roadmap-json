@@ -516,3 +516,116 @@ code.small {
         display: none !important;
     }
 }
+
+/* ========================================
+   Enhanced UI for Arrays and Tables
+   ======================================== */
+
+/* Improve readability of array item blocks */
+.json-editor .well {
+    border-left: 3px solid #007bff !important;
+    margin-top: 10px !important;
+    margin-bottom: 15px !important;
+    background-color: #ffffff !important;
+    border-radius: 4px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+}
+
+/* Add alternating background colors for array items */
+.json-editor-btn-add + div > .well:nth-child(even),
+.json-editor > div > .well:nth-child(even) {
+    background-color: #f8f9fa !important;
+}
+
+/* Style for collapsed array items with headers */
+.json-editor .well > h3 {
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    color: #495057 !important;
+    margin-bottom: 12px !important;
+    padding-bottom: 8px !important;
+    border-bottom: 1px solid #e9ecef !important;
+}
+
+/* Table format styling */
+.json-editor table {
+    width: 100% !important;
+    margin-bottom: 1rem !important;
+    border-collapse: collapse !important;
+    background-color: #fff !important;
+}
+
+.json-editor table thead th {
+    background-color: #e9ecef !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    color: #495057 !important;
+    border: 1px solid #dee2e6 !important;
+    padding: 0.75rem !important;
+    vertical-align: middle !important;
+}
+
+.json-editor table tbody td {
+    padding: 0.75rem !important;
+    border: 1px solid #dee2e6 !important;
+    vertical-align: middle !important;
+}
+
+.json-editor table tbody tr:hover {
+    background-color: #f8f9fa !important;
+}
+
+.json-editor table tbody tr:nth-child(even) {
+    background-color: #fdfdfd !important;
+}
+
+/* Table input fields */
+.json-editor table input[type="text"],
+.json-editor table input[type="number"],
+.json-editor table select {
+    width: 100% !important;
+    padding: 0.375rem 0.5rem !important;
+    font-size: 0.875rem !important;
+    border: 1px solid #ced4da !important;
+    border-radius: 0.25rem !important;
+}
+
+.json-editor table input[type="text"]:focus,
+.json-editor table input[type="number"]:focus,
+.json-editor table select:focus {
+    border-color: #80bdff !important;
+    outline: 0 !important;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25) !important;
+}
+
+/* Table action buttons */
+.json-editor table button {
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.75rem !important;
+    margin: 0 2px !important;
+}
+
+/* Category tabs styling (if JSON Editor supports it) */
+.json-editor-btn-edit_properties {
+    margin-top: 10px !important;
+}
+
+/* Array add button styling */
+.json-editor-btn-add {
+    margin-top: 10px !important;
+    margin-bottom: 15px !important;
+}
+
+/* Spacing between array items */
+.json-editor [data-schemapath] > .row {
+    margin-bottom: 10px !important;
+}
+
+/* Better visual separation for nested objects */
+.json-editor .well .well {
+    border-left-color: #6c757d !important;
+    background-color: #fefefe !important;
+    margin-left: 10px !important;
+}

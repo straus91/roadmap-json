@@ -111,25 +111,122 @@ class DynamicSchemaProcessor {
         );
     }
 
+    // Categorize properties into logical groups (generic approach)
+    categorizeProperties(properties, cardType) {
+        const categories = {};
+
+        // Define common property patterns for categorization
+        const coreKeywords = ['name', 'title', 'description', 'summary', 'overview'];
+        const metadataKeywords = ['author', 'publication', 'date', 'version', 'license', 'doi', 'reference'];
+        const technicalKeywords = ['imaging', 'modality', 'architecture', 'algorithm', 'training', 'input', 'output'];
+        const dataKeywords = ['dataset', 'data', 'subset', 'partition', 'sample', 'subject', 'patient'];
+        const performanceKeywords = ['performance', 'metric', 'accuracy', 'evaluation', 'validation'];
+        const detailsKeywords = ['detail', 'specification', 'parameter', 'configuration', 'setting'];
+
+        // Categorize each property
+        for (const [propKey, propValue] of Object.entries(properties)) {
+            const keyLower = propKey.toLowerCase();
+            const title = propValue.title?.toLowerCase() || '';
+            const description = propValue.description?.toLowerCase() || '';
+            const combined = `${keyLower} ${title} ${description}`;
+
+            let category = 'Other';
+
+            // Check against keyword patterns
+            if (coreKeywords.some(kw => combined.includes(kw))) {
+                category = 'Core Information';
+            } else if (metadataKeywords.some(kw => combined.includes(kw))) {
+                category = 'Metadata & Attribution';
+            } else if (technicalKeywords.some(kw => combined.includes(kw))) {
+                category = cardType === 'model' ? 'Technical Details' : 'Imaging Details';
+            } else if (dataKeywords.some(kw => combined.includes(kw))) {
+                category = 'Data & Subsets';
+            } else if (performanceKeywords.some(kw => combined.includes(kw))) {
+                category = 'Performance & Evaluation';
+            } else if (detailsKeywords.some(kw => combined.includes(kw))) {
+                category = 'Additional Details';
+            }
+
+            // Initialize category array if needed
+            if (!categories[category]) {
+                categories[category] = [];
+            }
+
+            // Add property key to category
+            categories[category].push(propKey);
+        }
+
+        // Remove empty categories and single-item "Other" category
+        if (categories['Other'] && categories['Other'].length === 1 && Object.keys(categories).length > 1) {
+            // Move single "Other" item to largest category
+            const largestCategory = Object.entries(categories)
+                .filter(([cat]) => cat !== 'Other')
+                .sort((a, b) => b[1].length - a[1].length)[0];
+
+            if (largestCategory) {
+                largestCategory[1].push(...categories['Other']);
+                delete categories['Other'];
+            }
+        }
+
+        // Sort categories by priority
+        const categoryOrder = [
+            'Core Information',
+            'Metadata & Attribution',
+            'Technical Details',
+            'Imaging Details',
+            'Data & Subsets',
+            'Performance & Evaluation',
+            'Additional Details',
+            'Other'
+        ];
+
+        const sortedCategories = {};
+        categoryOrder.forEach(cat => {
+            if (categories[cat]) {
+                sortedCategories[cat] = categories[cat];
+            }
+        });
+
+        return sortedCategories;
+    }
+
     // Convert ROADMAP JSON Schema to JSON Editor compatible format
     convertToJsonEditorSchema(roadmapSchema, cardType) {
         try {
             const sectionName = cardType.charAt(0).toUpperCase() + cardType.slice(1);
             const sectionDef = roadmapSchema.$defs[cardType.toLowerCase()];
-            
+
             if (!sectionDef) {
                 throw new Error(`No ${cardType} definition found in schema`);
             }
 
-            // Extract the properties for the form
+            // Process all properties
+            const allProcessedProps = this.processProperties(sectionDef.properties || {}, roadmapSchema.$defs, new Set(), 0);
+
+            // Group properties into logical categories (without restructuring data)
+            const categorizedProps = this.categorizeProperties(allProcessedProps, cardType);
+
+            // If we have multiple categories, use categories format for better organization
+            const useCategories = Object.keys(categorizedProps).length > 1;
+
             const jsonEditorSchema = {
                 type: "object",
                 title: `${sectionName} Information`,
-                properties: this.processProperties(sectionDef.properties || {}, roadmapSchema.$defs, new Set(), 0),
+                properties: allProcessedProps,
                 required: sectionDef.required || []
             };
 
-            console.log(`✅ Schema converted for ${cardType}`);
+            // Add categories format if we have logical groupings
+            if (useCategories) {
+                jsonEditorSchema.options = {
+                    categories: categorizedProps
+                };
+                console.log(`✅ Schema converted for ${cardType} with ${Object.keys(categorizedProps).length} categories`);
+            } else {
+                console.log(`✅ Schema converted for ${cardType}`);
+            }
+
             return jsonEditorSchema;
             
         } catch (error) {
@@ -205,25 +302,41 @@ class DynamicSchemaProcessor {
 
         if (prop.type === 'array' && prop.items) {
             processed.items = this.processProperty(prop.items, defs, visited, depth);
-            
-            // *** FINAL, MORE INTELLIGENT HEADER LOGIC ***
-            if (processed.items.type === 'object' && processed.items.properties) {
-                const props = processed.items.properties;
-                if (props.Name) {
-                    processed.items.headerTemplate = "{{self.Name}}";
-                } else if (props['Partition name']) {
-                    processed.items.headerTemplate = "{{self['Partition name']}}";
-                } else {
-                    const titleCandidates = ['Criterion', 'Sex', 'Demographic', 'Title'];
-                    const titleProps = titleCandidates.filter(p => props[p]);
-                    if (titleProps.length > 0) {
-                        processed.items.headerTemplate = titleProps.map(p => `{{self.${p}}}`).join(' - ');
+
+            // Check if this is a simple object array that should use table format
+            const isSimpleObjectArray =
+                processed.items.type === 'object' &&
+                processed.items.properties &&
+                Object.keys(processed.items.properties).length <= 6 && // Not too many columns
+                Object.values(processed.items.properties).every(p =>
+                    ['string', 'number', 'integer', 'boolean'].includes(p.type)
+                );
+
+            if (isSimpleObjectArray) {
+                // Use table format for simple, flat structures
+                processed.format = 'table';
+                console.log(`📊 Using table format for array: ${prop.title || 'unnamed'}`);
+            } else {
+                // Use intelligent header template for more complex arrays
+                if (processed.items.type === 'object' && processed.items.properties) {
+                    const props = processed.items.properties;
+                    if (props.Name) {
+                        processed.items.headerTemplate = "{{self.Name}}";
+                    } else if (props['Partition name']) {
+                        processed.items.headerTemplate = "{{self['Partition name']}}";
+                    } else if (props.Category) {
+                        processed.items.headerTemplate = "{{self.Category}}";
+                    } else {
+                        const titleCandidates = ['Criterion', 'Sex', 'Demographic', 'Title', 'Type'];
+                        const titleProps = titleCandidates.filter(p => props[p]);
+                        if (titleProps.length > 0) {
+                            processed.items.headerTemplate = titleProps.map(p => `{{self.${p}}}`).join(' - ');
+                        }
                     }
-                    // No fallback - let JSON Editor use default behavior for arrays without meaningful properties
                 }
             }
-            // *** END OF FINAL LOGIC ***
 
+            // Checkbox format for enum arrays with many options
             if (prop.items.enum && prop.items.enum.length > 5) {
                 processed.format = 'checkbox';
                 processed.uniqueItems = true;
