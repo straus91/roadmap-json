@@ -605,10 +605,13 @@ async function callGeminiAPIMultimodal(url, textPrompt, documentData, config = {
 // Function to create multimodal prompt with text, tables, and images
 function createMultimodalPrompt(documentData, schemas, cardType) {
   console.log('🔍 createMultimodalPrompt called with cardType:', cardType);
-  
+
   const cardTypeUpper = cardType.toUpperCase();
-  const isDataset = cardType === 'dataset';
-  
+
+  // Generate example structure from dynamic schema
+  const exampleStructure = generateExampleFromSchema(schemas[cardType], cardType);
+  const exampleJson = JSON.stringify(exampleStructure, null, 2);
+
   return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards.
 
 **TASK:** Extract information for a ${cardTypeUpper} card in valid JSON format.
@@ -624,52 +627,7 @@ function createMultimodalPrompt(documentData, schemas, cardType) {
 • Output must be valid JSON with proper ROADMAP structure
 
 **REQUIRED JSON STRUCTURE:**
-{
-  "${cardTypeUpper.charAt(0) + cardTypeUpper.slice(1).toLowerCase()}": {
-    "Name": "string",
-    "Description": "string", 
-    "Authors": [{"Name": "string", "Affiliation": "string"}],
-    "Publication": {"Journal": "string", "Date": "string", "DOI": "string"},${isDataset ? `
-    "Subset": [
-      {
-        "Name": "string",
-        "Description": "string", 
-        "Criteria": ["string"],
-        "Size": number,
-        "Demographics": {"Age": "string", "Sex": "string"},
-        "Labels": ["string"],
-        "Classifications": {"Category": "string", "Count": number}
-      }
-    ],
-    "Imaging": {
-      "Modality": ["string"],
-      "Body Region": ["string"],
-      "Number of Images": number
-    },
-    "Performance Metrics": {
-      "Accuracy": "string",
-      "Sensitivity": "string", 
-      "Specificity": "string",
-      "AUC": "string",
-      "F1-Score": "string"
-    }` : `
-    "Performance": {
-      "Metrics": [{"Metric": "string", "Value": "string"}],
-      "Validation": "string",
-      "Test Results": {
-        "Accuracy": "string",
-        "Sensitivity": "string",
-        "Specificity": "string", 
-        "AUC": "string",
-        "F1-Score": "string"
-      }
-    },
-    "Implementation": {
-      "Framework": "string",
-      "Architecture": "string"
-    }`}
-  }
-}
+${exampleJson}
 
 **DOCUMENT TEXT:**
 """${documentData.text.substring(0, 15000)}"""
@@ -848,13 +806,100 @@ ${extractedInformation}
 OUTPUT (Valid JSON only):`;
 }
 
+// Generate example JSON structure from schema
+function generateExampleFromSchema(schema, cardType) {
+  console.log('🏗️ Generating example structure from schema for:', cardType);
+
+  // Get the main section from schema
+  const sectionName = cardType.charAt(0).toUpperCase() + cardType.slice(1);
+  const sectionDef = schema.$defs?.[cardType.toLowerCase()];
+
+  if (!sectionDef || !sectionDef.properties) {
+    console.warn('⚠️ Schema definition not found, using fallback');
+    return {
+      [sectionName]: {
+        "Name": "string",
+        "Description": "string"
+      }
+    };
+  }
+
+  // Recursively generate example values from properties
+  function generateValue(propDef, visited = new Set(), depth = 0) {
+    const maxDepth = 5;
+    if (depth > maxDepth) return "...";
+
+    // Handle $ref
+    if (propDef.$ref) {
+      const refPath = propDef.$ref.replace('#/$defs/', '');
+      if (visited.has(refPath)) return "circular reference";
+
+      const refDef = schema.$defs?.[refPath];
+      if (refDef) {
+        const newVisited = new Set(visited);
+        newVisited.add(refPath);
+        return generateValue(refDef, newVisited, depth + 1);
+      }
+    }
+
+    // Handle by type
+    switch (propDef.type) {
+      case 'string':
+        if (propDef.enum) {
+          return propDef.enum[0] || "string";
+        }
+        return "string";
+
+      case 'number':
+      case 'integer':
+        return 0;
+
+      case 'boolean':
+        return false;
+
+      case 'array':
+        if (propDef.items) {
+          const itemExample = generateValue(propDef.items, visited, depth + 1);
+          return [itemExample];
+        }
+        return [];
+
+      case 'object':
+        if (propDef.properties) {
+          const objExample = {};
+          for (const [key, subProp] of Object.entries(propDef.properties)) {
+            objExample[key] = generateValue(subProp, visited, depth + 1);
+          }
+          return objExample;
+        }
+        return {};
+
+      default:
+        return "string";
+    }
+  }
+
+  // Generate the main structure
+  const exampleStructure = {};
+  for (const [propKey, propDef] of Object.entries(sectionDef.properties)) {
+    exampleStructure[propKey] = generateValue(propDef);
+  }
+
+  return {
+    [sectionName]: exampleStructure
+  };
+}
+
 // Function to create text-only prompt (without images/figures)
 function createTextOnlyPrompt(documentData, schemas, cardType) {
   console.log('🔍 createTextOnlyPrompt called with cardType:', cardType);
-  
+
   const cardTypeUpper = cardType.toUpperCase();
-  const isDataset = cardType === 'dataset';
-  
+
+  // Generate example structure from dynamic schema
+  const exampleStructure = generateExampleFromSchema(schemas[cardType], cardType);
+  const exampleJson = JSON.stringify(exampleStructure, null, 2);
+
   return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards.
 
 **TASK:** Extract information for a ${cardTypeUpper} card in valid JSON format (text-only analysis).
@@ -870,52 +915,7 @@ function createTextOnlyPrompt(documentData, schemas, cardType) {
 • Output must be valid JSON with proper ROADMAP structure
 
 **REQUIRED JSON STRUCTURE:**
-{
-  "${cardTypeUpper.charAt(0) + cardTypeUpper.slice(1).toLowerCase()}": {
-    "Name": "string",
-    "Description": "string", 
-    "Authors": [{"Name": "string", "Affiliation": "string"}],
-    "Publication": {"Journal": "string", "Date": "string", "DOI": "string"},${isDataset ? `
-    "Subset": [
-      {
-        "Name": "string",
-        "Description": "string", 
-        "Criteria": ["string"],
-        "Size": number,
-        "Demographics": {"Age": "string", "Sex": "string"},
-        "Labels": ["string"],
-        "Classifications": {"Category": "string", "Count": number}
-      }
-    ],
-    "Imaging": {
-      "Modality": ["string"],
-      "Body Region": ["string"],
-      "Number of Images": number
-    },
-    "Performance Metrics": {
-      "Accuracy": "string",
-      "Sensitivity": "string", 
-      "Specificity": "string",
-      "AUC": "string",
-      "F1-Score": "string"
-    }` : `
-    "Performance": {
-      "Metrics": [{"Metric": "string", "Value": "string"}],
-      "Validation": "string",
-      "Test Results": {
-        "Accuracy": "string",
-        "Sensitivity": "string",
-        "Specificity": "string", 
-        "AUC": "string",
-        "F1-Score": "string"
-      }
-    },
-    "Implementation": {
-      "Framework": "string",
-      "Architecture": "string"
-    }`}
-  }
-}
+${exampleJson}
 
 **DOCUMENT TEXT:**
 """${documentData.text.substring(0, 15000)}"""
