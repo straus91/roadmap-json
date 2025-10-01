@@ -52,7 +52,7 @@ app.get('/api/test-gemini', async (req, res) => {
       return res.status(500).json({ error: 'Gemini API key not configured' });
     }
 
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     const testPrompt = `Extract information from this text about a medical AI model:
 
@@ -393,7 +393,7 @@ async function processTextWithMultiStageGemini(extractedText) {
 async function analyzeAndSummarizeDocument(text) {
   try {
     const apiKey = process.env.GEMINI_API_KEY || process.env.LLM_API_KEY;
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = `You are an expert radiologist and AI researcher specializing in analyzing published radiology AI journal articles. Your task is to perform comprehensive document analysis for ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) extraction.
 
@@ -498,7 +498,7 @@ COMPREHENSIVE STRUCTURED ANALYSIS:`;
 async function classifyDocumentType(summary) {
   try {
     const apiKey = process.env.GEMINI_API_KEY || process.env.LLM_API_KEY;
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = `You are an expert radiologist and AI researcher specializing in classifying radiology AI journal articles. Analyze this document summary to determine if it primarily describes an AI MODEL/ALGORITHM or a DATASET/DATABASE.
 
@@ -569,7 +569,7 @@ CLASSIFICATION:`;
 async function extractToRoadmapFormat(summary, classification, originalText) {
   try {
     const apiKey = process.env.GEMINI_API_KEY || process.env.LLM_API_KEY;
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     // Load the actual ROADMAP schema
     const schemaType = classification.type.toLowerCase();
@@ -970,7 +970,7 @@ async function processTextWithGemini(extractedText) {
       return null;
     }
 
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     // Load actual ROADMAP schemas for more accurate processing
     let modelSchema, datasetSchema;
@@ -1087,7 +1087,7 @@ COMPREHENSIVE EXTRACTION OUTPUT (JSON only):`;
 async function generateMockWithGemini() {
   try {
     const apiKey = process.env.GEMINI_API_KEY || process.env.LLM_API_KEY;
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     const mockText = `
     We developed ResNet-COVID, a deep convolutional neural network for COVID-19 detection in chest CT scans. 
