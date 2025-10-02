@@ -566,8 +566,17 @@ function enhanceSchemaForUI(schema) {
  *
  * @param {object} schema - The JSON schema object to process
  */
-function addDynamicHeaderTemplates(schema) {
+function addDynamicHeaderTemplates(schema, path = 'root', depth = 0) {
   if (!schema || typeof schema !== 'object') {
+    return;
+  }
+
+  const indent = '  '.repeat(depth);
+  console.log(`${indent}📍 addDynamicHeaderTemplates at: ${path}`);
+
+  // Check if this node has properties to iterate
+  if (!schema.properties) {
+    console.log(`${indent}⚠️ No properties found at ${path}`);
     return;
   }
 
@@ -575,6 +584,9 @@ function addDynamicHeaderTemplates(schema) {
   for (const key in schema.properties) {
     if (schema.properties.hasOwnProperty(key)) {
       const prop = schema.properties[key];
+      const currentPath = `${path}.${key}`;
+
+      console.log(`${indent}  🔍 Checking: ${currentPath} (type: ${prop.type})`);
 
       // If we find an array that contains objects
       if (prop.type === 'array' && prop.items && prop.items.type === 'object') {
@@ -598,15 +610,22 @@ function addDynamicHeaderTemplates(schema) {
             const fallbackTitle = prop.items.title || 'Item';
             // Use bracket notation for properties that might contain spaces
             prop.items.headerTemplate = `{{self['${titleProp}'] || '${fallbackTitle} ' + (i+1)}}`;
+            console.log(`${indent}  ✅ Added headerTemplate to ${currentPath} using "${titleProp}"`);
+          } else {
+            console.log(`${indent}  ⚠️ No title property found for ${currentPath}`);
           }
+        } else {
+          console.log(`${indent}  ℹ️ ${currentPath} already has headerTemplate`);
         }
 
         // *** CRITICAL FIX: Recurse into array items to handle nested structures ***
-        addDynamicHeaderTemplates(prop.items);
+        console.log(`${indent}  ↓ Recursing into array items of ${currentPath}`);
+        addDynamicHeaderTemplates(prop.items, `${currentPath}[items]`, depth + 1);
       }
       // If we find a nested object, recurse into it
       else if (prop.type === 'object') {
-        addDynamicHeaderTemplates(prop);
+        console.log(`${indent}  ↓ Recursing into object ${currentPath}`);
+        addDynamicHeaderTemplates(prop, currentPath, depth + 1);
       }
     }
   }
@@ -618,8 +637,17 @@ function addDynamicHeaderTemplates(schema) {
  *
  * @param {object} schema - The JSON schema object to process
  */
-function disableAdditionalProperties(schema) {
+function disableAdditionalProperties(schema, path = 'root', depth = 0) {
   if (!schema || typeof schema !== 'object') {
+    return;
+  }
+
+  const indent = '  '.repeat(depth);
+  console.log(`${indent}📍 disableAdditionalProperties at: ${path}`);
+
+  // Check if this node has properties to iterate
+  if (!schema.properties) {
+    console.log(`${indent}⚠️ No properties found at ${path}`);
     return;
   }
 
@@ -627,20 +655,26 @@ function disableAdditionalProperties(schema) {
   for (const key in schema.properties) {
     if (schema.properties.hasOwnProperty(key)) {
       const prop = schema.properties[key];
+      const currentPath = `${path}.${key}`;
 
       // If we find an array that contains objects
       if (prop.type === 'array' && prop.items && prop.items.type === 'object') {
         // Only set if not already explicitly defined
         if (prop.items.additionalProperties === undefined) {
           prop.items.additionalProperties = false;
+          console.log(`${indent}  ✅ Disabled additionalProperties for ${currentPath}[items]`);
+        } else {
+          console.log(`${indent}  ℹ️ ${currentPath}[items] already has additionalProperties set`);
         }
 
         // *** CRITICAL FIX: Recurse into array items to handle nested structures ***
-        disableAdditionalProperties(prop.items);
+        console.log(`${indent}  ↓ Recursing into array items of ${currentPath}`);
+        disableAdditionalProperties(prop.items, `${currentPath}[items]`, depth + 1);
       }
       // If we find a nested object, recurse into it
       else if (prop.type === 'object') {
-        disableAdditionalProperties(prop);
+        console.log(`${indent}  ↓ Recursing into object ${currentPath}`);
+        disableAdditionalProperties(prop, currentPath, depth + 1);
       }
     }
   }
