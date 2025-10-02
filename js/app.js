@@ -593,10 +593,52 @@ function normalizeJsonToSchema(data, schema) {
 
   console.log('🔄 Normalizing JSON data to match schema...');
 
-  // Get schema properties
+  // Check if schema has a wrapper structure (Dataset/Model/Card)
   const schemaProps = schema.properties || {};
+  let targetSchema = null;
+  let wrapperKey = null;
 
-  // Create case-insensitive lookup map for schema field names
+  // Detect ROADMAP wrapper structure: Dataset or Model
+  if (schemaProps.Dataset && schemaProps.Dataset.$ref) {
+    wrapperKey = 'Dataset';
+    targetSchema = resolveSchemaRef(schemaProps.Dataset.$ref, schema);
+    console.log('📦 Detected Dataset wrapper, resolving $ref:', schemaProps.Dataset.$ref);
+  } else if (schemaProps.Model && schemaProps.Model.$ref) {
+    wrapperKey = 'Model';
+    targetSchema = resolveSchemaRef(schemaProps.Model.$ref, schema);
+    console.log('📦 Detected Model wrapper, resolving $ref:', schemaProps.Model.$ref);
+  }
+
+  // If we found a wrapper with resolved schema, normalize against it
+  if (targetSchema && targetSchema.properties) {
+    console.log('✅ Using resolved schema properties for normalization');
+
+    // Create case-insensitive lookup map for the actual field names
+    const fieldMap = {};
+    for (const key in targetSchema.properties) {
+      if (targetSchema.properties.hasOwnProperty(key)) {
+        fieldMap[key.toLowerCase()] = key;
+      }
+    }
+
+    // Normalize the data
+    const normalized = normalizeObject(data, targetSchema.properties, fieldMap, schema);
+
+    // Wrap the normalized data if it's not already wrapped
+    if (!normalized[wrapperKey]) {
+      console.log(`📦 Wrapping normalized data in "${wrapperKey}" property`);
+      const wrapped = {};
+      wrapped[wrapperKey] = normalized;
+      console.log('✅ JSON normalization complete (wrapped)');
+      return wrapped;
+    }
+
+    console.log('✅ JSON normalization complete');
+    return normalized;
+  }
+
+  // Fallback: No wrapper detected, normalize against root properties
+  console.log('⚠️ No wrapper structure detected, using root properties');
   const schemaFieldMap = {};
   for (const key in schemaProps) {
     if (schemaProps.hasOwnProperty(key)) {
@@ -604,7 +646,6 @@ function normalizeJsonToSchema(data, schema) {
     }
   }
 
-  // Normalize the data recursively, passing root schema for $ref resolution
   const normalized = normalizeObject(data, schemaProps, schemaFieldMap, schema);
 
   console.log('✅ JSON normalization complete');
