@@ -643,13 +643,13 @@ async function callGeminiAPIMultimodal(url, textPrompt, documentData, config = {
 }
 
 // Function to create multimodal prompt with text, tables, and images
-function createMultimodalPrompt(documentData, schemas, cardType) {
+async function createMultimodalPrompt(documentData, schemas, cardType) {
   console.log('🔍 createMultimodalPrompt called with cardType:', cardType);
 
   const cardTypeUpper = cardType.toUpperCase();
 
-  // Generate example structure from dynamic schema
-  const exampleStructure = generateExampleFromSchema(schemas[cardType], cardType);
+  // Generate example structure from dynamic schema (now async for external refs)
+  const exampleStructure = await generateExampleFromSchema(schemas[cardType], cardType);
   const exampleJson = JSON.stringify(exampleStructure, null, 2);
 
   return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards.
@@ -846,16 +846,86 @@ ${extractedInformation}
 OUTPUT (Valid JSON only):`;
 }
 
+// Dynamically find schema properties (handles both GitHub and legacy formats)
+function findSchemaProperties(schema, cardType) {
+  const capitalizedType = cardType.charAt(0).toUpperCase() + cardType.slice(1);
+  const lowercaseType = cardType.toLowerCase();
+
+  // Strategy 1: Try properties.Dataset or properties.Model (GitHub/new format)
+  if (schema.properties?.[capitalizedType]?.properties) {
+    console.log(`✅ Found properties at: properties.${capitalizedType} (GitHub format)`);
+    return {
+      properties: schema.properties[capitalizedType].properties,
+      defs: schema.$defs || {},
+      source: `properties.${capitalizedType}`
+    };
+  }
+
+  // Strategy 2: Try $defs.dataset or $defs.model (old local format)
+  if (schema.$defs?.[lowercaseType]?.properties) {
+    console.log(`✅ Found properties at: $defs.${lowercaseType} (legacy format)`);
+    return {
+      properties: schema.$defs[lowercaseType].properties,
+      defs: schema.$defs,
+      source: `$defs.${lowercaseType}`
+    };
+  }
+
+  // Strategy 3: Fallback to root properties (generic)
+  if (schema.properties) {
+    console.log(`⚠️ Using root properties as fallback`);
+    return {
+      properties: schema.properties,
+      defs: schema.$defs || {},
+      source: 'root'
+    };
+  }
+
+  return null;
+}
+
+// Cache for external schema files
+const externalSchemaCache = new Map();
+const GITHUB_ROADMAP_BASE = 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/';
+
+// Fetch external ROADMAP schema file
+async function fetchExternalSchema(filename) {
+  // Check cache first
+  if (externalSchemaCache.has(filename)) {
+    console.log(`📦 Using cached external schema: ${filename}`);
+    return externalSchemaCache.get(filename);
+  }
+
+  try {
+    const url = GITHUB_ROADMAP_BASE + filename;
+    console.log(`🌐 Fetching external schema: ${url}`);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const externalSchema = await response.json();
+    externalSchemaCache.set(filename, externalSchema);
+    console.log(`✅ Fetched and cached: ${filename}`);
+
+    return externalSchema;
+  } catch (error) {
+    console.error(`❌ Failed to fetch ${filename}:`, error.message);
+    return null;
+  }
+}
+
 // Generate example JSON structure from schema
-function generateExampleFromSchema(schema, cardType) {
+async function generateExampleFromSchema(schema, cardType) {
   console.log('🏗️ Generating example structure from schema for:', cardType);
 
-  // Get the main section from schema
+  // Get the main section from schema using dynamic detection
   const sectionName = cardType.charAt(0).toUpperCase() + cardType.slice(1);
-  const sectionDef = schema.$defs?.[cardType.toLowerCase()];
+  const schemaInfo = findSchemaProperties(schema, cardType);
 
-  if (!sectionDef || !sectionDef.properties) {
-    console.warn('⚠️ Schema definition not found, using fallback');
+  if (!schemaInfo || !schemaInfo.properties) {
+    console.warn('⚠️ Schema properties not found, using fallback');
     return {
       [sectionName]: {
         "Name": "string",
@@ -864,21 +934,46 @@ function generateExampleFromSchema(schema, cardType) {
     };
   }
 
-  // Recursively generate example values from properties
-  function generateValue(propDef, visited = new Set(), depth = 0) {
+  console.log(`📋 Generating example from: ${schemaInfo.source}`);
+
+  // Recursively generate example values from properties (now async for external refs)
+  async function generateValue(propDef, visited = new Set(), depth = 0) {
     const maxDepth = 5;
     if (depth > maxDepth) return "...";
 
     // Handle $ref
     if (propDef.$ref) {
-      const refPath = propDef.$ref.replace('#/$defs/', '');
+      const ref = propDef.$ref;
+
+      // Check if external reference (no "#" means external file)
+      if (!ref.startsWith('#')) {
+        // External reference like "ROADMAP.indexing.json"
+        if (visited.has(ref)) return "circular reference";
+
+        const externalSchema = await fetchExternalSchema(ref);
+        if (externalSchema && externalSchema.properties) {
+          const newVisited = new Set(visited);
+          newVisited.add(ref);
+
+          // Generate example from external schema properties
+          const externalExample = {};
+          for (const [key, subProp] of Object.entries(externalSchema.properties)) {
+            externalExample[key] = await generateValue(subProp, newVisited, depth + 1);
+          }
+          return externalExample;
+        }
+        return "external schema unavailable";
+      }
+
+      // Internal reference like "#/$defs/person"
+      const refPath = ref.replace('#/$defs/', '');
       if (visited.has(refPath)) return "circular reference";
 
-      const refDef = schema.$defs?.[refPath];
+      const refDef = schemaInfo.defs?.[refPath];
       if (refDef) {
         const newVisited = new Set(visited);
         newVisited.add(refPath);
-        return generateValue(refDef, newVisited, depth + 1);
+        return await generateValue(refDef, newVisited, depth + 1);
       }
     }
 
@@ -899,7 +994,7 @@ function generateExampleFromSchema(schema, cardType) {
 
       case 'array':
         if (propDef.items) {
-          const itemExample = generateValue(propDef.items, visited, depth + 1);
+          const itemExample = await generateValue(propDef.items, visited, depth + 1);
           return [itemExample];
         }
         return [];
@@ -908,7 +1003,7 @@ function generateExampleFromSchema(schema, cardType) {
         if (propDef.properties) {
           const objExample = {};
           for (const [key, subProp] of Object.entries(propDef.properties)) {
-            objExample[key] = generateValue(subProp, visited, depth + 1);
+            objExample[key] = await generateValue(subProp, visited, depth + 1);
           }
           return objExample;
         }
@@ -919,10 +1014,10 @@ function generateExampleFromSchema(schema, cardType) {
     }
   }
 
-  // Generate the main structure
+  // Generate the main structure (now with async/await for external refs)
   const exampleStructure = {};
-  for (const [propKey, propDef] of Object.entries(sectionDef.properties)) {
-    exampleStructure[propKey] = generateValue(propDef);
+  for (const [propKey, propDef] of Object.entries(schemaInfo.properties)) {
+    exampleStructure[propKey] = await generateValue(propDef);
   }
 
   return {
@@ -931,13 +1026,13 @@ function generateExampleFromSchema(schema, cardType) {
 }
 
 // Function to create text-only prompt (without images/figures)
-function createTextOnlyPrompt(documentData, schemas, cardType) {
+async function createTextOnlyPrompt(documentData, schemas, cardType) {
   console.log('🔍 createTextOnlyPrompt called with cardType:', cardType);
 
   const cardTypeUpper = cardType.toUpperCase();
 
-  // Generate example structure from dynamic schema
-  const exampleStructure = generateExampleFromSchema(schemas[cardType], cardType);
+  // Generate example structure from dynamic schema (now async for external refs)
+  const exampleStructure = await generateExampleFromSchema(schemas[cardType], cardType);
   const exampleJson = JSON.stringify(exampleStructure, null, 2);
 
   return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards.
@@ -1070,12 +1165,13 @@ function getDatasetFieldLocationHints() {
 }
 
 // Helper function to create the enhanced single prompt based on processing mode and card type
-function createEnhancedSinglePrompt(documentData, schemas, processingMode, cardType) {
+async function createEnhancedSinglePrompt(documentData, schemas, processingMode, cardType) {
   const cardTypeUpper = cardType.toUpperCase();
   const schemaForPrompt = cardType === 'model' ? schemas.model : schemas.dataset;
 
-  // Dynamically extract the structure from the official schema file
-  const dynamicSchemaStructure = extractSchemaStructure(schemaForPrompt, cardType);
+  // Dynamically generate example structure (now includes external refs)
+  const exampleStructure = await generateExampleFromSchema(schemaForPrompt, cardType);
+  const dynamicSchemaStructure = exampleStructure[cardType.charAt(0).toUpperCase() + cardType.slice(1)];
   const modelToUse = processingMode === 'multimodal' ? "gemini-1.5-pro-latest" : "gemini-1.5-flash-latest";
 
   // Generate type-specific extraction guidance
@@ -1531,9 +1627,9 @@ export default async function handler(req, res) {
         images_count: referencedImages.length
       }
     };
-    
-    const prompt = createEnhancedSinglePrompt(documentData, schemas, processingMode, cardType);
-    
+
+    const prompt = await createEnhancedSinglePrompt(documentData, schemas, processingMode, cardType);
+
     console.log('🚀 Processing document with STREAMING and enhanced chain-of-thought prompt...');
     console.log('📝 Processing mode:', processingMode);
     console.log('🎯 Using cardType for prompt generation:', cardType);
