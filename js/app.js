@@ -231,8 +231,12 @@ async function initializeEditor(initialData = null) {
             setTimeout(() => {
                 addExamplesToFields();
             }, FORM_RENDER_DELAY_MS);
-            
-            
+
+            // Fix dynamic array labels (fallback for fields not in schema)
+            setTimeout(() => {
+                fixDynamicArrayLabels();
+            }, FORM_RENDER_DELAY_MS + 500);
+
             // Expand all by default
             setTimeout(() => {
                 if (editor && typeof editor.expandAll === 'function') {
@@ -698,6 +702,108 @@ function disableAdditionalProperties(schema, path = 'root', depth = 0) {
       }
     }
   }
+}
+
+/**
+ * Fixes "item 1", "item 2" labels in array items for fields not in schema.
+ * This is a fallback for when PDF extraction uses field names that don't match the schema.
+ * Runs after the editor renders and replaces generic labels with actual array values.
+ */
+function fixDynamicArrayLabels() {
+  console.log('🔧 Fixing dynamic array labels...');
+
+  try {
+    if (!editor) {
+      console.warn('⚠️ Editor not available for label fixing');
+      return;
+    }
+
+    // Get the current editor data
+    const editorData = editor.getValue();
+
+    // Find all elements with "item" labels in the DOM
+    const editorHolder = document.getElementById('editor-holder');
+    if (!editorHolder) return;
+
+    // Find all h3 elements that contain "item" text (array item headers)
+    const itemHeaders = editorHolder.querySelectorAll('h3, .je-object__title');
+    let fixedCount = 0;
+
+    itemHeaders.forEach(header => {
+      const text = header.textContent.trim();
+
+      // Check if it's a generic "item 1", "item 2", etc. label
+      const itemMatch = text.match(/^item\s+(\d+)$/i);
+      if (itemMatch) {
+        // Try to find the actual value for this array item
+        // Walk up the DOM to find the parent array container
+        let arrayContainer = header.closest('[data-schemapath]');
+        if (arrayContainer) {
+          const schemaPath = arrayContainer.getAttribute('data-schemapath');
+
+          // Try to get the actual value from editor data
+          const value = getValueFromPath(editorData, schemaPath);
+
+          if (value !== null && value !== undefined) {
+            // If it's a string, use it directly
+            if (typeof value === 'string') {
+              header.textContent = value;
+              console.log(`✅ Fixed label: "item ${itemMatch[1]}" → "${value}"`);
+              fixedCount++;
+            }
+            // If it's an object with a Name property, use that
+            else if (typeof value === 'object' && value.Name) {
+              header.textContent = value.Name;
+              console.log(`✅ Fixed label: "item ${itemMatch[1]}" → "${value.Name}"`);
+              fixedCount++;
+            }
+          }
+        }
+      }
+    });
+
+    if (fixedCount > 0) {
+      console.log(`✅ Fixed ${fixedCount} dynamic array labels`);
+    } else {
+      console.log('ℹ️ No dynamic array labels needed fixing');
+    }
+
+  } catch (error) {
+    console.error('❌ Error fixing dynamic array labels:', error);
+  }
+}
+
+/**
+ * Helper function to get a value from nested object using a path string.
+ * Path format: "root.tab_name.field_name.0" (where 0 is array index)
+ */
+function getValueFromPath(obj, path) {
+  if (!path || !obj) return null;
+
+  // Remove "root." prefix if present
+  path = path.replace(/^root\./, '');
+
+  // Split path and traverse
+  const parts = path.split('.');
+  let current = obj;
+
+  for (const part of parts) {
+    if (current === null || current === undefined) return null;
+
+    // Check if it's an array index
+    const arrayIndex = parseInt(part);
+    if (!isNaN(arrayIndex)) {
+      if (Array.isArray(current)) {
+        current = current[arrayIndex];
+      } else {
+        return null;
+      }
+    } else {
+      current = current[part];
+    }
+  }
+
+  return current;
 }
 
 function resetForm() {

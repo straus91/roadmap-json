@@ -905,6 +905,7 @@ function createTextOnlyPrompt(documentData, schemas, cardType) {
 **TASK:** Extract information for a ${cardTypeUpper} card in valid JSON format (text-only analysis).
 
 **CRITICAL INSTRUCTIONS:**
+• **EXACT FIELD NAMES**: Use the EXACT field names from the schema example below - match capitalization precisely (e.g., "Subsets" not "subsets", "Author" not "authors")
 • Extract ALL authors with affiliations - do not summarize
 • For datasets: Convert patient demographics/characteristics tables into detailed Subset objects
 • **TABLE DATA PRIORITY**: Look specifically for labels, classifications, metrics, performance data, demographic breakdowns, and statistical measures in ALL tables
@@ -912,7 +913,7 @@ function createTextOnlyPrompt(documentData, schemas, cardType) {
 • **LABEL MAPPING**: If tables contain label categories, class distributions, or annotation schemes, extract these comprehensively
 • Extract exact numerical values and statistical measures - never summarize or approximate
 • Include publication details, performance metrics, and technical specifications
-• Output must be valid JSON with proper ROADMAP structure
+• Output must be valid JSON with proper ROADMAP structure matching the schema field names exactly
 
 **REQUIRED JSON STRUCTURE:**
 ${exampleJson}
@@ -996,11 +997,12 @@ function createEnhancedSinglePrompt(documentData, schemas, processingMode, cardT
 **TASK:** Analyze the provided document text, tables, and figures to extract comprehensive information for a ${cardTypeUpper} card. Your output MUST be a single, valid JSON object that strictly adheres to the provided ROADMAP schema structure.
 
 **CRITICAL INSTRUCTIONS:**
-1.  **Strict Schema Compliance:** Your entire output must be a single JSON object that perfectly matches the structure, field names, and data types defined in the "REQUIRED JSON STRUCTURE" section below.
-2.  **Comprehensive Extraction:** Extract ALL relevant information from the document. Search thoroughly for each schema field before omitting. If truly not found after checking relevant sections, omit the field. Never use placeholder text like "Not specified" or "N/A".
-3.  **Author Details:** Extract ALL authors with their full names and affiliations. Do not summarize the author list.
-4.  **Table Data is Key:** Look specifically for labels, classifications, performance metrics, demographic breakdowns, and statistical measures in ALL tables.
-5.  **Numerical Precision:** Extract exact numerical values, age ranges, and statistical measures (e.g., "47.9 ± 21.0 (18-90)"). Do not approximate.
+1.  **EXACT FIELD NAMES:** Use the EXACT field names and capitalization from the schema structure below (e.g., "Author" not "authors", "Subsets" not "subsets", "Name" not "name"). Field name precision is critical for proper rendering.
+2.  **Strict Schema Compliance:** Your entire output must be a single JSON object that perfectly matches the structure, field names, and data types defined in the "REQUIRED JSON STRUCTURE" section below.
+3.  **Comprehensive Extraction:** Extract ALL relevant information from the document. Search thoroughly for each schema field before omitting. If truly not found after checking relevant sections, omit the field. Never use placeholder text like "Not specified" or "N/A".
+4.  **Author Details:** Extract ALL authors with their full names and affiliations. Do not summarize the author list.
+5.  **Table Data is Key:** Look specifically for labels, classifications, performance metrics, demographic breakdowns, and statistical measures in ALL tables.
+6.  **Numerical Precision:** Extract exact numerical values, age ranges, and statistical measures (e.g., "47.9 ± 21.0 (18-90)"). Do not approximate.
 
 ${typeSpecificInstructions}
 
