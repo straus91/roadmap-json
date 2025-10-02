@@ -904,16 +904,72 @@ function createTextOnlyPrompt(documentData, schemas, cardType) {
 
 **TASK:** Extract information for a ${cardTypeUpper} card in valid JSON format (text-only analysis).
 
-**CRITICAL INSTRUCTIONS:**
-• **EXACT FIELD NAMES**: Use the EXACT field names from the schema example below - match capitalization precisely (e.g., "Subsets" not "subsets", "Author" not "authors")
-• Extract ALL authors with affiliations - do not summarize
-• For datasets: Convert patient demographics/characteristics tables into detailed Subset objects
-• **TABLE DATA PRIORITY**: Look specifically for labels, classifications, metrics, performance data, demographic breakdowns, and statistical measures in ALL tables
-• **METRICS EXTRACTION**: Extract accuracy, sensitivity, specificity, AUC, F1-scores, sample sizes, age ranges, gender distributions, and any classification categories
-• **LABEL MAPPING**: If tables contain label categories, class distributions, or annotation schemes, extract these comprehensively
-• Extract exact numerical values and statistical measures - never summarize or approximate
-• Include publication details, performance metrics, and technical specifications
-• Output must be valid JSON with proper ROADMAP structure matching the schema field names exactly
+**CRITICAL: STRICT SCHEMA COMPLIANCE**
+Your output MUST match the schema structure EXACTLY. DO NOT create any fields not shown in the schema example below.
+
+**FIELD MAPPING GUIDE - READ CAREFULLY:**
+When you find information about:
+• "Modalities" or "imaging type" (CT, MRI, etc.) → Use: Imaging.Modality (array of strings with RadLex codes)
+• "Anatomy" or "body parts" → Use: Imaging.Anatomy (array within Imaging.Content)
+• "Dataset description" or "purpose" → Use: Labeling (string) or Motivation.Purpose (string)
+• "Training/test/validation split" → Use: Partition (array) with "Partition name" and "Data" fields
+• "Total sample size" or "number of instances" → Use: Composition.Number of instances (integer)
+• "Patient demographics" → Use: Data.Demographics (within Partition items or Subsets items)
+• "Inclusion/exclusion criteria" → Use: Data.Inclusion or Data.Exclusion (within Partition or Subsets)
+• "Tasks" (detection, segmentation, classification) → Describe in Labeling field (string)
+• "Authors" → Use: Author (array) with Name, Email, Address fields (NOT "affiliation")
+• Any info that doesn't fit → Use: Comments field (string)
+
+**CRITICAL RULES:**
+1. DO NOT create fields like: "description", "modalities", "anatomy", "tasks", "sample_size", "inclusion_criteria", "affiliation"
+2. DO NOT use lowercase for schema fields: use "Author" not "authors", "Subsets" not "subsets", "Name" not "name"
+3. Use NESTED structures: Imaging.Modality, NOT a top-level "modalities" field
+4. For author affiliations: put in Address field, NOT "affiliation"
+5. ALL extracted information must go somewhere in the schema structure
+6. If uncertain where info goes: put it in Comments field with clear labels
+
+**DATASET PARTITION EXAMPLE:**
+{
+  "Dataset": {
+    "Name": "Example Dataset",
+    "Imaging": {
+      "Modality": ["Computed tomography (RID10321)"],
+      "Content": {
+        "Anatomy": ["Abdomen", "Pelvis"]
+      }
+    },
+    "Labeling": "Dataset includes detection, classification, and segmentation tasks for traumatic injuries",
+    "Partition": [
+      {
+        "Partition name": "Training",
+        "Data": {
+          "Number of instances": 3147,
+          "Demographics": {
+            "Age": "Mean 45.2 years",
+            "Sex": "60% male, 40% female"
+          },
+          "Inclusion": "Adult patients ≥18 years with abdominal trauma"
+        }
+      },
+      {
+        "Partition name": "Testing",
+        "Data": {
+          "Number of instances": 404
+        }
+      }
+    ],
+    "Comments": "Additional details: Uses DICOM format, includes segmentation masks for 206 series"
+  }
+}
+
+**VALIDATION CHECKLIST (verify before output):**
+□ All field names match schema example EXACTLY (case-sensitive)
+□ No top-level fields like "description", "modalities", "tasks", "sample_size"
+□ Nested structures used correctly (Imaging.Modality, not "modality")
+□ Author uses "Address" field, NOT "affiliation"
+□ Partitions use "Partition name" and "Data", NOT "name" and other custom fields
+□ All extracted information is placed somewhere in the structure
+□ Any info that doesn't fit is in "Comments" field
 
 **REQUIRED JSON STRUCTURE:**
 ${exampleJson}
