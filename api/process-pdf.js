@@ -954,18 +954,16 @@ async function generateExampleFromSchema(schema, cardType) {
         if (visited.has(ref)) return "circular reference";
 
         const externalSchema = await fetchExternalSchema(ref);
-        if (externalSchema && externalSchema.properties) {
-          const newVisited = new Set(visited);
-          newVisited.add(ref);
-
-          // Generate example from external schema properties
-          const externalExample = {};
-          for (const [key, subProp] of Object.entries(externalSchema.properties)) {
-            externalExample[key] = await generateValue(subProp, newVisited, depth + 1);
-          }
-          return externalExample;
+        if (!externalSchema) {
+          return "external schema unavailable";
         }
-        return "external schema unavailable";
+
+        const newVisited = new Set(visited);
+        newVisited.add(ref);
+
+        // Recursively generate value from the fetched external schema
+        // This handles ALL JSON Schema types: objects, arrays, anyOf, simple types, etc.
+        return await generateValue(externalSchema, newVisited, depth + 1);
       }
 
       // Internal reference like "#/$defs/person"
@@ -980,11 +978,35 @@ async function generateExampleFromSchema(schema, cardType) {
       }
     }
 
+    // Handle schema composition (anyOf, oneOf, allOf)
+    if (propDef.anyOf && Array.isArray(propDef.anyOf) && propDef.anyOf.length > 0) {
+      // Use first option in anyOf
+      return await generateValue(propDef.anyOf[0], visited, depth + 1);
+    }
+    if (propDef.oneOf && Array.isArray(propDef.oneOf) && propDef.oneOf.length > 0) {
+      // Use first option in oneOf
+      return await generateValue(propDef.oneOf[0], visited, depth + 1);
+    }
+    if (propDef.allOf && Array.isArray(propDef.allOf) && propDef.allOf.length > 0) {
+      // Merge all schemas in allOf (simplified: just use first)
+      return await generateValue(propDef.allOf[0], visited, depth + 1);
+    }
+
     // Handle by type
     switch (propDef.type) {
       case 'string':
         if (propDef.enum) {
           return propDef.enum[0] || "string";
+        }
+        // Check for format hints
+        if (propDef.format === 'date') {
+          return "2025-01-01";
+        }
+        if (propDef.format === 'email') {
+          return "example@example.com";
+        }
+        if (propDef.format === 'uri' || propDef.format === 'url') {
+          return "https://example.com";
         }
         return "string";
 
@@ -1013,6 +1035,7 @@ async function generateExampleFromSchema(schema, cardType) {
         return {};
 
       default:
+        // No type specified - might be schema composition or generic
         return "string";
     }
   }
