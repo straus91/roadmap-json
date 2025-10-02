@@ -588,39 +588,45 @@ function addDynamicHeaderTemplates(schema, path = 'root', depth = 0) {
 
       console.log(`${indent}  🔍 Checking: ${currentPath} (type: ${prop.type})`);
 
-      // If we find an array that contains objects
-      if (prop.type === 'array' && prop.items && prop.items.type === 'object') {
-        // Only add a template if one isn't already defined in the schema
-        if (!prop.items.headerTemplate) {
-          const itemProps = prop.items.properties || {};
-          let titleProp = null;
+      // Handle ALL arrays, not just arrays of objects
+      if (prop.type === 'array' && prop.items) {
+        // If array contains objects, add headerTemplate
+        if (prop.items.type === 'object') {
+          // Only add a template if one isn't already defined in the schema
+          if (!prop.items.headerTemplate) {
+            const itemProps = prop.items.properties || {};
+            let titleProp = null;
 
-          // Heuristic: Intelligently find the best property for the title
-          // by checking for common, descriptive property names.
-          const potentialTitleProps = ['Name', 'Title', 'Label', 'Description', 'ID', 'Result Information'];
-          for (const p of potentialTitleProps) {
-            if (itemProps[p] && itemProps[p].type === 'string') {
-              titleProp = p;
-              break; // Use the first one found
+            // Heuristic: Intelligently find the best property for the title
+            // by checking for common, descriptive property names.
+            const potentialTitleProps = ['Name', 'Title', 'Label', 'Description', 'ID', 'Result Information'];
+            for (const p of potentialTitleProps) {
+              if (itemProps[p] && itemProps[p].type === 'string') {
+                titleProp = p;
+                break; // Use the first one found
+              }
             }
-          }
 
-          // If a good title property was found, inject the dynamic headerTemplate rule
-          if (titleProp) {
-            const fallbackTitle = prop.items.title || 'Item';
-            // Use bracket notation for properties that might contain spaces
-            prop.items.headerTemplate = `{{self['${titleProp}'] || '${fallbackTitle} ' + (i+1)}}`;
-            console.log(`${indent}  ✅ Added headerTemplate to ${currentPath} using "${titleProp}"`);
+            // If a good title property was found, inject the dynamic headerTemplate rule
+            if (titleProp) {
+              const fallbackTitle = prop.items.title || 'Item';
+              // Use bracket notation for properties that might contain spaces
+              prop.items.headerTemplate = `{{self['${titleProp}'] || '${fallbackTitle} ' + (i+1)}}`;
+              console.log(`${indent}  ✅ Added headerTemplate to ${currentPath} using "${titleProp}"`);
+            } else {
+              console.log(`${indent}  ⚠️ No title property found for ${currentPath}`);
+            }
           } else {
-            console.log(`${indent}  ⚠️ No title property found for ${currentPath}`);
+            console.log(`${indent}  ℹ️ ${currentPath} already has headerTemplate`);
           }
-        } else {
-          console.log(`${indent}  ℹ️ ${currentPath} already has headerTemplate`);
-        }
 
-        // *** CRITICAL FIX: Recurse into array items to handle nested structures ***
-        console.log(`${indent}  ↓ Recursing into array items of ${currentPath}`);
-        addDynamicHeaderTemplates(prop.items, `${currentPath}[items]`, depth + 1);
+          // Recurse into array items to handle nested structures
+          console.log(`${indent}  ↓ Recursing into object array items of ${currentPath}`);
+          addDynamicHeaderTemplates(prop.items, `${currentPath}[items]`, depth + 1);
+        } else {
+          // Array of simple types (string, number, etc.) - no headerTemplate needed
+          console.log(`${indent}  ℹ️ ${currentPath} is array of ${prop.items.type} (no headerTemplate needed)`);
+        }
       }
       // If we find a nested object, recurse into it
       else if (prop.type === 'object') {
@@ -657,19 +663,27 @@ function disableAdditionalProperties(schema, path = 'root', depth = 0) {
       const prop = schema.properties[key];
       const currentPath = `${path}.${key}`;
 
-      // If we find an array that contains objects
-      if (prop.type === 'array' && prop.items && prop.items.type === 'object') {
-        // Only set if not already explicitly defined
-        if (prop.items.additionalProperties === undefined) {
-          prop.items.additionalProperties = false;
-          console.log(`${indent}  ✅ Disabled additionalProperties for ${currentPath}[items]`);
-        } else {
-          console.log(`${indent}  ℹ️ ${currentPath}[items] already has additionalProperties set`);
-        }
+      // Handle ALL arrays, not just arrays of objects
+      if (prop.type === 'array' && prop.items) {
+        console.log(`${indent}  🔍 Checking array: ${currentPath} (item type: ${prop.items.type})`);
 
-        // *** CRITICAL FIX: Recurse into array items to handle nested structures ***
-        console.log(`${indent}  ↓ Recursing into array items of ${currentPath}`);
-        disableAdditionalProperties(prop.items, `${currentPath}[items]`, depth + 1);
+        // If array contains objects, disable additionalProperties
+        if (prop.items.type === 'object') {
+          // Only set if not already explicitly defined
+          if (prop.items.additionalProperties === undefined) {
+            prop.items.additionalProperties = false;
+            console.log(`${indent}  ✅ Disabled additionalProperties for ${currentPath}[items]`);
+          } else {
+            console.log(`${indent}  ℹ️ ${currentPath}[items] already has additionalProperties set`);
+          }
+
+          // *** CRITICAL FIX: Recurse into array items to handle nested structures ***
+          console.log(`${indent}  ↓ Recursing into object array items of ${currentPath}`);
+          disableAdditionalProperties(prop.items, `${currentPath}[items]`, depth + 1);
+        } else {
+          // Array of simple types (string, number, etc.) - no additionalProperties needed
+          console.log(`${indent}  ℹ️ ${currentPath} is array of ${prop.items.type} (no additionalProperties needed)`);
+        }
       }
       // If we find a nested object, recurse into it
       else if (prop.type === 'object') {
