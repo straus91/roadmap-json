@@ -184,29 +184,16 @@ async function initializeEditor(initialData = null) {
             return;
         }
 
-        // *** Clone schema to prevent mutation of cached original ***
-        const schemaClone = JSON.parse(JSON.stringify(schema));
-
-        // *** Enhance schema with all UI improvements (in-memory only) ***
-        enhanceSchemaForUI(schemaClone);
-
-        // *** Normalize initial data to match schema field names (case-insensitive) ***
-        let normalizedData = initialData || {};
-        if (initialData && Object.keys(initialData).length > 0) {
-            normalizedData = normalizeJsonToSchema(initialData, schemaClone);
-            console.log('📝 Normalized data:', normalizedData);
-        }
-
         // Update schema info display
         updateSchemaInfo();
 
         // Clear loading indicator
         editorHolder.innerHTML = '';
 
-        // Initialize JSON Editor
+        // Initialize JSON Editor with vanilla settings
         editor = new JSONEditor(editorHolder, {
-            schema: schemaClone,
-            startval: normalizedData,
+            schema: schema,
+            startval: initialData || {},
             theme: 'bootstrap4',
             iconlib: 'fontawesome4',
             show_errors: 'interaction',
@@ -238,17 +225,6 @@ async function initializeEditor(initialData = null) {
             setTimeout(() => {
                 addExamplesToFields();
             }, FORM_RENDER_DELAY_MS);
-
-            // Fix dynamic array labels (fallback for fields not in schema)
-            setTimeout(() => {
-                try {
-                    console.log('⏰ Timer fired: About to run fixDynamicArrayLabels...');
-                    fixDynamicArrayLabels();
-                } catch (error) {
-                    console.error('💥 CRITICAL ERROR in fixDynamicArrayLabels:', error);
-                    alert('Error fixing array labels: ' + error.message);
-                }
-            }, FORM_RENDER_DELAY_MS + 500);
 
             // Expand all by default
             setTimeout(() => {
