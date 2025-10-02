@@ -86,7 +86,13 @@ header .display-4 {
     z-index: 1;
 }
 
-/* Force specific containers to allow dropdown overflow */
+/* ========================================
+   CUSTOM JSON EDITOR STYLES - COMMENTED OUT FOR VANILLA APPEARANCE
+   Uncomment sections below if you want custom styling
+   ======================================== */
+
+/*
+Force specific containers to allow dropdown overflow
 #editor_holder .json-editor-object,
 #editor-holder .json-editor-object,
 #editor_holder .well,
@@ -94,7 +100,7 @@ header .display-4 {
     overflow: visible !important;
 }
 
-/* Fix dropdown overflow issues in Model Information - Enhanced */
+Fix dropdown overflow issues in Model Information - Enhanced
 .json-editor .well,
 .json-editor .form-group,
 .json-editor [data-schemapath],
@@ -104,34 +110,34 @@ header .display-4 {
     z-index: auto !important;
 }
 
-/* Base select styling with proper layering */
+Base select styling with proper layering
 .json-editor select {
     z-index: 1050 !important;
     position: relative !important;
     margin-bottom: 15px !important;
 }
 
-/* Higher priority when focused */
+Higher priority when focused
 .json-editor select:focus {
     z-index: 2000 !important;
     position: relative !important;
 }
 
-/* Edge browser specific dropdown fixes */
+Edge browser specific dropdown fixes
 .json-editor select option {
     background-color: white !important;
     color: black !important;
     padding: 2px 4px !important;
 }
 
-/* Force dropdown list appearance in Edge */
+Force dropdown list appearance in Edge
 .json-editor select[size="1"] {
     appearance: menulist !important;
     -webkit-appearance: menulist !important;
     -moz-appearance: menulist !important;
 }
 
-/* Property name inputs positioning */
+Property name inputs positioning
 .json-editor input[placeholder*="Property name"],
 .json-editor .property-selector {
     z-index: 999 !important;
@@ -140,7 +146,7 @@ header .display-4 {
     margin-bottom: 10px !important;
 }
 
-/* Prevent property controls from overlapping dropdowns */
+Prevent property controls from overlapping dropdowns
 .json-editor .property-controls {
     margin-top: 25px !important;
     z-index: 998 !important;
@@ -150,23 +156,23 @@ header .display-4 {
     border-top: 1px solid #e9ecef !important;
 }
 
-/* Container spacing to prevent overlap */
+Container spacing to prevent overlap
 .json-editor .well .form-group:has(select) {
     margin-bottom: 25px !important;
 }
 
-/* Special handling for object property containers */
+Special handling for object property containers
 .json-editor .well:has(select) {
     padding-bottom: 25px !important;
 }
 
-/* Ensure object properties container allows overflow */
+Ensure object properties container allows overflow
 .json-editor .object-properties {
     overflow: visible !important;
     position: relative;
 }
 
-/* Fix for property controls at bottom of objects */
+Fix for property controls at bottom of objects
 .json-editor .property-controls {
     margin-top: 15px;
     z-index: 1000;
@@ -175,7 +181,7 @@ header .display-4 {
     padding: 5px 0;
 }
 
-/* Custom styling for JSON Editor form elements */
+Custom styling for JSON Editor form elements
 .json-editor-btn {
     margin-right: 5px;
     margin-bottom: 5px;
@@ -194,14 +200,14 @@ header .display-4 {
     box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
 }
 
-/* Required field indicators */
+Required field indicators
 .json-editor label.required::after {
     content: " *";
     color: #dc3545;
     font-weight: bold;
 }
 
-/* Array controls styling */
+Array controls styling
 .json-editor .array-controls {
     margin-bottom: 10px;
 }
@@ -213,7 +219,7 @@ header .display-4 {
     border-radius: 4px;
 }
 
-/* Object properties styling */
+Object properties styling
 .json-editor .well {
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
@@ -221,6 +227,7 @@ header .display-4 {
     padding: 15px;
     margin-bottom: 15px;
 }
+*/
 
 /* Checkbox styling for content codes */
 [data-schemapath*="Content"] .checkbox-group {
@@ -518,10 +525,11 @@ code.small {
 }
 
 /* ========================================
-   Enhanced UI for Arrays and Tables
+   Enhanced UI for Arrays and Tables - COMMENTED OUT FOR VANILLA APPEARANCE
    ======================================== */
 
-/* Improve readability of array item blocks */
+/*
+Improve readability of array item blocks
 .json-editor .well {
     border-left: 3px solid #007bff !important;
     margin-top: 10px !important;
@@ -531,13 +539,13 @@ code.small {
     box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
 }
 
-/* Add alternating background colors for array items */
+Add alternating background colors for array items
 .json-editor-btn-add + div > .well:nth-child(even),
 .json-editor > div > .well:nth-child(even) {
     background-color: #f8f9fa !important;
 }
 
-/* Style for collapsed array items with headers */
+Style for collapsed array items with headers
 .json-editor .well > h3 {
     font-size: 0.95rem !important;
     font-weight: 500 !important;
@@ -547,7 +555,7 @@ code.small {
     border-bottom: 1px solid #e9ecef !important;
 }
 
-/* Table format styling */
+Table format styling
 .json-editor table {
     width: 100% !important;
     margin-bottom: 1rem !important;
@@ -581,7 +589,7 @@ code.small {
     background-color: #fdfdfd !important;
 }
 
-/* Table input fields */
+Table input fields
 .json-editor table input[type="text"],
 .json-editor table input[type="number"],
 .json-editor table select {
@@ -600,66 +608,67 @@ code.small {
     box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25) !important;
 }
 
-/* Table action buttons */
+Table action buttons
 .json-editor table button {
     padding: 0.25rem 0.5rem !important;
     font-size: 0.75rem !important;
     margin: 0 2px !important;
 }
 
-/* Category tabs styling (if JSON Editor supports it) */
+Category tabs styling (if JSON Editor supports it)
 .json-editor-btn-edit_properties {
     margin-top: 10px !important;
 }
 
-/* Array add button styling */
+Array add button styling
 .json-editor-btn-add {
     margin-top: 10px !important;
     margin-bottom: 15px !important;
 }
 
-/* Spacing between array items */
+Spacing between array items
 .json-editor [data-schemapath] > .row {
     margin-bottom: 10px !important;
 }
 
-/* Better visual separation for nested objects */
+Better visual separation for nested objects
 .json-editor .well .well {
     border-left-color: #6c757d !important;
     background-color: #fefefe !important;
     margin-left: 10px !important;
 }
 
-/* ========================================
-   Hide Unwanted JSON Editor UI Elements
-   ======================================== */
+========================================
+   Hide Unwanted JSON Editor UI Elements - COMMENTED OUT
+   ========================================
 
-/* Hide type selector dropdowns (object, string, array, etc.) */
-/* These dropdowns appear inline next to field labels showing types like "string", "array", "object" */
-/* They are typically small selects with gray italic text showing the type */
+Hide type selector dropdowns (object, string, array, etc.)
+These dropdowns appear inline next to field labels showing types like "string", "array", "object"
+They are typically small selects with gray italic text showing the type
 
-/* Method 1: Hide selects that only contain JSON type options */
+Method 1: Hide selects that only contain JSON type options
 .json-editor select:has(option[value="string"]):has(option[value="number"]):has(option[value="object"]):has(option[value="array"]) {
     display: none !important;
 }
 
-/* Method 2: Target by position - type selectors appear after field labels */
+Method 2: Target by position - type selectors appear after field labels
 .json-editor > div > label + select,
 .json-editor .form-group > label + select {
     display: none !important;
 }
 
-/* Method 3: More specific - these selects are usually inline with the label */
+Method 3: More specific - these selects are usually inline with the label
 .json-editor label select {
     display: none !important;
 }
 
-/* Hide "Edit Properties" buttons on objects */
+Hide "Edit Properties" buttons on objects
 .json-editor-btn-edit_properties {
     display: none !important;
 }
 
-/* Hide property selector controls */
+Hide property selector controls
 .json-editor .property-selector {
     display: none !important;
 }
+*/
