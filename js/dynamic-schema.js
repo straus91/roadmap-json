@@ -378,37 +378,15 @@ class DynamicSchemaProcessor {
                 0
             );
 
-            // Use categorization to build tabs dynamically (schema-agnostic!)
-            const categories = this.categorizeProperties(allProcessedProps, cardType);
-
+            // Use GitHub schema structure AS-IS (no re-categorization)
+            // This respects the natural hierarchy defined in the ROADMAP schema
             const jsonEditorSchema = {
                 type: "object",
                 title: sectionName,
-                format: "tabs", // Enable the tabbed interface
-                properties: {}
+                properties: allProcessedProps  // Use schema structure directly
             };
 
-            // Build tabs from categories (no hardcoding!)
-            Object.entries(categories).forEach(([categoryName, propertyKeys]) => {
-                const tabKey = categoryName.toLowerCase().replace(/\s/g, '_').replace(/&/g, 'and');
-                const tabProperties = {};
-
-                propertyKeys.forEach(propKey => {
-                    if (allProcessedProps[propKey]) {
-                        tabProperties[propKey] = allProcessedProps[propKey];
-                    }
-                });
-
-                if (Object.keys(tabProperties).length > 0) {
-                    jsonEditorSchema.properties[tabKey] = {
-                        title: categoryName,
-                        type: 'object',
-                        properties: tabProperties
-                    };
-                }
-            });
-
-            console.log(`✅ Schema converted for ${cardType} with ${Object.keys(categories).length} dynamic tabs`);
+            console.log(`✅ Schema converted for ${cardType} with ${Object.keys(allProcessedProps).length} properties (GitHub structure preserved)`);
             return jsonEditorSchema;
 
         } catch (error) {
