@@ -2898,14 +2898,14 @@ async function handleDebugPdfUpload(event) {
     `;
 
     try {
-        debugDetectedType = await analyzeAndSelectSchema(file);
-        debugCardType = debugDetectedType;
+        debugState.detectedType = await analyzeAndSelectSchema(file);
+        debugState.cardType = debugState.detectedType;
 
         // Update UI to show detection
-        setDebugCardType(debugCardType);
+        setDebugCardType(debugState.cardType);
         updateDebugDetectionDisplay();
 
-        console.log('✅ Auto-detected card type:', debugCardType);
+        console.log('✅ Auto-detected card type:', debugState.cardType);
     } catch (error) {
         console.error('Error during PDF analysis:', error);
         // Continue with current selection if analysis fails
@@ -2916,8 +2916,8 @@ async function handleDebugPdfUpload(event) {
 
     try {
         const customUrl = document.getElementById('debug-custom-schema-url').value;
-        const schemaUrl = getSchemaUrl(debugCardType, debugSchemaSource, customUrl);
-        debugSchemaUrl = schemaUrl;
+        const schemaUrl = getSchemaUrl(debugState.cardType, debugState.schemaSource, customUrl);
+        debugState.schemaUrl = schemaUrl;
 
         customSchema = await fetchAndCacheSchema(schemaUrl);
         console.log('✅ Schema loaded from:', schemaUrl);
@@ -2943,8 +2943,8 @@ async function handleDebugPdfUpload(event) {
     try {
         const formData = new FormData();
         formData.append('pdf', file);
-        formData.append('mode', debugProcessingMode);
-        formData.append('cardType', debugCardType);
+        formData.append('mode', debugState.processingMode);
+        formData.append('cardType', debugState.cardType);
 
         // Send schema as JSON string if available
         if (customSchema) {
@@ -2952,10 +2952,10 @@ async function handleDebugPdfUpload(event) {
         }
 
         console.log('🔍 DEBUG: Sending to backend:', {
-            mode: debugProcessingMode,
-            cardType: debugCardType,
-            schemaSource: debugSchemaSource,
-            schemaUrl: debugSchemaUrl,
+            mode: debugState.processingMode,
+            cardType: debugState.cardType,
+            schemaSource: debugState.schemaSource,
+            schemaUrl: debugState.schemaUrl,
             hasCustomSchema: !!customSchema
         });
 
@@ -2986,56 +2986,135 @@ async function handleDebugPdfUpload(event) {
 }
 
 function updateDebugDisplays(debugData) {
-    // Update Document AI section
+    // Update Document AI section with detailed stats
+    const summary = debugData.processing_summary || {};
+    const metadata = debugData.metadata || {};
+
     document.getElementById('docai-status').innerHTML = '<span class="badge badge-success">Complete</span>';
-    
-    // Text preview
-    const textPreview = debugData.extractedText ? debugData.extractedText.substring(0, 2000) + '...' : 'No text extracted';
+
+    // Enhanced text preview with statistics
+    const textLength = debugData.extractedText?.length || 0;
+    const textPreview = debugData.extractedText
+        ? `=== EXTRACTED TEXT (${textLength.toLocaleString()} chars) ===\n\n${debugData.extractedText.substring(0, 3000)}${textLength > 3000 ? '\n\n... [text continues - showing first 3000 chars]' : ''}`
+        : 'No text extracted';
     document.getElementById('debug-text-preview').textContent = textPreview;
-    
-    // Tables preview
-    const tablesText = debugData.extractedTables && debugData.extractedTables.length > 0 
-        ? JSON.stringify(debugData.extractedTables, null, 2)
+
+    // Enhanced tables preview with detailed formatting
+    const tablesText = debugData.extractedTables && debugData.extractedTables.length > 0
+        ? `=== EXTRACTED TABLES (${debugData.extractedTables.length} found) ===\n\n` +
+          debugData.extractedTables.map((table, idx) =>
+            `TABLE ${idx + 1} (Page ${table.page}):\n` +
+            `Headers: ${JSON.stringify(table.headers)}\n` +
+            `Rows (${table.rows.length}):\n${JSON.stringify(table.rows, null, 2)}`
+          ).join('\n\n---\n\n')
         : 'No tables found';
     document.getElementById('debug-tables-preview').textContent = tablesText;
-    
-    // Images preview
-    const imagesText = debugData.referencedImages && debugData.referencedImages.length > 0
-        ? debugData.referencedImages.map(img => `Figure ${img.figureNumber} (Page ${img.page}) - ${img.referenced ? 'Referenced' : 'Available'}`).join('\n')
-        : 'No images found';
+
+    // Enhanced images preview with all images info
+    const totalImages = debugData.allImagesFound?.length || 0;
+    const selectedImages = debugData.referencedImages?.length || 0;
+    const figureRefs = debugData.figureReferences || [];
+
+    const imagesText = `=== IMAGE ANALYSIS ===\n\n` +
+        `Total images found: ${totalImages}\n` +
+        `Selected for AI: ${selectedImages}\n` +
+        `Figure references in text: ${figureRefs.length > 0 ? figureRefs.join(', ') : 'none'}\n\n` +
+        (debugData.referencedImages && debugData.referencedImages.length > 0
+            ? `SELECTED IMAGES:\n` + debugData.referencedImages.map(img =>
+                `• Figure ${img.figureNumber} (Page ${img.page}) - ${img.referenced ? 'Referenced in text ✓' : 'Not referenced'}`
+              ).join('\n')
+            : 'No images selected for AI processing');
     document.getElementById('debug-images-preview').textContent = imagesText;
-    
-    // Enhanced single-step prompt preview
+
+    // Enhanced single-step prompt preview with full details
     if (debugData.enhanced_prompt) {
-        document.getElementById('extraction-status').innerHTML = '<span class="badge badge-success">Enhanced Prompt Ready</span>';
-        document.getElementById('debug-extraction-prompt').textContent = debugData.enhanced_prompt;
-        
-        // Hide step 2 since we use single-step now
-        document.getElementById('formatting-status').innerHTML = '<span class="badge badge-secondary">Single-Step Process</span>';
-        document.getElementById('debug-formatting-prompt').textContent = 'This system now uses a single enhanced prompt instead of separate extraction and formatting steps.';
+        const promptLength = debugData.enhanced_prompt.length;
+        document.getElementById('extraction-status').innerHTML = `<span class="badge badge-success">Complete (${promptLength.toLocaleString()} chars)</span>`;
+
+        // Show comprehensive prompt with metadata
+        const promptDisplay = `=== AI EXTRACTION PROMPT ===\n\n` +
+            `Prompt Type: Enhanced Single-Step Extraction\n` +
+            `Card Type: ${summary.card_type || 'unknown'}\n` +
+            `Processing Mode: ${summary.processing_mode || 'unknown'}\n` +
+            `Prompt Length: ${promptLength.toLocaleString()} characters\n` +
+            `Schema Source: ${debugState.schemaSource || 'unknown'}\n` +
+            `Schema URL: ${debugState.schemaUrl || 'none'}\n\n` +
+            `--- FULL PROMPT SENT TO GEMINI AI ---\n\n` +
+            debugData.enhanced_prompt;
+
+        document.getElementById('debug-extraction-prompt').textContent = promptDisplay;
+
+        // Update step 2 to show it's single-step process
+        document.getElementById('formatting-status').innerHTML = '<span class="badge badge-secondary">N/A (Single-Step)</span>';
+        document.getElementById('debug-formatting-prompt').textContent =
+            '=== WORKFLOW INFORMATION ===\n\n' +
+            'This system uses a SINGLE-STEP enhanced prompt that:\n' +
+            '• Extracts structured information from the PDF\n' +
+            '• Formats it directly into ROADMAP JSON schema\n' +
+            '• Includes strict schema enforcement rules\n' +
+            '• Maps fields correctly to avoid schema mismatches\n\n' +
+            'Previously used two-step approach (extraction → formatting) has been deprecated.\n' +
+            'The single enhanced prompt shown above is sent directly to Gemini AI.';
     }
-    
-    // Results preview
+
+    // Results preview (if AI has been called)
     if (debugData.roadmapResults) {
         document.getElementById('results-status').innerHTML = '<span class="badge badge-success">Complete</span>';
-        document.getElementById('debug-results-preview').textContent = JSON.stringify(debugData.roadmapResults, null, 2);
+        const resultsDisplay = `=== AI EXTRACTION RESULTS ===\n\n` +
+            `Card Type: ${summary.card_type || 'unknown'}\n` +
+            `Result Length: ${JSON.stringify(debugData.roadmapResults).length.toLocaleString()} chars\n\n` +
+            `--- EXTRACTED JSON ---\n\n` +
+            JSON.stringify(debugData.roadmapResults, null, 2);
+        document.getElementById('debug-results-preview').textContent = resultsDisplay;
+    } else {
+        document.getElementById('results-status').innerHTML = '<span class="badge badge-info">Preview Only</span>';
+        document.getElementById('debug-results-preview').textContent =
+            '=== DEBUG MODE ===\n\n' +
+            'This is a debug preview showing what would be sent to the AI.\n' +
+            'No actual AI extraction has been performed.\n\n' +
+            'To perform full extraction, use the main PDF upload on the home screen.';
     }
-    
-    // Update overall status with current single-step workflow info
-    const workflowType = debugData.processing_summary?.workflow_type || 'enhanced_single_step_extraction';
-    const enhancedPromptLength = debugData.processing_summary?.enhanced_prompt_length || 0;
-    
+
+    // Update overall status with comprehensive processing info
     document.getElementById('debug-status').innerHTML = `
         <div class="alert alert-success">
-            <i class="fa fa-check-circle mr-2"></i>Processing complete! 
-            <strong>Enhanced Single-Step Extraction</strong><br>
+            <i class="fa fa-check-circle mr-2"></i><strong>Debug Processing Complete</strong><br>
             <small>
-                Document: ${debugData.extractedText?.length || 0} chars, 
-                Tables: ${debugData.extractedTables?.length || 0}, 
-                Images: ${debugData.referencedImages?.length || 0}<br>
-                Enhanced Prompt: ${enhancedPromptLength.toLocaleString()} chars, 
-                Mode: ${debugData.processing_summary?.processing_mode || 'unknown'}
+                <strong>Document Analysis:</strong><br>
+                • Pages processed: ${summary.pages_processed || 0}<br>
+                • Text extracted: ${textLength.toLocaleString()} characters<br>
+                • Tables found: ${debugData.extractedTables?.length || 0}<br>
+                • Total images found: ${totalImages}<br>
+                • Images selected for AI: ${selectedImages}<br>
+                <br>
+                <strong>AI Configuration:</strong><br>
+                • Card type: ${summary.card_type || 'unknown'}<br>
+                • Processing mode: ${summary.processing_mode || 'unknown'}<br>
+                • Schema source: ${debugState.schemaSource}<br>
+                • Workflow: ${summary.workflow_type || 'enhanced_single_step_extraction'}<br>
+                • Prompt length: ${(summary.enhanced_prompt_length || 0).toLocaleString()} chars<br>
             </small>
         </div>
     `;
+
+    // Log comprehensive extraction details to console
+    console.log('🔍 ===== DEBUG EXTRACTION COMPLETE =====');
+    console.log('📄 Document:', {
+        filename: metadata.filename,
+        textLength: textLength,
+        tablesCount: debugData.extractedTables?.length || 0,
+        imagesTotal: totalImages,
+        imagesSelected: selectedImages,
+        pagesProcessed: summary.pages_processed
+    });
+    console.log('🤖 AI Configuration:', {
+        cardType: summary.card_type,
+        processingMode: summary.processing_mode,
+        schemaSource: debugState.schemaSource,
+        schemaUrl: debugState.schemaUrl,
+        workflowType: summary.workflow_type,
+        promptLength: summary.enhanced_prompt_length
+    });
+    console.log('📋 Full prompt available in "AI Extraction Step 1" section');
+    console.log('=======================================');
 }
