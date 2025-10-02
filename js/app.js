@@ -600,6 +600,9 @@ function addDynamicHeaderTemplates(schema) {
             prop.items.headerTemplate = `{{self['${titleProp}'] || '${fallbackTitle} ' + (i+1)}}`;
           }
         }
+
+        // *** CRITICAL FIX: Recurse into array items to handle nested structures ***
+        addDynamicHeaderTemplates(prop.items);
       }
       // If we find a nested object, recurse into it
       else if (prop.type === 'object') {
@@ -631,6 +634,9 @@ function disableAdditionalProperties(schema) {
         if (prop.items.additionalProperties === undefined) {
           prop.items.additionalProperties = false;
         }
+
+        // *** CRITICAL FIX: Recurse into array items to handle nested structures ***
+        disableAdditionalProperties(prop.items);
       }
       // If we find a nested object, recurse into it
       else if (prop.type === 'object') {
