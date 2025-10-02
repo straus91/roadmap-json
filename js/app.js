@@ -1,28 +1,64 @@
 // ROADMAP Model Card Editor - Production Version
 
+// ==============================================================================
+// CONFIGURATION & CONSTANTS
+// ==============================================================================
+
+// Schema URLs
+const GITHUB_SCHEMAS = {
+    model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.model.json',
+    dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.dataset.json'
+};
+
+// UI Timing Constants
+const FORM_RENDER_DELAY_MS = 1500;     // Wait for JSON Editor to fully render
+const ALERT_AUTO_DISMISS_MS = 5000;    // Default alert auto-dismiss duration
+const DEBOUNCE_DELAY_MS = 300;         // Input debounce delay
+
+// Processing Limits
+const MAX_PROMPT_TEXT_LENGTH = 15000;  // Character limit for AI prompts
+const MAX_PDF_SIZE_MB = 10;            // Maximum PDF file size
+const MAX_SCHEMA_DEPTH = 10;           // Maximum recursion depth for schema processing
+
+// Schema Sources
+const SCHEMA_SOURCES = {
+    GITHUB: 'github',
+    CUSTOM: 'custom'
+};
+
+// Processing Modes
+const PROCESSING_MODES = {
+    MULTIMODAL: 'multimodal',
+    TEXT_ONLY: 'text-only'
+};
+
+// Card Types
+const CARD_TYPES = {
+    MODEL: 'model',
+    DATASET: 'dataset'
+};
+
+// ==============================================================================
+// STATE MANAGEMENT
+// ==============================================================================
+
 // Global variables
 let editor = null;
 let currentCardType = null;
 let isJsonPreviewVisible = false;
 let schemaProcessor = null;
-let pdfProcessingMode = 'multimodal'; // Default to multimodal
-let debugProcessingMode = 'multimodal'; // Default to multimodal
-let pdfCardType = 'model'; // Default to model card
-let debugCardType = 'model'; // Default to model card
+let pdfProcessingMode = PROCESSING_MODES.MULTIMODAL;
+let debugProcessingMode = PROCESSING_MODES.MULTIMODAL;
+let pdfCardType = CARD_TYPES.MODEL;
+let debugCardType = CARD_TYPES.MODEL;
 
 // Schema source variables
-let pdfSchemaSource = 'github'; // 'github' or 'custom'
-let debugSchemaSource = 'github'; // 'github' or 'custom'
+let pdfSchemaSource = SCHEMA_SOURCES.GITHUB;
+let debugSchemaSource = SCHEMA_SOURCES.GITHUB;
 let pdfSchemaUrl = null;
 let debugSchemaUrl = null;
-let pdfDetectedType = 'model'; // Auto-detected type from PDF
-let debugDetectedType = 'model'; // Auto-detected type from PDF
-
-// GitHub schema URLs
-const GITHUB_SCHEMAS = {
-    model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.model.json',
-    dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.dataset.json'
-};
+let pdfDetectedType = CARD_TYPES.MODEL;
+let debugDetectedType = CARD_TYPES.MODEL;
 
 // Application initialization
 document.addEventListener('DOMContentLoaded', function() {
@@ -188,7 +224,7 @@ async function initializeEditor(initialData = null) {
             // Add examples to form fields - wait longer for full form rendering
             setTimeout(() => {
                 addExamplesToFields();
-            }, 1500);
+            }, FORM_RENDER_DELAY_MS);
             
             
             // Expand all by default
@@ -321,9 +357,9 @@ function loadFile() {
         editorData = convertTxtToRoadmapFormat(jsonData, cardType);
     } else {
         // Standard JSON format
-        if (cardType === 'model' && jsonData.Model) {
+        if (cardType === CARD_TYPES.MODEL && jsonData.Model) {
             editorData = jsonData.Model;
-        } else if (cardType === 'dataset' && jsonData.Dataset) {
+        } else if (cardType === CARD_TYPES.DATASET && jsonData.Dataset) {
             editorData = jsonData.Dataset;
         }
     }
@@ -416,9 +452,9 @@ function downloadJSON() {
         };
         
         // Add the appropriate section
-        if (currentCardType === 'model') {
+        if (currentCardType === CARD_TYPES.MODEL) {
             roadmapData.Model = editorData;
-        } else if (currentCardType === 'dataset') {
+        } else if (currentCardType === CARD_TYPES.DATASET) {
             roadmapData.Dataset = editorData;
         }
         
@@ -444,7 +480,7 @@ function downloadJSON() {
 }
 
 // Utility functions
-function showAlert(message, type = 'info', duration = 5000) {
+function showAlert(message, type = 'info', duration = ALERT_AUTO_DISMISS_MS) {
     // Remove existing alerts
     const existingAlerts = document.querySelectorAll('.alert.custom-alert');
     existingAlerts.forEach(alert => alert.remove());
@@ -641,9 +677,9 @@ function detectFileFormat(fileName, jsonData) {
 
 // Convert TXT format to ROADMAP format
 function convertTxtToRoadmapFormat(txtData, cardType) {
-    if (cardType === 'model') {
+    if (cardType === CARD_TYPES.MODEL) {
         return convertTxtModelToRoadmap(txtData);
-    } else if (cardType === 'dataset') {
+    } else if (cardType === CARD_TYPES.DATASET) {
         return convertTxtDatasetToRoadmap(txtData);
     }
     return txtData;
@@ -846,9 +882,9 @@ function downloadTXT() {
         
         // Convert to TXT format
         let txtData;
-        if (currentCardType === 'model') {
+        if (currentCardType === CARD_TYPES.MODEL) {
             txtData = convertRoadmapToTxtModel(editorData);
-        } else if (currentCardType === 'dataset') {
+        } else if (currentCardType === CARD_TYPES.DATASET) {
             txtData = convertRoadmapToTxtDataset(editorData);
         }
         
@@ -1547,7 +1583,7 @@ function setPdfProcessingMode(mode) {
     const multimodalBtn = document.getElementById('pdf-multimodal-btn');
     const textOnlyBtn = document.getElementById('pdf-text-only-btn');
     
-    if (mode === 'multimodal') {
+    if (mode === PROCESSING_MODES.MULTIMODAL) {
         multimodalBtn.classList.add('active');
         textOnlyBtn.classList.remove('active');
     } else {
@@ -1558,12 +1594,12 @@ function setPdfProcessingMode(mode) {
 
 function setDebugProcessingMode(mode) {
     debugProcessingMode = mode;
-    
+
     // Update button states
     const multimodalBtn = document.getElementById('debug-multimodal-btn');
     const textOnlyBtn = document.getElementById('debug-text-only-btn');
-    
-    if (mode === 'multimodal') {
+
+    if (mode === PROCESSING_MODES.MULTIMODAL) {
         multimodalBtn.classList.add('active');
         textOnlyBtn.classList.remove('active');
     } else {
@@ -1580,7 +1616,7 @@ function setPdfCardType(cardType) {
     const modelBtn = document.getElementById('pdf-model-btn');
     const datasetBtn = document.getElementById('pdf-dataset-btn');
     
-    if (cardType === 'model') {
+    if (cardType === CARD_TYPES.MODEL) {
         modelBtn.classList.add('active');
         datasetBtn.classList.remove('active');
     } else {
@@ -1591,12 +1627,12 @@ function setPdfCardType(cardType) {
 
 function setDebugCardType(cardType) {
     debugCardType = cardType;
-    
+
     // Update button states
     const modelBtn = document.getElementById('debug-model-btn');
     const datasetBtn = document.getElementById('debug-dataset-btn');
-    
-    if (cardType === 'model') {
+
+    if (cardType === CARD_TYPES.MODEL) {
         modelBtn.classList.add('active');
         datasetBtn.classList.remove('active');
     } else {
@@ -1613,7 +1649,7 @@ function setPdfSchemaSource(source) {
     const customBtn = document.getElementById('pdf-custom-schema-btn');
     const customInput = document.getElementById('pdf-custom-schema-url');
 
-    if (source === 'github') {
+    if (source === SCHEMA_SOURCES.GITHUB) {
         githubBtn.classList.add('active');
         customBtn.classList.remove('active');
         customInput.style.display = 'none';
@@ -1631,7 +1667,7 @@ function setDebugSchemaSource(source) {
     const customBtn = document.getElementById('debug-custom-schema-btn');
     const customInput = document.getElementById('debug-custom-schema-url');
 
-    if (source === 'github') {
+    if (source === SCHEMA_SOURCES.GITHUB) {
         githubBtn.classList.add('active');
         customBtn.classList.remove('active');
         customInput.style.display = 'none';
@@ -1883,7 +1919,7 @@ function togglePdfDetection(event) {
     event.preventDefault();
 
     // Toggle between model and dataset
-    pdfCardType = pdfCardType === 'model' ? 'dataset' : 'model';
+    pdfCardType = pdfCardType === CARD_TYPES.MODEL ? CARD_TYPES.DATASET : CARD_TYPES.MODEL;
 
     // Update button states
     setPdfCardType(pdfCardType);
@@ -1896,7 +1932,7 @@ function toggleDebugDetection(event) {
     event.preventDefault();
 
     // Toggle between model and dataset
-    debugCardType = debugCardType === 'model' ? 'dataset' : 'model';
+    debugCardType = debugCardType === CARD_TYPES.MODEL ? CARD_TYPES.DATASET : CARD_TYPES.MODEL;
 
     // Update button states
     setDebugCardType(debugCardType);
@@ -1910,8 +1946,8 @@ function updatePdfDetectionDisplay() {
     const detectedTypeSpan = document.getElementById('pdf-detected-type');
     const toggleLink = document.getElementById('pdf-toggle-detection');
 
-    detectedTypeSpan.textContent = pdfCardType === 'model' ? 'Model Card' : 'Dataset Card';
-    toggleLink.textContent = `[Switch to ${pdfCardType === 'model' ? 'Dataset' : 'Model'}]`;
+    detectedTypeSpan.textContent = pdfCardType === CARD_TYPES.MODEL ? 'Model Card' : 'Dataset Card';
+    toggleLink.textContent = `[Switch to ${pdfCardType === CARD_TYPES.MODEL ? 'Dataset' : 'Model'}]`;
     detectionDiv.style.display = 'block';
 }
 
@@ -1920,8 +1956,8 @@ function updateDebugDetectionDisplay() {
     const detectedTypeSpan = document.getElementById('debug-detected-type');
     const toggleLink = document.getElementById('debug-toggle-detection');
 
-    detectedTypeSpan.textContent = debugCardType === 'model' ? 'Model Card' : 'Dataset Card';
-    toggleLink.textContent = `[Switch to ${debugCardType === 'model' ? 'Dataset' : 'Model'}]`;
+    detectedTypeSpan.textContent = debugCardType === CARD_TYPES.MODEL ? 'Model Card' : 'Dataset Card';
+    toggleLink.textContent = `[Switch to ${debugCardType === CARD_TYPES.MODEL ? 'Dataset' : 'Model'}]`;
     detectionDiv.style.display = 'block';
 }
 
@@ -2034,14 +2070,14 @@ async function handlePdfUpload(event) {
         let editorData = {};
 
         // Extract data based on user selection
-        if (cardType === 'model') {
+        if (cardType === CARD_TYPES.MODEL) {
             if (structuredJson.Model) {
                 editorData = structuredJson.Model;
             } else {
                 // Fallback: use root level data if no nested Model key
                 editorData = structuredJson;
             }
-        } else if (cardType === 'dataset') {
+        } else if (cardType === CARD_TYPES.DATASET) {
             if (structuredJson.Dataset) {
                 editorData = structuredJson.Dataset;
             } else {
@@ -2204,8 +2240,8 @@ function displaySchemas(schemas) {
     
     schemas.forEach(schema => {
         const authors = schema.authors && schema.authors.length > 0 ? schema.authors.slice(0, 3).join(', ') + (schema.authors.length > 3 ? ', et al.' : '') : 'Unknown Authors';
-        const typeColor = schema.schema_type === 'model' ? 'primary' : 'success';
-        const typeIcon = schema.schema_type === 'model' ? 'brain' : 'database';
+        const typeColor = schema.schema_type === CARD_TYPES.MODEL ? 'primary' : 'success';
+        const typeIcon = schema.schema_type === CARD_TYPES.MODEL ? 'brain' : 'database';
         
         html += `
         <div class="col-md-6 mb-3">
