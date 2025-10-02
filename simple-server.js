@@ -971,19 +971,31 @@ async function processTextWithGemini(extractedText) {
     }
 
     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    
-    // Load actual ROADMAP schemas for more accurate processing
+
+    // GitHub URLs for latest ROADMAP schemas (same as other endpoints)
+    const GITHUB_SCHEMAS = {
+      model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.model.json',
+      dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.dataset.json'
+    };
+
+    // Load actual ROADMAP schemas from GitHub for more accurate processing
     let modelSchema, datasetSchema;
     try {
-      const [modelContent, datasetContent] = await Promise.all([
-        fs.readFile('./schemas/base-model-schema.json', 'utf8'),
-        fs.readFile('./schemas/base-dataset-schema.json', 'utf8')
+      console.log('🌐 Fetching schemas from GitHub for DOI extraction...');
+      const [modelResponse, datasetResponse] = await Promise.all([
+        fetch(GITHUB_SCHEMAS.model),
+        fetch(GITHUB_SCHEMAS.dataset)
       ]);
-      modelSchema = JSON.parse(modelContent);
-      datasetSchema = JSON.parse(datasetContent);
-      console.log('✅ ROADMAP schemas loaded for enhanced processing');
+
+      if (!modelResponse.ok || !datasetResponse.ok) {
+        throw new Error('Failed to fetch schemas from GitHub');
+      }
+
+      modelSchema = await modelResponse.json();
+      datasetSchema = await datasetResponse.json();
+      console.log('✅ ROADMAP schemas loaded from GitHub for DOI extraction');
     } catch (schemaError) {
-      console.log('⚠️ Could not load schemas, using enhanced templates');
+      console.log('⚠️ Could not load schemas from GitHub, using enhanced templates:', schemaError.message);
     }
 
     const prompt = `You are an expert radiologist and AI researcher specialized in extracting comprehensive information from published radiology AI journal articles to populate ROADMAP (Radiology Ontology for AI Models, Datasets and Projects) cards.

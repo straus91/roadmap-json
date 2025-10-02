@@ -1447,20 +1447,47 @@ function convertRoadmapToTxtDataset(roadmapData) {
 // Schema management functions
 function updateSchemaInfo() {
     if (!schemaProcessor || !currentCardType) return;
-    
+
     const info = schemaProcessor.getSchemaInfo(currentCardType);
     const sourceElement = document.getElementById('schema-source');
     const versionElement = document.getElementById('schema-version');
-    
+
     if (sourceElement && versionElement) {
-        sourceElement.textContent = info.source;
-        versionElement.textContent = info.version;
-        
-        // Add visual indicator for custom schemas
+        // Add visual indicator based on source type
+        let icon = '';
+        let displayText = info.source;
+
         if (info.isCustom) {
-            sourceElement.innerHTML = '<i class="fa fa-cloud text-info mr-1"></i>' + info.source;
+            icon = '<i class="fa fa-cloud text-info mr-1"></i>';
+        } else if (info.source.includes('GitHub')) {
+            icon = '<i class="fa fa-github text-success mr-1"></i>';
         } else {
-            sourceElement.innerHTML = '<i class="fa fa-file text-success mr-1"></i>' + info.source;
+            icon = '<i class="fa fa-file text-warning mr-1"></i>';
+        }
+
+        // Add URL as tooltip if available
+        if (info.sourceUrl) {
+            sourceElement.innerHTML = `${icon}<a href="${info.sourceUrl}" target="_blank" title="${info.sourceUrl}">${displayText}</a>`;
+        } else {
+            sourceElement.innerHTML = `${icon}${displayText}`;
+        }
+
+        versionElement.textContent = info.version;
+
+        // Log schema info for debugging
+        console.log('📋 Schema Info:', {
+            cardType: currentCardType,
+            source: info.source,
+            url: info.sourceUrl,
+            version: info.version,
+            isCustom: info.isCustom,
+            cacheExpiry: info.cacheExpiry
+        });
+
+        // Show cache expiry if available
+        if (info.cacheExpiry && !info.isCustom) {
+            const expiryTime = info.cacheExpiry.toLocaleTimeString();
+            console.log(`   Cache expires at: ${expiryTime}`);
         }
     }
 }

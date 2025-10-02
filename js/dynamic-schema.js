@@ -1,4 +1,4 @@
-// Dynamic Schema Processor - Loads schemas from base files or custom URLs
+// Dynamic Schema Processor - Loads schemas from GitHub or custom URLs
 class DynamicSchemaProcessor {
     constructor() {
         this.baseSchemas = {
@@ -10,30 +10,64 @@ class DynamicSchemaProcessor {
             dataset: null
         };
         this.currentSchemaSource = {
-            model: 'base',
-            dataset: 'base'
+            model: 'github',
+            dataset: 'github'
+        };
+        this.schemaCache = null;
+        this.schemaCacheTime = null;
+        this.CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+    }
+
+    // GitHub URLs for latest ROADMAP schemas (same as backend)
+    get GITHUB_SCHEMAS() {
+        return {
+            model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.model.json',
+            dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.dataset.json'
         };
     }
 
-    // Load base schemas from local files
+    // Load base schemas from GitHub (with caching)
     async loadBaseSchemas() {
         try {
+            // Check if we have a valid cached copy
+            if (this.schemaCache && this.schemaCacheTime && (Date.now() - this.schemaCacheTime < this.CACHE_DURATION_MS)) {
+                console.log('📦 Using cached schemas from GitHub');
+                this.baseSchemas.model = this.schemaCache.model;
+                this.baseSchemas.dataset = this.schemaCache.dataset;
+                return true;
+            }
+
+            console.log('🌐 Fetching schemas from GitHub...');
+            console.log('  Model:', this.GITHUB_SCHEMAS.model);
+            console.log('  Dataset:', this.GITHUB_SCHEMAS.dataset);
+
             const [modelResponse, datasetResponse] = await Promise.all([
-                fetch('schemas/base-model-schema.json'),
-                fetch('schemas/base-dataset-schema.json')
+                fetch(this.GITHUB_SCHEMAS.model),
+                fetch(this.GITHUB_SCHEMAS.dataset)
             ]);
 
-            if (!modelResponse.ok || !datasetResponse.ok) {
-                throw new Error('Failed to load base schemas');
+            if (!modelResponse.ok) {
+                throw new Error(`Failed to fetch model schema: ${modelResponse.status} ${modelResponse.statusText}`);
+            }
+            if (!datasetResponse.ok) {
+                throw new Error(`Failed to fetch dataset schema: ${datasetResponse.status} ${datasetResponse.statusText}`);
             }
 
             this.baseSchemas.model = await modelResponse.json();
             this.baseSchemas.dataset = await datasetResponse.json();
 
-            console.log('✅ Base schemas loaded successfully');
+            // Cache the results
+            this.schemaCache = {
+                model: this.baseSchemas.model,
+                dataset: this.baseSchemas.dataset
+            };
+            this.schemaCacheTime = Date.now();
+
+            console.log('✅ Base schemas loaded from GitHub successfully');
+            console.log('   Cache will expire in 5 minutes');
             return true;
         } catch (error) {
-            console.error('❌ Failed to load base schemas:', error);
+            console.error('❌ Failed to load schemas from GitHub:', error);
             return false;
         }
     }
@@ -89,7 +123,8 @@ class DynamicSchemaProcessor {
         } else {
             schema = this.baseSchemas[cardType];
             this.loadedSchemas[cardType] = schema;
-            this.currentSchemaSource[cardType] = 'base';
+            this.currentSchemaSource[cardType] = 'github';
+            console.log(`✅ Using GitHub schema for ${cardType}`);
         }
 
         // Convert to JSON Editor format
@@ -451,25 +486,43 @@ class DynamicSchemaProcessor {
     getSchemaInfo(cardType) {
         const source = this.currentSchemaSource[cardType];
         const schema = this.loadedSchemas[cardType];
-        
+
+        // Determine display source
+        let displaySource = source;
+        let sourceUrl = null;
+
+        if (source === 'github') {
+            displaySource = 'GitHub (Latest)';
+            sourceUrl = this.GITHUB_SCHEMAS[cardType];
+        } else if (source === 'base') {
+            displaySource = 'Local Files';
+        } else {
+            displaySource = 'Custom URL';
+            sourceUrl = source;
+        }
+
         return {
-            source: source === 'base' ? 'Base Schema' : source,
+            source: displaySource,
+            sourceUrl: sourceUrl,
             version: schema?.$id || 'Unknown',
             description: schema?.description || '',
-            isCustom: source !== 'base'
+            isCustom: source !== 'github' && source !== 'base',
+            cacheExpiry: this.schemaCacheTime ? new Date(this.schemaCacheTime + this.CACHE_DURATION_MS) : null
         };
     }
 
-    // Reset to base schemas
+    // Reset to base schemas (GitHub)
     resetToBase(cardType = null) {
         if (cardType) {
             this.loadedSchemas[cardType] = this.baseSchemas[cardType];
-            this.currentSchemaSource[cardType] = 'base';
+            this.currentSchemaSource[cardType] = 'github';
+            console.log(`🔄 Reset to GitHub schema for ${cardType}`);
         } else {
             this.loadedSchemas.model = this.baseSchemas.model;
             this.loadedSchemas.dataset = this.baseSchemas.dataset;
-            this.currentSchemaSource.model = 'base';
-            this.currentSchemaSource.dataset = 'base';
+            this.currentSchemaSource.model = 'github';
+            this.currentSchemaSource.dataset = 'github';
+            console.log('🔄 Reset to GitHub schemas for all card types');
         }
     }
 }
