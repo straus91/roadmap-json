@@ -1172,6 +1172,10 @@ async function createEnhancedSinglePrompt(documentData, schemas, processingMode,
   // Dynamically generate example structure (now includes external refs)
   const exampleStructure = await generateExampleFromSchema(schemaForPrompt, cardType);
   const dynamicSchemaStructure = exampleStructure[cardType.charAt(0).toUpperCase() + cardType.slice(1)];
+
+  // Debug: Show structure keys to verify completeness
+  console.log('📋 Generated schema structure keys:', Object.keys(dynamicSchemaStructure || {}).slice(0, 10));
+
   const modelToUse = processingMode === 'multimodal' ? "gemini-1.5-pro-latest" : "gemini-1.5-flash-latest";
 
   // Generate type-specific extraction guidance
@@ -1633,6 +1637,12 @@ export default async function handler(req, res) {
     console.log('🚀 Processing document with STREAMING and enhanced chain-of-thought prompt...');
     console.log('📝 Processing mode:', processingMode);
     console.log('🎯 Using cardType for prompt generation:', cardType);
+
+    // Debug: Show a preview of the REQUIRED JSON STRUCTURE section
+    const structureMatch = prompt.match(/\*\*REQUIRED JSON STRUCTURE[^:]*:\*\*[\s\S]{0,500}/);
+    if (structureMatch) {
+      console.log('📋 Prompt includes schema structure:', structureMatch[0].substring(0, 300) + '...');
+    }
 
     // Build request body based on processing mode
     let requestBody;
