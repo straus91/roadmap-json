@@ -590,14 +590,30 @@ function normalizeJsonToSchema(data, schema) {
   let wrapperKey = null;
 
   // Detect ROADMAP wrapper structure: Dataset or Model
-  if (schemaProps.Dataset && schemaProps.Dataset.$ref) {
+  // GitHub format: properties.Dataset.properties (direct properties)
+  // Old format: properties.Dataset.$ref (needs resolving)
+  if (schemaProps.Dataset) {
     wrapperKey = 'Dataset';
-    targetSchema = resolveSchemaRef(schemaProps.Dataset.$ref, schema);
-    console.log('📦 Detected Dataset wrapper, resolving $ref:', schemaProps.Dataset.$ref);
-  } else if (schemaProps.Model && schemaProps.Model.$ref) {
+    if (schemaProps.Dataset.properties) {
+      // GitHub format - properties directly available
+      targetSchema = schemaProps.Dataset;
+      console.log('📦 Detected Dataset wrapper (GitHub format)');
+    } else if (schemaProps.Dataset.$ref) {
+      // Old format - need to resolve $ref
+      targetSchema = resolveSchemaRef(schemaProps.Dataset.$ref, schema);
+      console.log('📦 Detected Dataset wrapper, resolving $ref:', schemaProps.Dataset.$ref);
+    }
+  } else if (schemaProps.Model) {
     wrapperKey = 'Model';
-    targetSchema = resolveSchemaRef(schemaProps.Model.$ref, schema);
-    console.log('📦 Detected Model wrapper, resolving $ref:', schemaProps.Model.$ref);
+    if (schemaProps.Model.properties) {
+      // GitHub format - properties directly available
+      targetSchema = schemaProps.Model;
+      console.log('📦 Detected Model wrapper (GitHub format)');
+    } else if (schemaProps.Model.$ref) {
+      // Old format - need to resolve $ref
+      targetSchema = resolveSchemaRef(schemaProps.Model.$ref, schema);
+      console.log('📦 Detected Model wrapper, resolving $ref:', schemaProps.Model.$ref);
+    }
   }
 
   // If we found a wrapper with resolved schema, normalize against it

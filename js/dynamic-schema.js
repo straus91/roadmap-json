@@ -26,7 +26,85 @@ class DynamicSchemaProcessor {
         };
     }
 
-    // Load base schemas from GitHub (with caching)
+    // Cache for external schema files
+    externalSchemaCache = new Map();
+
+    // Fetch external ROADMAP schema file
+    async fetchExternalSchema(filename) {
+        // Check cache first
+        if (this.externalSchemaCache.has(filename)) {
+            console.log(`  📦 Using cached: ${filename}`);
+            return this.externalSchemaCache.get(filename);
+        }
+
+        try {
+            const url = `https://raw.githubusercontent.com/cekahn/ROADMAP/main/${filename}`;
+            console.log(`  🌐 Fetching: ${filename}`);
+
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const externalSchema = await response.json();
+            this.externalSchemaCache.set(filename, externalSchema);
+            return externalSchema;
+        } catch (error) {
+            console.warn(`  ⚠️ Failed to fetch ${filename}:`, error.message);
+            return null;
+        }
+    }
+
+    // Resolve all external $ref in schema
+    async resolveExternalRefs(schema) {
+        console.log('🔗 Resolving external schema references...');
+
+        // Recursively find and resolve all external $ref
+        const resolveRefs = async (obj, visited = new Set()) => {
+            if (!obj || typeof obj !== 'object' || visited.has(obj)) return obj;
+            visited.add(obj);
+
+            if (Array.isArray(obj)) {
+                for (let i = 0; i < obj.length; i++) {
+                    obj[i] = await resolveRefs(obj[i], visited);
+                }
+                return obj;
+            }
+
+            // Check if this object has an external $ref
+            if (obj.$ref && !obj.$ref.startsWith('#')) {
+                const filename = obj.$ref;
+                const externalSchema = await this.fetchExternalSchema(filename);
+
+                if (externalSchema) {
+                    // Replace $ref with actual schema content
+                    // Keep other properties and merge with fetched schema
+                    const resolved = { ...externalSchema };
+                    for (const key in obj) {
+                        if (key !== '$ref') {
+                            resolved[key] = obj[key];
+                        }
+                    }
+                    return await resolveRefs(resolved, visited);
+                }
+            }
+
+            // Recursively process all properties
+            for (const key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    obj[key] = await resolveRefs(obj[key], visited);
+                }
+            }
+
+            return obj;
+        };
+
+        const resolved = await resolveRefs(JSON.parse(JSON.stringify(schema)));
+        console.log('✅ External references resolved');
+        return resolved;
+    }
+
+    // Load base schemas from GitHub (with caching and external ref resolution)
     async loadBaseSchemas() {
         try {
             // Check if we have a valid cached copy
@@ -53,8 +131,16 @@ class DynamicSchemaProcessor {
                 throw new Error(`Failed to fetch dataset schema: ${datasetResponse.status} ${datasetResponse.statusText}`);
             }
 
-            this.baseSchemas.model = await modelResponse.json();
-            this.baseSchemas.dataset = await datasetResponse.json();
+            let modelSchema = await modelResponse.json();
+            let datasetSchema = await datasetResponse.json();
+
+            // Resolve external references in both schemas
+            console.log('🔗 Resolving external references in schemas...');
+            modelSchema = await this.resolveExternalRefs(modelSchema);
+            datasetSchema = await this.resolveExternalRefs(datasetSchema);
+
+            this.baseSchemas.model = modelSchema;
+            this.baseSchemas.dataset = datasetSchema;
 
             // Cache the results
             this.schemaCache = {
