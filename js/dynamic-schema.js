@@ -201,14 +201,16 @@ class DynamicSchemaProcessor {
                 throw new Error(`No ${cardType} definition or properties found in schema`);
             }
 
-            const allProps = sectionDef.properties;
+            // Process all properties first
+            const allProcessedProps = this.processProperties(
+                sectionDef.properties || {},
+                roadmapSchema.$defs,
+                new Set(),
+                0
+            );
 
-            // Define the structure of our tabs for dataset
-            const tabStructure = {
-                "Core Info": ['Name', 'Author', 'Date', 'Reference', 'License', 'Comments'],
-                "Imaging & Labeling": ['Imaging', 'Labeling', 'Collection process'],
-                "Subsets": ['Subsets']
-            };
+            // Use categorization to build tabs dynamically (schema-agnostic!)
+            const categories = this.categorizeProperties(allProcessedProps, cardType);
 
             const jsonEditorSchema = {
                 type: "object",
@@ -217,29 +219,27 @@ class DynamicSchemaProcessor {
                 properties: {}
             };
 
-            // Dynamically build the tabs based on the structure
-            Object.keys(tabStructure).forEach(tabTitle => {
-                const tabKey = tabTitle.toLowerCase().replace(/\s/g, '_').replace(/&/g, 'and');
+            // Build tabs from categories (no hardcoding!)
+            Object.entries(categories).forEach(([categoryName, propertyKeys]) => {
+                const tabKey = categoryName.toLowerCase().replace(/\s/g, '_').replace(/&/g, 'and');
                 const tabProperties = {};
-                let hasProps = false;
 
-                tabStructure[tabTitle].forEach(propName => {
-                    if (allProps[propName]) {
-                        tabProperties[propName] = this.processProperty(allProps[propName], roadmapSchema.$defs);
-                        hasProps = true;
+                propertyKeys.forEach(propKey => {
+                    if (allProcessedProps[propKey]) {
+                        tabProperties[propKey] = allProcessedProps[propKey];
                     }
                 });
 
-                if (hasProps) {
+                if (Object.keys(tabProperties).length > 0) {
                     jsonEditorSchema.properties[tabKey] = {
-                        title: tabTitle,
+                        title: categoryName,
                         type: 'object',
                         properties: tabProperties
                     };
                 }
             });
 
-            console.log(`✅ Schema converted for ${cardType} with tabs`);
+            console.log(`✅ Schema converted for ${cardType} with ${Object.keys(categories).length} dynamic tabs`);
             return jsonEditorSchema;
 
         } catch (error) {

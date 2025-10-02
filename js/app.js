@@ -137,13 +137,16 @@ async function initializeEditor(initialData = null) {
         // Get schema (base or custom)
         const schema = await schemaProcessor.getSchema(currentCardType, customUrl);
 
-        // *** Enhance schema with all UI improvements (in-memory only) ***
-        enhanceSchemaForUI(schema);
-
         if (!schema) {
             showAlert('Schema not available for ' + currentCardType + ' cards.', 'danger');
             return;
         }
+
+        // *** Clone schema to prevent mutation of cached original ***
+        const schemaClone = JSON.parse(JSON.stringify(schema));
+
+        // *** Enhance schema with all UI improvements (in-memory only) ***
+        enhanceSchemaForUI(schemaClone);
         
         // Update schema info display
         updateSchemaInfo();
@@ -153,7 +156,7 @@ async function initializeEditor(initialData = null) {
 
         // Initialize JSON Editor
         editor = new JSONEditor(editorHolder, {
-            schema: schema,
+            schema: schemaClone,
             startval: initialData || {},
             theme: 'bootstrap4',
             iconlib: 'fontawesome4',
