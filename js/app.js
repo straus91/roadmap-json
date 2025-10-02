@@ -206,9 +206,9 @@ async function initializeEditor(initialData = null) {
             required_by_default: false,
             keep_oneof_values: false,
             prompt_before_delete: true,
-            no_additional_properties: true,  // Prevent adding arbitrary properties
+            no_additional_properties: false,
             disable_edit_json: true,
-            disable_properties: true,  // Hide type selector dropdowns ("object", "string", etc.)
+            disable_properties: false,
             show_opt_in: false,
             compact: true,
             object_layout: 'normal',
