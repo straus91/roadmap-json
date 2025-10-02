@@ -926,6 +926,52 @@ ${JSON.stringify(documentData.tables, null, 2)}
 **OUTPUT (Valid JSON only):**`;
 }
 
+// Helper functions for type-specific extraction guidance
+function getModelSpecificInstructions() {
+  return `**MODEL CARD SPECIFIC PRIORITIES:**
+6.  **Architecture Details:** Extract network architecture, model type (CNN, RNN, transformer, etc.), layer specifications, and architectural innovations. Look in Methods → "Model Architecture", "Network Design", or "Architecture" subsections.
+7.  **Training Methodology:** Extract loss functions, optimizers, learning rates, batch sizes, number of epochs, data augmentation techniques. Look in Methods → "Training Procedure", "Optimization", or "Implementation Details".
+8.  **Performance Metrics:** Focus on TEST set performance. Extract accuracy, sensitivity, specificity, AUC, F1-scores from Results tables. Include comparisons with baselines and state-of-the-art methods.
+9.  **Computational Requirements:** Extract GPU type, training time, inference speed, memory usage, hardware specifications. Often mentioned in Methods or supplementary materials.
+10. **Implementation Details:** Extract framework/library used (PyTorch, TensorFlow, Keras), code repository URLs (GitHub, GitLab), pre-trained model availability. Check end of paper and supplementary materials.
+11. **Input/Output Specifications:** Extract input image dimensions, preprocessing steps, output format (classification, segmentation masks, bounding boxes).`;
+}
+
+function getDatasetSpecificInstructions() {
+  return `**DATASET CARD SPECIFIC PRIORITIES:**
+6.  **Data Collection Protocols:** Extract acquisition protocols, scanner manufacturers/models, imaging parameters (slice thickness, resolution), collection timeframe. Look in Methods → "Data Collection", "Image Acquisition".
+7.  **Demographics & Characteristics:** Extract ALL patient/subject characteristics including age (mean, range, distribution), sex/gender, diagnoses, clinical history. Convert demographic tables into structured Subset objects with counts.
+8.  **Subsets & Partitions:** Convert train/validation/test split tables into detailed Subset objects. For EACH subset, extract sample size and demographic breakdown. Look for tables with "Training Set", "Test Set", "Validation Set" labels.
+9.  **Annotation & Labeling:** Extract labeling methodology, number of annotators, annotation tools used, inter-rater agreement metrics (Kappa, ICC), ground truth definition. Look in Methods → "Annotation", "Ground Truth", "Reference Standard".
+10. **Label Distributions:** Convert label/classification tables into Classification objects with counts. Extract injury grades, disease categories, anatomical structure labels with their frequencies.
+11. **Inclusion/Exclusion Criteria:** Extract patient selection criteria, exclusion reasons, quality control measures. Usually in Methods → "Study Population" or "Patient Selection".`;
+}
+
+function getModelFieldLocationHints() {
+  return `**WHERE TO FIND MODEL INFORMATION:**
+• **Name**: Title of paper or explicitly stated model name
+• **Architecture**: Methods → "Model Architecture", "Network Design" subsections
+• **Training Details**: Methods → "Training Procedure", "Optimization" subsections
+• **Performance Metrics**: Results section → Tables comparing your model vs baselines, ablation studies
+• **Dataset Used**: Methods → "Dataset", "Data" subsections (extract name, size, source)
+• **Code Repository**: End of paper, supplementary materials → "Code availability", "Data and code availability"
+• **Computational Requirements**: Methods → "Implementation Details", supplementary materials
+• **Input/Output**: Methods → "Preprocessing", "Model Input", "Output"`;
+}
+
+function getDatasetFieldLocationHints() {
+  return `**WHERE TO FIND DATASET INFORMATION:**
+• **Name**: Title of paper or dataset name in abstract
+• **Sample Size**: Abstract, Methods, often as "N=X patients/images/scans/cases"
+• **Demographics**: Tables labeled "Patient Characteristics", "Study Population", "Demographics"
+• **Subsets/Partitions**: Tables with "Training", "Validation", "Test", "Development", "Internal", "External"
+• **Imaging Modality**: Methods → "Image Acquisition", "Scanning Protocol" (look for CT, MRI, ultrasound, X-ray, PET)
+• **Anatomy**: Methods → mentions of organ systems, body regions (brain, abdomen, chest, etc.)
+• **Collection Period**: Methods → "Study Period", "Data Collection", dates of acquisition
+• **Annotations**: Methods → "Labeling", "Ground Truth", "Reference Standard", "Annotation Protocol"
+• **Label Distributions**: Tables showing injury grades, disease categories, classification counts`;
+}
+
 // Helper function to create the enhanced single prompt based on processing mode and card type
 function createEnhancedSinglePrompt(documentData, schemas, processingMode, cardType) {
   const cardTypeUpper = cardType.toUpperCase();
@@ -935,6 +981,15 @@ function createEnhancedSinglePrompt(documentData, schemas, processingMode, cardT
   const dynamicSchemaStructure = extractSchemaStructure(schemaForPrompt, cardType);
   const modelToUse = processingMode === 'multimodal' ? "gemini-1.5-pro-latest" : "gemini-1.5-flash-latest";
 
+  // Generate type-specific extraction guidance
+  const typeSpecificInstructions = cardType === 'model'
+    ? getModelSpecificInstructions()
+    : getDatasetSpecificInstructions();
+
+  const fieldLocationHints = cardType === 'model'
+    ? getModelFieldLocationHints()
+    : getDatasetFieldLocationHints();
+
   // This prompt combines detailed instructions with the dynamic schema
   return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards. Your model is ${modelToUse}.
 
@@ -942,11 +997,14 @@ function createEnhancedSinglePrompt(documentData, schemas, processingMode, cardT
 
 **CRITICAL INSTRUCTIONS:**
 1.  **Strict Schema Compliance:** Your entire output must be a single JSON object that perfectly matches the structure, field names, and data types defined in the "REQUIRED JSON STRUCTURE" section below.
-2.  **Comprehensive Extraction:** Extract ALL relevant information. Do not summarize or omit details. If a value is not found, omit the field rather than filling it with placeholder text like "Not specified".
+2.  **Comprehensive Extraction:** Extract ALL relevant information from the document. Search thoroughly for each schema field before omitting. If truly not found after checking relevant sections, omit the field. Never use placeholder text like "Not specified" or "N/A".
 3.  **Author Details:** Extract ALL authors with their full names and affiliations. Do not summarize the author list.
-4.  **Subset and Classification Priority:** This is the most important part. Convert all patient demographics, characteristics tables, and injury grading tables into detailed Subset objects. For each subset (e.g., "Training Set", "Full Dataset"), you must extract all available 'Classifications' (like 'Liver Injury', 'Spleen Injury', 'Negative Injury') with their corresponding 'Count'.
-5.  **Table Data is Key:** Look specifically for labels, classifications, performance metrics, demographic breakdowns, and statistical measures in ALL tables.
-6.  **Numerical Precision:** Extract exact numerical values, age ranges, and statistical measures (e.g., "47.9 ± 21.0 (18-90)"). Do not approximate.
+4.  **Table Data is Key:** Look specifically for labels, classifications, performance metrics, demographic breakdowns, and statistical measures in ALL tables.
+5.  **Numerical Precision:** Extract exact numerical values, age ranges, and statistical measures (e.g., "47.9 ± 21.0 (18-90)"). Do not approximate.
+
+${typeSpecificInstructions}
+
+${fieldLocationHints}
 
 ---
 
