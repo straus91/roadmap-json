@@ -72,7 +72,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Author",
-                        "headerTemplate": "{{self.Name || 'Author ' + (i+1)}}",
                         "properties": {
                             "Name": {
                                 "type": "string",
@@ -110,7 +109,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Organization",
-                        "headerTemplate": "{{self.Name || 'Organization ' + (i+1)}}",
                         "properties": {
                             "Name": {
                                 "type": "string",
@@ -190,7 +188,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Reference",
-                        "headerTemplate": "{{self.Title || 'Reference ' + (i+1)}}",
                         "properties": {
                             "Authors": {
                                 "type": "string",
@@ -372,7 +369,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Performance Result",
-                        "headerTemplate": "Result {{i+1}}: {{self['Result Information']}}",
                         "properties": {
                             "Result Information": {
                                 "type": "string",
@@ -512,7 +508,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Author",
-                        "headerTemplate": "{{self.Name || 'Author ' + (i+1)}}",
                         "properties": {
                             "Name": {
                                 "type": "string",
@@ -540,7 +535,6 @@ class SchemaProcessor {
                     "default": [{"Name": ""}],
                     "items": {
                         "type": "object",
-                        "headerTemplate": "{{self.Name || 'Organization ' + (i+1)}}",
                         "properties": {
                             "Name": {
                                 "type": "string",

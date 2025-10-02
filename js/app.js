@@ -136,7 +136,10 @@ async function initializeEditor(initialData = null) {
         
         // Get schema (base or custom)
         const schema = await schemaProcessor.getSchema(currentCardType, customUrl);
-        
+
+        // *** Automatically process the schema to add dynamic header templates ***
+        addDynamicHeaderTemplates(schema);
+
         if (!schema) {
             showAlert('Schema not available for ' + currentCardType + ' cards.', 'danger');
             return;
@@ -485,6 +488,56 @@ function getAlertIcon(type) {
         info: '<i class="fa fa-info-circle"></i>'
     };
     return icons[type] || icons.info;
+}
+
+/**
+ * Recursively traverses a JSON schema and adds a dynamic `headerTemplate`
+ * to any array of objects that doesn't already have one. It uses a
+ * heuristic to find the most likely property to use for the title.
+ * This function makes the UI scalable for any schema (models, datasets, etc.).
+ * @param {object} schema - The JSON schema object to process.
+ */
+function addDynamicHeaderTemplates(schema) {
+  if (!schema || typeof schema !== 'object') {
+    return;
+  }
+
+  // Iterate over all properties of the current schema object
+  for (const key in schema.properties) {
+    if (schema.properties.hasOwnProperty(key)) {
+      const prop = schema.properties[key];
+
+      // If we find an array that contains objects
+      if (prop.type === 'array' && prop.items && prop.items.type === 'object') {
+        // Only add a template if one isn't already defined in the schema
+        if (!prop.items.headerTemplate) {
+          const itemProps = prop.items.properties || {};
+          let titleProp = null;
+
+          // Heuristic: Intelligently find the best property for the title
+          // by checking for common, descriptive property names.
+          const potentialTitleProps = ['Name', 'Title', 'Label', 'Description', 'ID', 'Result Information'];
+          for (const p of potentialTitleProps) {
+            if (itemProps[p] && itemProps[p].type === 'string') {
+              titleProp = p;
+              break; // Use the first one found
+            }
+          }
+
+          // If a good title property was found, inject the dynamic headerTemplate rule
+          if (titleProp) {
+            const fallbackTitle = prop.items.title || 'Item';
+            // Use bracket notation for properties that might contain spaces
+            prop.items.headerTemplate = `{{self['${titleProp}'] || '${fallbackTitle} ' + (i+1)}}`;
+          }
+        }
+      }
+      // If we find a nested object, recurse into it
+      else if (prop.type === 'object') {
+        addDynamicHeaderTemplates(prop);
+      }
+    }
+  }
 }
 
 function resetForm() {
