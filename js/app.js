@@ -47,18 +47,24 @@ let editor = null;
 let currentCardType = null;
 let isJsonPreviewVisible = false;
 let schemaProcessor = null;
-let pdfProcessingMode = PROCESSING_MODES.MULTIMODAL;
-let debugProcessingMode = PROCESSING_MODES.MULTIMODAL;
-let pdfCardType = CARD_TYPES.MODEL;
-let debugCardType = CARD_TYPES.MODEL;
 
-// Schema source variables
-let pdfSchemaSource = SCHEMA_SOURCES.GITHUB;
-let debugSchemaSource = SCHEMA_SOURCES.GITHUB;
-let pdfSchemaUrl = null;
-let debugSchemaUrl = null;
-let pdfDetectedType = CARD_TYPES.MODEL;
-let debugDetectedType = CARD_TYPES.MODEL;
+// PDF processing state (consolidated structure)
+const pdfState = {
+    processingMode: PROCESSING_MODES.MULTIMODAL,
+    cardType: CARD_TYPES.MODEL,
+    schemaSource: SCHEMA_SOURCES.GITHUB,
+    schemaUrl: null,
+    detectedType: CARD_TYPES.MODEL
+};
+
+// Debug processing state (consolidated structure)
+const debugState = {
+    processingMode: PROCESSING_MODES.MULTIMODAL,
+    cardType: CARD_TYPES.MODEL,
+    schemaSource: SCHEMA_SOURCES.GITHUB,
+    schemaUrl: null,
+    detectedType: CARD_TYPES.MODEL
+};
 
 // Application initialization
 document.addEventListener('DOMContentLoaded', function() {
@@ -1577,7 +1583,7 @@ window.debugExamples = function() {
 
 // Processing mode functions
 function setPdfProcessingMode(mode) {
-    pdfProcessingMode = mode;
+    pdfState.processingMode = mode;
     
     // Update button states
     const multimodalBtn = document.getElementById('pdf-multimodal-btn');
@@ -1593,7 +1599,7 @@ function setPdfProcessingMode(mode) {
 }
 
 function setDebugProcessingMode(mode) {
-    debugProcessingMode = mode;
+    debugState.processingMode = mode;
 
     // Update button states
     const multimodalBtn = document.getElementById('debug-multimodal-btn');
@@ -1610,7 +1616,7 @@ function setDebugProcessingMode(mode) {
 
 // Card type selection functions
 function setPdfCardType(cardType) {
-    pdfCardType = cardType;
+    pdfState.cardType = cardType;
     
     // Update button states
     const modelBtn = document.getElementById('pdf-model-btn');
@@ -1626,7 +1632,7 @@ function setPdfCardType(cardType) {
 }
 
 function setDebugCardType(cardType) {
-    debugCardType = cardType;
+    debugState.cardType = cardType;
 
     // Update button states
     const modelBtn = document.getElementById('debug-model-btn');
@@ -1643,7 +1649,7 @@ function setDebugCardType(cardType) {
 
 // Schema source toggle functions
 function setPdfSchemaSource(source) {
-    pdfSchemaSource = source;
+    pdfState.schemaSource = source;
 
     const githubBtn = document.getElementById('pdf-github-schema-btn');
     const customBtn = document.getElementById('pdf-custom-schema-btn');
@@ -1661,7 +1667,7 @@ function setPdfSchemaSource(source) {
 }
 
 function setDebugSchemaSource(source) {
-    debugSchemaSource = source;
+    debugState.schemaSource = source;
 
     const githubBtn = document.getElementById('debug-github-schema-btn');
     const customBtn = document.getElementById('debug-custom-schema-btn');
@@ -1919,10 +1925,10 @@ function togglePdfDetection(event) {
     event.preventDefault();
 
     // Toggle between model and dataset
-    pdfCardType = pdfCardType === CARD_TYPES.MODEL ? CARD_TYPES.DATASET : CARD_TYPES.MODEL;
+    pdfState.cardType = pdfState.cardType === CARD_TYPES.MODEL ? CARD_TYPES.DATASET : CARD_TYPES.MODEL;
 
     // Update button states
-    setPdfCardType(pdfCardType);
+    setPdfCardType(pdfState.cardType);
 
     // Update detection display
     updatePdfDetectionDisplay();
@@ -1932,10 +1938,10 @@ function toggleDebugDetection(event) {
     event.preventDefault();
 
     // Toggle between model and dataset
-    debugCardType = debugCardType === CARD_TYPES.MODEL ? CARD_TYPES.DATASET : CARD_TYPES.MODEL;
+    debugState.cardType = debugState.cardType === CARD_TYPES.MODEL ? CARD_TYPES.DATASET : CARD_TYPES.MODEL;
 
     // Update button states
-    setDebugCardType(debugCardType);
+    setDebugCardType(debugState.cardType);
 
     // Update detection display
     updateDebugDetectionDisplay();
@@ -1946,8 +1952,8 @@ function updatePdfDetectionDisplay() {
     const detectedTypeSpan = document.getElementById('pdf-detected-type');
     const toggleLink = document.getElementById('pdf-toggle-detection');
 
-    detectedTypeSpan.textContent = pdfCardType === CARD_TYPES.MODEL ? 'Model Card' : 'Dataset Card';
-    toggleLink.textContent = `[Switch to ${pdfCardType === CARD_TYPES.MODEL ? 'Dataset' : 'Model'}]`;
+    detectedTypeSpan.textContent = pdfState.cardType === CARD_TYPES.MODEL ? 'Model Card' : 'Dataset Card';
+    toggleLink.textContent = `[Switch to ${pdfState.cardType === CARD_TYPES.MODEL ? 'Dataset' : 'Model'}]`;
     detectionDiv.style.display = 'block';
 }
 
@@ -1956,8 +1962,8 @@ function updateDebugDetectionDisplay() {
     const detectedTypeSpan = document.getElementById('debug-detected-type');
     const toggleLink = document.getElementById('debug-toggle-detection');
 
-    detectedTypeSpan.textContent = debugCardType === CARD_TYPES.MODEL ? 'Model Card' : 'Dataset Card';
-    toggleLink.textContent = `[Switch to ${debugCardType === CARD_TYPES.MODEL ? 'Dataset' : 'Model'}]`;
+    detectedTypeSpan.textContent = debugState.cardType === CARD_TYPES.MODEL ? 'Model Card' : 'Dataset Card';
+    toggleLink.textContent = `[Switch to ${debugState.cardType === CARD_TYPES.MODEL ? 'Dataset' : 'Model'}]`;
     detectionDiv.style.display = 'block';
 }
 
@@ -1982,14 +1988,14 @@ async function handlePdfUpload(event) {
     // Step 1: Analyze PDF and auto-detect schema type
     showAlert('Analyzing PDF content...', 'info', 0);
     try {
-        pdfDetectedType = await analyzeAndSelectSchema(file);
-        pdfCardType = pdfDetectedType;
+        pdfState.detectedType = await analyzeAndSelectSchema(file);
+        pdfState.cardType = pdfState.detectedType;
 
         // Update UI to show detection
-        setPdfCardType(pdfCardType);
+        setPdfCardType(pdfState.cardType);
         updatePdfDetectionDisplay();
 
-        console.log('✅ Auto-detected card type:', pdfCardType);
+        console.log('✅ Auto-detected card type:', pdfState.cardType);
     } catch (error) {
         console.error('Error during PDF analysis:', error);
         // Continue with current selection if analysis fails
@@ -2001,8 +2007,8 @@ async function handlePdfUpload(event) {
 
     try {
         const customUrl = document.getElementById('pdf-custom-schema-url').value;
-        const schemaUrl = getSchemaUrl(pdfCardType, pdfSchemaSource, customUrl);
-        pdfSchemaUrl = schemaUrl;
+        const schemaUrl = getSchemaUrl(pdfState.cardType, pdfState.schemaSource, customUrl);
+        pdfState.schemaUrl = schemaUrl;
 
         customSchema = await fetchAndCacheSchema(schemaUrl);
         console.log('✅ Schema loaded from:', schemaUrl);
@@ -2017,8 +2023,8 @@ async function handlePdfUpload(event) {
 
     const formData = new FormData();
     formData.append('pdf', file);
-    formData.append('mode', pdfProcessingMode);
-    formData.append('cardType', pdfCardType);
+    formData.append('mode', pdfState.processingMode);
+    formData.append('cardType', pdfState.cardType);
 
     // Send schema as JSON string if available
     if (customSchema) {
@@ -2026,10 +2032,10 @@ async function handlePdfUpload(event) {
     }
 
     console.log('🔍 DEBUG: Sending to backend:', {
-        mode: pdfProcessingMode,
-        cardType: pdfCardType,
-        schemaSource: pdfSchemaSource,
-        schemaUrl: pdfSchemaUrl,
+        mode: pdfState.processingMode,
+        cardType: pdfState.cardType,
+        schemaSource: pdfState.schemaSource,
+        schemaUrl: pdfState.schemaUrl,
         hasCustomSchema: !!customSchema
     });
 
@@ -2066,7 +2072,7 @@ async function handlePdfUpload(event) {
         }
 
         // Use the user-selected card type instead of trying to detect from response
-        const cardType = pdfCardType;
+        const cardType = pdfState.cardType;
         let editorData = {};
 
         // Extract data based on user selection
