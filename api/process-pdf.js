@@ -215,25 +215,65 @@ function findReferencedImages(text, images) {
 }
 
 // Function to load and parse schema files
+// GitHub URLs for latest ROADMAP schemas (same as frontend)
+const GITHUB_SCHEMAS = {
+  model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.model.json',
+  dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.dataset.json'
+};
+
+// In-memory cache for schemas (persists during API lifetime)
+let schemaCache = null;
+let schemaCacheTime = null;
+const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Loads ROADMAP schemas from GitHub
+ * Uses in-memory caching to avoid repeated fetches
+ * Note: Local schema files in /schemas are kept for reference but not used
+ */
 async function loadSchemas() {
   try {
-    const schemasDir = path.join(process.cwd(), 'schemas');
-    
-    const modelSchemaPath = path.join(schemasDir, 'base-model-schema.json');
-    const datasetSchemaPath = path.join(schemasDir, 'base-dataset-schema.json');
-    
-    const [modelSchemaContent, datasetSchemaContent] = await Promise.all([
-      fs.readFile(modelSchemaPath, 'utf8'),
-      fs.readFile(datasetSchemaPath, 'utf8')
+    // Check if we have a valid cached copy
+    if (schemaCache && schemaCacheTime && (Date.now() - schemaCacheTime < CACHE_DURATION_MS)) {
+      console.log('📦 Using cached schemas');
+      return schemaCache;
+    }
+
+    console.log('🌐 Fetching schemas from GitHub...');
+
+    // Fetch both schemas in parallel
+    const [modelResponse, datasetResponse] = await Promise.all([
+      fetch(GITHUB_SCHEMAS.model),
+      fetch(GITHUB_SCHEMAS.dataset)
     ]);
-    
-    return {
-      model: JSON.parse(modelSchemaContent),
-      dataset: JSON.parse(datasetSchemaContent)
+
+    // Check for HTTP errors
+    if (!modelResponse.ok) {
+      throw new Error(`Failed to fetch model schema: ${modelResponse.status} ${modelResponse.statusText}`);
+    }
+    if (!datasetResponse.ok) {
+      throw new Error(`Failed to fetch dataset schema: ${datasetResponse.status} ${datasetResponse.statusText}`);
+    }
+
+    // Parse JSON
+    const [modelSchema, datasetSchema] = await Promise.all([
+      modelResponse.json(),
+      datasetResponse.json()
+    ]);
+
+    console.log('✅ Successfully fetched schemas from GitHub');
+
+    // Cache the results
+    schemaCache = {
+      model: modelSchema,
+      dataset: datasetSchema
     };
+    schemaCacheTime = Date.now();
+
+    return schemaCache;
   } catch (error) {
-    console.error('Error loading schemas:', error);
-    throw new Error('Failed to load ROADMAP schemas');
+    console.error('❌ Error loading schemas from GitHub:', error);
+    throw new Error(`Failed to load ROADMAP schemas: ${error.message}`);
   }
 }
 
