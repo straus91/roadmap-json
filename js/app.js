@@ -162,7 +162,7 @@ async function initializeEditor(initialData = null) {
             disable_edit_json: true,
             disable_properties: false,
             show_opt_in: false,
-            compact: false,
+            compact: true,
             object_layout: 'normal',
             // Additional options to help with dropdown rendering
             use_default_values: true,
