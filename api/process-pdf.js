@@ -11,6 +11,9 @@ export const config = {
   },
 };
 
+// Export shared functions for use in debug-pdf.js
+export { loadSchemas, generateExampleFromSchema, createEnhancedSinglePrompt, findSchemaProperties, fetchExternalSchema };
+
 // Recursive function to sanitize stringified JSON objects in API responses
 function sanitizeStringifiedJson(obj) {
   // Handle null, undefined, or primitive types

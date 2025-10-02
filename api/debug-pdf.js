@@ -3,6 +3,8 @@ import { IncomingForm } from 'formidable';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { DocumentProcessorServiceClient } from '@google-cloud/documentai';
+// Import shared functions from production code to ensure debug uses EXACT same logic
+import { loadSchemas, createEnhancedSinglePrompt } from './process-pdf.js';
 
 export const config = {
   api: {
@@ -144,81 +146,9 @@ function findReferencedImages(text, images) {
   };
 }
 
-// Create enhanced debug prompt matching the production version
-function createEnhancedDebugPrompt(documentData, cardType, processingMode) {
-  const cardTypeUpper = cardType.toUpperCase();
-  const isDataset = cardType === 'dataset';
-  
-  return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards.
-
-**TASK:** Extract information for a ${cardTypeUpper} card in valid JSON format (${processingMode} debug analysis).
-
-**CRITICAL INSTRUCTIONS:**
-• Extract ALL authors with affiliations - do not summarize
-• For datasets: Convert patient demographics/characteristics tables into detailed Subset objects
-• **TABLE DATA PRIORITY**: Look specifically for labels, classifications, metrics, performance data, demographic breakdowns, and statistical measures in ALL tables
-• **METRICS EXTRACTION**: Extract accuracy, sensitivity, specificity, AUC, F1-scores, sample sizes, age ranges, gender distributions, and any classification categories
-• **LABEL MAPPING**: If tables contain label categories, class distributions, or annotation schemes, extract these comprehensively
-• Extract exact numerical values and statistical measures - never summarize or approximate
-• Include publication details, performance metrics, and technical specifications
-• Output must be valid JSON with proper ROADMAP structure
-
-**REQUIRED JSON STRUCTURE:**
-{
-  "${cardTypeUpper.charAt(0) + cardTypeUpper.slice(1).toLowerCase()}": {
-    "Name": "string",
-    "Description": "string", 
-    "Authors": [{"Name": "string", "Affiliation": "string"}],
-    "Publication": {"Journal": "string", "Date": "string", "DOI": "string"},${isDataset ? `
-    "Subset": [
-      {
-        "Name": "string",
-        "Description": "string", 
-        "Criteria": ["string"],
-        "Size": number,
-        "Demographics": {"Age": "string", "Sex": "string"},
-        "Labels": ["string"],
-        "Classifications": {"Category": "string", "Count": number}
-      }
-    ],
-    "Imaging": {
-      "Modality": ["string"],
-      "Body Region": ["string"],
-      "Number of Images": number
-    },
-    "Performance Metrics": {
-      "Accuracy": "string",
-      "Sensitivity": "string", 
-      "Specificity": "string",
-      "AUC": "string",
-      "F1-Score": "string"
-    }` : `
-    "Performance": {
-      "Metrics": [{"Metric": "string", "Value": "string"}],
-      "Validation": "string",
-      "Test Results": {
-        "Accuracy": "string",
-        "Sensitivity": "string",
-        "Specificity": "string", 
-        "AUC": "string",
-        "F1-Score": "string"
-      }
-    },
-    "Implementation": {
-      "Framework": "string",
-      "Architecture": "string"
-    }`}
-  }
-}
-
-**DOCUMENT TEXT:**
-"""${documentData.text.substring(0, processingMode === 'text-only' ? 8000 : 6000)}${documentData.text.length > (processingMode === 'text-only' ? 8000 : 6000) ? '\n\n... [text continues but truncated for debug display]' : ''}"""
-
-**TABLES:**
-${JSON.stringify(documentData.tables, null, 2)}
-
-**OUTPUT (Valid JSON only):**`;
-}
+// REMOVED: Old hardcoded createEnhancedDebugPrompt()
+// Now using shared createEnhancedSinglePrompt() from process-pdf.js
+// This ensures debug mode shows EXACTLY the same prompt as production
 
 // DEPRECATED: Legacy two-step extraction function - no longer used
 // The system now uses createEnhancedDebugPrompt for single-step extraction
@@ -539,10 +469,15 @@ export default async function handler(req, res) {
       }
     };
 
-    // Create the enhanced single prompt that would be sent to Gemini
-    const enhancedPrompt = createEnhancedDebugPrompt(documentData, cardType, processingMode);
+    // Load schemas from GitHub (same as production)
+    console.log('📚 Loading ROADMAP schemas from GitHub for debug prompt generation...');
+    const schemas = await loadSchemas();
 
-    console.log('✅ Debug processing complete - Single-step enhanced extraction ready');
+    // Create the enhanced single prompt using PRODUCTION function
+    // This ensures debug shows EXACTLY what production uses
+    const enhancedPrompt = await createEnhancedSinglePrompt(documentData, schemas, processingMode, cardType);
+
+    console.log('✅ Debug processing complete - Using production prompt generation');
     
     // Return comprehensive debug information
     res.status(200).json({
