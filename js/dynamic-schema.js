@@ -226,20 +226,68 @@ class DynamicSchemaProcessor {
         return sortedCategories;
     }
 
+    // Dynamically find properties in schema (handles different schema structures)
+    findSchemaProperties(schema, cardType) {
+        const capitalizedType = cardType.charAt(0).toUpperCase() + cardType.slice(1);
+        const lowercaseType = cardType.toLowerCase();
+
+        // Strategy 1: Try properties.Dataset or properties.Model (GitHub/new format)
+        if (schema.properties?.[capitalizedType]?.properties) {
+            console.log(`✅ Found properties at: properties.${capitalizedType} (GitHub format)`);
+            return {
+                properties: schema.properties[capitalizedType].properties,
+                defs: schema.$defs || {},
+                source: `properties.${capitalizedType}`
+            };
+        }
+
+        // Strategy 2: Try $defs.dataset or $defs.model (old local format)
+        if (schema.$defs?.[lowercaseType]?.properties) {
+            console.log(`✅ Found properties at: $defs.${lowercaseType} (legacy format)`);
+            return {
+                properties: schema.$defs[lowercaseType].properties,
+                defs: schema.$defs,
+                source: `$defs.${lowercaseType}`
+            };
+        }
+
+        // Strategy 3: Fallback to root properties (generic)
+        if (schema.properties) {
+            console.log(`⚠️ Using root properties as fallback`);
+            return {
+                properties: schema.properties,
+                defs: schema.$defs || {},
+                source: 'root'
+            };
+        }
+
+        return null;
+    }
+
     // Convert ROADMAP JSON Schema to JSON Editor compatible format with tabs
     convertToJsonEditorSchema(roadmapSchema, cardType) {
         try {
             const sectionName = cardType.charAt(0).toUpperCase() + cardType.slice(1);
-            const sectionDef = roadmapSchema.$defs[cardType.toLowerCase()];
 
-            if (!sectionDef || !sectionDef.properties) {
-                throw new Error(`No ${cardType} definition or properties found in schema`);
+            // Dynamically find properties regardless of schema structure
+            const schemaInfo = this.findSchemaProperties(roadmapSchema, cardType);
+
+            if (!schemaInfo || !schemaInfo.properties) {
+                console.error('❌ Schema structure:', {
+                    hasProperties: !!roadmapSchema.properties,
+                    propertiesKeys: roadmapSchema.properties ? Object.keys(roadmapSchema.properties) : [],
+                    hasDefs: !!roadmapSchema.$defs,
+                    defsKeys: roadmapSchema.$defs ? Object.keys(roadmapSchema.$defs) : []
+                });
+                throw new Error(`No ${cardType} properties found in schema. Tried: properties.${sectionName}, $defs.${cardType.toLowerCase()}, and root properties.`);
             }
+
+            console.log(`📋 Processing schema properties from: ${schemaInfo.source}`);
 
             // Process all properties first
             const allProcessedProps = this.processProperties(
-                sectionDef.properties || {},
-                roadmapSchema.$defs,
+                schemaInfo.properties,
+                schemaInfo.defs,
                 new Set(),
                 0
             );
