@@ -184,16 +184,24 @@ async function initializeEditor(initialData = null) {
             return;
         }
 
+        // *** Normalize initial data to match schema field names (case-insensitive) ***
+        let normalizedData = initialData || {};
+        if (initialData && Object.keys(initialData).length > 0) {
+            console.log('🔄 Starting normalization of initial data...');
+            normalizedData = normalizeJsonToSchema(initialData, schema);
+            console.log('📝 Normalized data keys:', normalizedData ? Object.keys(normalizedData) : 'null');
+        }
+
         // Update schema info display
         updateSchemaInfo();
 
         // Clear loading indicator
         editorHolder.innerHTML = '';
 
-        // Initialize JSON Editor with vanilla settings
+        // Initialize JSON Editor with normalized data
         editor = new JSONEditor(editorHolder, {
             schema: schema,
-            startval: initialData || {},
+            startval: normalizedData,
             theme: 'bootstrap4',
             iconlib: 'fontawesome4',
             show_errors: 'interaction',
@@ -563,11 +571,18 @@ function resolveSchemaRef(ref, schema) {
  * @returns {object} Normalized JSON data with corrected field names
  */
 function normalizeJsonToSchema(data, schema) {
-  if (!data || typeof data !== 'object' || !schema || typeof schema !== 'object') {
+  // Guard against null/undefined/non-objects
+  if (data === null || data === undefined) {
+    console.warn('⚠️ Normalization received null/undefined data');
+    return data;
+  }
+
+  if (typeof data !== 'object' || !schema || typeof schema !== 'object') {
     return data;
   }
 
   console.log('🔄 Normalizing JSON data to match schema...');
+  console.log('📥 Input data keys:', Object.keys(data));
 
   // Check if schema has a wrapper structure (Dataset/Model/Card)
   const schemaProps = schema.properties || {};
@@ -586,31 +601,54 @@ function normalizeJsonToSchema(data, schema) {
   }
 
   // If we found a wrapper with resolved schema, normalize against it
-  if (targetSchema && targetSchema.properties) {
+  if (targetSchema && targetSchema.properties && wrapperKey) {
     console.log('✅ Using resolved schema properties for normalization');
 
-    // Create case-insensitive lookup map for the actual field names
-    const fieldMap = {};
-    for (const key in targetSchema.properties) {
-      if (targetSchema.properties.hasOwnProperty(key)) {
-        fieldMap[key.toLowerCase()] = key;
+    // Check if data is already wrapped
+    const dataHasWrapper = data.hasOwnProperty(wrapperKey) ||
+                          data.hasOwnProperty(wrapperKey.toLowerCase());
+
+    if (dataHasWrapper) {
+      console.log(`📦 Data already has "${wrapperKey}" wrapper`);
+      // Data is wrapped, normalize the inner content
+      const innerData = data[wrapperKey] || data[wrapperKey.toLowerCase()];
+
+      if (!innerData || typeof innerData !== 'object') {
+        console.warn('⚠️ Wrapper exists but inner data is invalid');
+        return data;
       }
-    }
 
-    // Normalize the data
-    const normalized = normalizeObject(data, targetSchema.properties, fieldMap, schema);
+      // Create case-insensitive lookup map
+      const fieldMap = {};
+      for (const key in targetSchema.properties) {
+        if (targetSchema.properties.hasOwnProperty(key)) {
+          fieldMap[key.toLowerCase()] = key;
+        }
+      }
 
-    // Wrap the normalized data if it's not already wrapped
-    if (!normalized[wrapperKey]) {
-      console.log(`📦 Wrapping normalized data in "${wrapperKey}" property`);
-      const wrapped = {};
-      wrapped[wrapperKey] = normalized;
+      const normalized = normalizeObject(innerData, targetSchema.properties, fieldMap, schema);
+      const result = {};
+      result[wrapperKey] = normalized;
+      console.log('✅ JSON normalization complete (already wrapped)');
+      return result;
+    } else {
+      console.log(`📦 Data is unwrapped, will wrap in "${wrapperKey}"`);
+      // Data is unwrapped, normalize then wrap
+
+      // Create case-insensitive lookup map
+      const fieldMap = {};
+      for (const key in targetSchema.properties) {
+        if (targetSchema.properties.hasOwnProperty(key)) {
+          fieldMap[key.toLowerCase()] = key;
+        }
+      }
+
+      const normalized = normalizeObject(data, targetSchema.properties, fieldMap, schema);
+      const result = {};
+      result[wrapperKey] = normalized;
       console.log('✅ JSON normalization complete (wrapped)');
-      return wrapped;
+      return result;
     }
-
-    console.log('✅ JSON normalization complete');
-    return normalized;
   }
 
   // Fallback: No wrapper detected, normalize against root properties
@@ -624,7 +662,7 @@ function normalizeJsonToSchema(data, schema) {
 
   const normalized = normalizeObject(data, schemaProps, schemaFieldMap, schema);
 
-  console.log('✅ JSON normalization complete');
+  console.log('✅ JSON normalization complete (no wrapper)');
   return normalized;
 }
 
@@ -638,20 +676,22 @@ function normalizeJsonToSchema(data, schema) {
  * @returns {object} Normalized object
  */
 function normalizeObject(obj, schemaProps, fieldMap, rootSchema) {
-  if (!obj || typeof obj !== 'object') {
+  // Handle null/undefined
+  if (obj === null || obj === undefined) {
     return obj;
   }
 
-  // Handle arrays
+  // Handle non-objects (primitives, functions, etc.)
+  if (typeof obj !== 'object') {
+    return obj;
+  }
+
+  // Handle arrays - DON'T recurse without proper schema context
+  // Arrays should be handled by the parent's schema definition
   if (Array.isArray(obj)) {
-    return obj.map(item => {
-      if (typeof item === 'object' && !Array.isArray(item)) {
-        // For object arrays, we need to infer the schema from the first item's structure
-        // or recursively normalize if we have schema info
-        return normalizeObject(item, schemaProps, fieldMap, rootSchema);
-      }
-      return item; // Primitives stay unchanged
-    });
+    console.warn('⚠️ normalizeObject called on array - this should be handled by parent schema');
+    // Return as-is; parent should handle array item normalization
+    return obj;
   }
 
   // Normalize object properties
@@ -660,10 +700,23 @@ function normalizeObject(obj, schemaProps, fieldMap, rootSchema) {
   for (const key in obj) {
     if (!obj.hasOwnProperty(key)) continue;
 
-    const lowerKey = key.toLowerCase();
-    const correctKey = fieldMap[lowerKey] || key; // Use schema key if found, otherwise keep original
-
     const value = obj[key];
+
+    // Handle null/undefined values
+    if (value === null || value === undefined) {
+      normalizedObj[key] = value;
+      continue;
+    }
+
+    const lowerKey = key.toLowerCase();
+    const correctKey = fieldMap[lowerKey]; // Use schema key if found
+
+    // If field not found in schema
+    if (!correctKey) {
+      console.warn(`⚠️ Field "${key}" not found in schema - keeping original key`);
+      normalizedObj[key] = value;
+      continue;
+    }
 
     // Check if this field has a schema definition
     const schemaProp = schemaProps[correctKey];
@@ -727,8 +780,8 @@ function normalizeObject(obj, schemaProps, fieldMap, rootSchema) {
         normalizedObj[correctKey] = value;
       }
     } else {
-      // Field not in schema - keep as is (will be handled by dynamic field injection later)
-      console.log(`⚠️ Field "${key}" not found in schema - keeping as is`);
+      // schemaProp doesn't exist but correctKey was found - unusual case
+      console.warn(`⚠️ Field "${correctKey}" found in field map but not in schema properties`);
       normalizedObj[correctKey] = value;
     }
   }
