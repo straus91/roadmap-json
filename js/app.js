@@ -625,8 +625,13 @@ function addDynamicHeaderTemplates(schema, path = 'root', depth = 0) {
           console.log(`${indent}  ↓ Recursing into object array items of ${currentPath}`);
           addDynamicHeaderTemplates(prop.items, `${currentPath}[items]`, depth + 1);
         } else {
-          // Array of simple types (string, number, etc.) - no headerTemplate needed
-          console.log(`${indent}  ℹ️ ${currentPath} is array of ${prop.items.type} (no headerTemplate needed)`);
+          // Array of simple types (string, number, etc.) - use {{self}} to show the value
+          if (!prop.items.headerTemplate) {
+            prop.items.headerTemplate = "{{self}}";
+            console.log(`${indent}  ✅ Added headerTemplate {{self}} to ${currentPath} (${prop.items.type} array)`);
+          } else {
+            console.log(`${indent}  ℹ️ ${currentPath} already has headerTemplate`);
+          }
         }
       }
       // If we find a nested object, recurse into it

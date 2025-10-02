@@ -635,7 +635,22 @@ code.small {
    ======================================== */
 
 /* Hide type selector dropdowns (object, string, array, etc.) */
-.json-editor select[data-schematype] {
+/* These dropdowns appear inline next to field labels showing types like "string", "array", "object" */
+/* They are typically small selects with gray italic text showing the type */
+
+/* Method 1: Hide selects that only contain JSON type options */
+.json-editor select:has(option[value="string"]):has(option[value="number"]):has(option[value="object"]):has(option[value="array"]) {
+    display: none !important;
+}
+
+/* Method 2: Target by position - type selectors appear after field labels */
+.json-editor > div > label + select,
+.json-editor .form-group > label + select {
+    display: none !important;
+}
+
+/* Method 3: More specific - these selects are usually inline with the label */
+.json-editor label select {
     display: none !important;
 }
 
