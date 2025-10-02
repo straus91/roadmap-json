@@ -189,17 +189,24 @@ async function initializeEditor(initialData = null) {
 
         // *** Enhance schema with all UI improvements (in-memory only) ***
         enhanceSchemaForUI(schemaClone);
-        
+
+        // *** Normalize initial data to match schema field names (case-insensitive) ***
+        let normalizedData = initialData || {};
+        if (initialData && Object.keys(initialData).length > 0) {
+            normalizedData = normalizeJsonToSchema(initialData, schemaClone);
+            console.log('📝 Normalized data:', normalizedData);
+        }
+
         // Update schema info display
         updateSchemaInfo();
-    
+
         // Clear loading indicator
         editorHolder.innerHTML = '';
 
         // Initialize JSON Editor
         editor = new JSONEditor(editorHolder, {
             schema: schemaClone,
-            startval: initialData || {},
+            startval: normalizedData,
             theme: 'bootstrap4',
             iconlib: 'fontawesome4',
             show_errors: 'interaction',
@@ -543,6 +550,173 @@ function getAlertIcon(type) {
         info: '<i class="fa fa-info-circle"></i>'
     };
     return icons[type] || icons.info;
+}
+
+/**
+ * Resolves a $ref pointer in the schema.
+ *
+ * @param {string} ref - The $ref string (e.g., "#/$defs/person")
+ * @param {object} schema - The root schema object
+ * @returns {object|null} The resolved schema object or null
+ */
+function resolveSchemaRef(ref, schema) {
+  if (!ref || !ref.startsWith('#/')) {
+    return null;
+  }
+
+  const path = ref.substring(2).split('/'); // Remove '#/' and split
+  let current = schema;
+
+  for (const part of path) {
+    if (current && typeof current === 'object' && current[part]) {
+      current = current[part];
+    } else {
+      return null;
+    }
+  }
+
+  return current;
+}
+
+/**
+ * Normalizes JSON data to match schema field names (case-insensitive).
+ * Prevents "item 1/2/3" fallback by ensuring all fields match schema expectations.
+ *
+ * @param {object} data - The JSON data to normalize
+ * @param {object} schema - The JSON schema to match against
+ * @returns {object} Normalized JSON data with corrected field names
+ */
+function normalizeJsonToSchema(data, schema) {
+  if (!data || typeof data !== 'object' || !schema || typeof schema !== 'object') {
+    return data;
+  }
+
+  console.log('🔄 Normalizing JSON data to match schema...');
+
+  // Get schema properties
+  const schemaProps = schema.properties || {};
+
+  // Create case-insensitive lookup map for schema field names
+  const schemaFieldMap = {};
+  for (const key in schemaProps) {
+    if (schemaProps.hasOwnProperty(key)) {
+      schemaFieldMap[key.toLowerCase()] = key;
+    }
+  }
+
+  // Normalize the data recursively, passing root schema for $ref resolution
+  const normalized = normalizeObject(data, schemaProps, schemaFieldMap, schema);
+
+  console.log('✅ JSON normalization complete');
+  return normalized;
+}
+
+/**
+ * Recursively normalizes an object's field names to match schema.
+ *
+ * @param {object} obj - Object to normalize
+ * @param {object} schemaProps - Schema properties for this level
+ * @param {object} fieldMap - Case-insensitive field name lookup
+ * @param {object} rootSchema - Root schema for $ref resolution
+ * @returns {object} Normalized object
+ */
+function normalizeObject(obj, schemaProps, fieldMap, rootSchema) {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    return obj.map(item => {
+      if (typeof item === 'object' && !Array.isArray(item)) {
+        // For object arrays, we need to infer the schema from the first item's structure
+        // or recursively normalize if we have schema info
+        return normalizeObject(item, schemaProps, fieldMap, rootSchema);
+      }
+      return item; // Primitives stay unchanged
+    });
+  }
+
+  // Normalize object properties
+  const normalizedObj = {};
+
+  for (const key in obj) {
+    if (!obj.hasOwnProperty(key)) continue;
+
+    const lowerKey = key.toLowerCase();
+    const correctKey = fieldMap[lowerKey] || key; // Use schema key if found, otherwise keep original
+
+    const value = obj[key];
+
+    // Check if this field has a schema definition
+    const schemaProp = schemaProps[correctKey];
+
+    if (schemaProp) {
+      // Recursively normalize based on schema type
+      if (schemaProp.type === 'object' && schemaProp.properties) {
+        // Create field map for nested object
+        const nestedFieldMap = {};
+        for (const nestedKey in schemaProp.properties) {
+          if (schemaProp.properties.hasOwnProperty(nestedKey)) {
+            nestedFieldMap[nestedKey.toLowerCase()] = nestedKey;
+          }
+        }
+        normalizedObj[correctKey] = normalizeObject(value, schemaProp.properties, nestedFieldMap, rootSchema);
+      } else if (schemaProp.type === 'array' && schemaProp.items) {
+        // Handle arrays
+        if (Array.isArray(value)) {
+          if (schemaProp.items.type === 'object' && schemaProp.items.properties) {
+            // Array of objects - normalize each item
+            const itemFieldMap = {};
+            for (const itemKey in schemaProp.items.properties) {
+              if (schemaProp.items.properties.hasOwnProperty(itemKey)) {
+                itemFieldMap[itemKey.toLowerCase()] = itemKey;
+              }
+            }
+            normalizedObj[correctKey] = value.map(item =>
+              normalizeObject(item, schemaProp.items.properties, itemFieldMap, rootSchema)
+            );
+          } else if (schemaProp.items.$ref) {
+            // Handle $ref - resolve reference and normalize
+            const resolvedSchema = resolveSchemaRef(schemaProp.items.$ref, rootSchema);
+            if (resolvedSchema && resolvedSchema.properties) {
+              // Create field map from resolved schema
+              const refFieldMap = {};
+              for (const refKey in resolvedSchema.properties) {
+                if (resolvedSchema.properties.hasOwnProperty(refKey)) {
+                  refFieldMap[refKey.toLowerCase()] = refKey;
+                }
+              }
+              normalizedObj[correctKey] = value.map(item => {
+                if (typeof item === 'object' && !Array.isArray(item)) {
+                  return normalizeObject(item, resolvedSchema.properties, refFieldMap, rootSchema);
+                }
+                return item;
+              });
+            } else {
+              // Couldn't resolve $ref - keep as is
+              console.warn(`⚠️ Could not resolve $ref: ${schemaProp.items.$ref}`);
+              normalizedObj[correctKey] = value;
+            }
+          } else {
+            // Array of primitives - keep as is
+            normalizedObj[correctKey] = value;
+          }
+        } else {
+          normalizedObj[correctKey] = value;
+        }
+      } else {
+        // Simple type - keep value as is
+        normalizedObj[correctKey] = value;
+      }
+    } else {
+      // Field not in schema - keep as is (will be handled by dynamic field injection later)
+      console.log(`⚠️ Field "${key}" not found in schema - keeping as is`);
+      normalizedObj[correctKey] = value;
+    }
+  }
+
+  return normalizedObj;
 }
 
 /**
