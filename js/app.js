@@ -720,52 +720,59 @@ function fixDynamicArrayLabels() {
 
     // Get the current editor data
     const editorData = editor.getValue();
+    console.log('📊 Editor data:', editorData);
 
     // Find all elements with "item" labels in the DOM
     const editorHolder = document.getElementById('editor-holder');
-    if (!editorHolder) return;
+    if (!editorHolder) {
+      console.warn('⚠️ Editor holder not found');
+      return;
+    }
 
-    // Find all h3 elements that contain "item" text (array item headers)
-    const itemHeaders = editorHolder.querySelectorAll('h3, .je-object__title');
+    // Cast a wider net - search for ANY element containing "item N" pattern
+    const allElements = editorHolder.querySelectorAll('*');
+    console.log(`🔍 Scanning ${allElements.length} elements for "item" labels...`);
+
     let fixedCount = 0;
+    let foundItemLabels = 0;
 
-    itemHeaders.forEach(header => {
-      const text = header.textContent.trim();
+    allElements.forEach(element => {
+      // Only process text nodes, not input values
+      if (element.children.length === 0 || element.tagName === 'SPAN' || element.tagName === 'H3' || element.tagName === 'DIV') {
+        const text = element.textContent?.trim() || '';
 
-      // Check if it's a generic "item 1", "item 2", etc. label
-      const itemMatch = text.match(/^item\s+(\d+)$/i);
-      if (itemMatch) {
-        // Try to find the actual value for this array item
-        // Walk up the DOM to find the parent array container
-        let arrayContainer = header.closest('[data-schemapath]');
-        if (arrayContainer) {
-          const schemaPath = arrayContainer.getAttribute('data-schemapath');
+        // Check if it's a generic "item 1", "item 2", etc. label (and ONLY that)
+        const itemMatch = text.match(/^item\s+(\d+)$/i);
+        if (itemMatch && element.textContent === text) {
+          foundItemLabels++;
+          console.log(`🎯 Found "item ${itemMatch[1]}" in <${element.tagName}>`);
 
-          // Try to get the actual value from editor data
-          const value = getValueFromPath(editorData, schemaPath);
-
-          if (value !== null && value !== undefined) {
-            // If it's a string, use it directly
-            if (typeof value === 'string') {
-              header.textContent = value;
-              console.log(`✅ Fixed label: "item ${itemMatch[1]}" → "${value}"`);
+          // Find the closest parent with a text input containing actual value
+          const parentContainer = element.closest('.well, [data-schemapath]');
+          if (parentContainer) {
+            // Look for input or textarea with actual value
+            const valueInput = parentContainer.querySelector('input[type="text"], textarea');
+            if (valueInput && valueInput.value && valueInput.value.trim()) {
+              const actualValue = valueInput.value.trim();
+              element.textContent = actualValue;
+              console.log(`✅ Fixed label: "item ${itemMatch[1]}" → "${actualValue}"`);
               fixedCount++;
-            }
-            // If it's an object with a Name property, use that
-            else if (typeof value === 'object' && value.Name) {
-              header.textContent = value.Name;
-              console.log(`✅ Fixed label: "item ${itemMatch[1]}" → "${value.Name}"`);
-              fixedCount++;
+            } else {
+              console.log(`⚠️ No value input found for "item ${itemMatch[1]}"`);
             }
           }
         }
       }
     });
 
+    console.log(`📈 Found ${foundItemLabels} "item" labels, fixed ${fixedCount}`);
+
     if (fixedCount > 0) {
       console.log(`✅ Fixed ${fixedCount} dynamic array labels`);
+    } else if (foundItemLabels > 0) {
+      console.warn(`⚠️ Found ${foundItemLabels} "item" labels but couldn't fix them`);
     } else {
-      console.log('ℹ️ No dynamic array labels needed fixing');
+      console.log('ℹ️ No dynamic array labels found');
     }
 
   } catch (error) {
