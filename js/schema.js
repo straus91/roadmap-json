@@ -72,7 +72,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Author",
-                        "additionalProperties": false,
                         "properties": {
                             "Name": {
                                 "type": "string",
@@ -110,7 +109,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Organization",
-                        "additionalProperties": false,
                         "properties": {
                             "Name": {
                                 "type": "string",
@@ -190,7 +188,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Reference",
-                        "additionalProperties": false,
                         "properties": {
                             "Authors": {
                                 "type": "string",
@@ -372,7 +369,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Performance Result",
-                        "additionalProperties": false,
                         "properties": {
                             "Result Information": {
                                 "type": "string",
@@ -512,7 +508,6 @@ class SchemaProcessor {
                     "items": {
                         "type": "object",
                         "title": "Author",
-                        "additionalProperties": false,
                         "properties": {
                             "Name": {
                                 "type": "string",
@@ -540,7 +535,6 @@ class SchemaProcessor {
                     "default": [{"Name": ""}],
                     "items": {
                         "type": "object",
-                        "additionalProperties": false,
                         "properties": {
                             "Name": {
                                 "type": "string",

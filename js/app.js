@@ -137,8 +137,8 @@ async function initializeEditor(initialData = null) {
         // Get schema (base or custom)
         const schema = await schemaProcessor.getSchema(currentCardType, customUrl);
 
-        // *** Automatically process the schema to add dynamic header templates ***
-        addDynamicHeaderTemplates(schema);
+        // *** Enhance schema with all UI improvements (in-memory only) ***
+        enhanceSchemaForUI(schema);
 
         if (!schema) {
             showAlert('Schema not available for ' + currentCardType + ' cards.', 'danger');
@@ -491,11 +491,35 @@ function getAlertIcon(type) {
 }
 
 /**
- * Recursively traverses a JSON schema and adds a dynamic `headerTemplate`
- * to any array of objects that doesn't already have one. It uses a
- * heuristic to find the most likely property to use for the title.
- * This function makes the UI scalable for any schema (models, datasets, etc.).
- * @param {object} schema - The JSON schema object to process.
+ * Master function to enhance any JSON schema with UI improvements.
+ * This is the single source of truth for all dynamic schema modifications.
+ * Processes schemas in-memory without modifying source files.
+ *
+ * Enhancements applied:
+ * 1. Dynamic headerTemplates for intuitive array item titles
+ * 2. Disabled additional properties to prevent confusing "item 1" fields
+ *
+ * @param {object} schema - The JSON schema object to enhance
+ */
+function enhanceSchemaForUI(schema) {
+  if (!schema || typeof schema !== 'object') {
+    return;
+  }
+
+  console.log('🔧 Enhancing schema for UI...');
+
+  // Apply all enhancements
+  addDynamicHeaderTemplates(schema);
+  disableAdditionalProperties(schema);
+
+  console.log('✅ Schema enhancement complete');
+}
+
+/**
+ * Recursively adds dynamic headerTemplates to array items.
+ * Makes array items show meaningful titles instead of generic "item 1".
+ *
+ * @param {object} schema - The JSON schema object to process
  */
 function addDynamicHeaderTemplates(schema) {
   if (!schema || typeof schema !== 'object') {
@@ -535,6 +559,37 @@ function addDynamicHeaderTemplates(schema) {
       // If we find a nested object, recurse into it
       else if (prop.type === 'object') {
         addDynamicHeaderTemplates(prop);
+      }
+    }
+  }
+}
+
+/**
+ * Recursively disables additional properties on all object items in arrays.
+ * Prevents confusing "Add Property" buttons and "item 1" fields in the UI.
+ *
+ * @param {object} schema - The JSON schema object to process
+ */
+function disableAdditionalProperties(schema) {
+  if (!schema || typeof schema !== 'object') {
+    return;
+  }
+
+  // Iterate over all properties
+  for (const key in schema.properties) {
+    if (schema.properties.hasOwnProperty(key)) {
+      const prop = schema.properties[key];
+
+      // If we find an array that contains objects
+      if (prop.type === 'array' && prop.items && prop.items.type === 'object') {
+        // Only set if not already explicitly defined
+        if (prop.items.additionalProperties === undefined) {
+          prop.items.additionalProperties = false;
+        }
+      }
+      // If we find a nested object, recurse into it
+      else if (prop.type === 'object') {
+        disableAdditionalProperties(prop);
       }
     }
   }
