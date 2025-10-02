@@ -234,7 +234,13 @@ async function initializeEditor(initialData = null) {
 
             // Fix dynamic array labels (fallback for fields not in schema)
             setTimeout(() => {
-                fixDynamicArrayLabels();
+                try {
+                    console.log('⏰ Timer fired: About to run fixDynamicArrayLabels...');
+                    fixDynamicArrayLabels();
+                } catch (error) {
+                    console.error('💥 CRITICAL ERROR in fixDynamicArrayLabels:', error);
+                    alert('Error fixing array labels: ' + error.message);
+                }
             }, FORM_RENDER_DELAY_MS + 500);
 
             // Expand all by default
