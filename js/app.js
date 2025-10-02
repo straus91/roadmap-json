@@ -611,7 +611,8 @@ function addDynamicHeaderTemplates(schema, path = 'root', depth = 0) {
             if (titleProp) {
               const fallbackTitle = prop.items.title || 'Item';
               // Use bracket notation for properties that might contain spaces
-              prop.items.headerTemplate = `{{self['${titleProp}'] || '${fallbackTitle} ' + (i+1)}}`;
+              // Use i1 for 1-based index (JSON Editor's template variable)
+              prop.items.headerTemplate = `{{self['${titleProp}'] || '${fallbackTitle} ' + i1}}`;
               console.log(`${indent}  ✅ Added headerTemplate to ${currentPath} using "${titleProp}"`);
             } else {
               console.log(`${indent}  ⚠️ No title property found for ${currentPath}`);

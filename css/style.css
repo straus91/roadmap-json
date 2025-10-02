@@ -629,3 +629,22 @@ code.small {
     background-color: #fefefe !important;
     margin-left: 10px !important;
 }
+
+/* ========================================
+   Hide Unwanted JSON Editor UI Elements
+   ======================================== */
+
+/* Hide type selector dropdowns (object, string, array, etc.) */
+.json-editor select[data-schematype] {
+    display: none !important;
+}
+
+/* Hide "Edit Properties" buttons on objects */
+.json-editor-btn-edit_properties {
+    display: none !important;
+}
+
+/* Hide property selector controls */
+.json-editor .property-selector {
+    display: none !important;
+}
