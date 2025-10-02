@@ -672,3 +672,50 @@ Hide property selector controls
     display: none !important;
 }
 */
+
+/* ==========================================================================
+   CUSTOM THEME OVERRIDE - BOXY & COMPACT
+   ========================================================================== */
+
+/* Remove rounded corners from all major components within the editor */
+#editor-holder .card,
+#editor-holder .form-control,
+#editor-holder .btn,
+#editor-holder .alert {
+    border-radius: 0 !important;
+}
+
+/* Reduce the vertical padding inside the main editor sections */
+#editor-holder > .card > .card-body {
+    padding: 1rem;
+}
+
+/* Reduce padding on nested cards (used for arrays and objects) */
+#editor-holder .card .card-body {
+    padding: 0.75rem;
+}
+#editor-holder .card .card-header {
+    padding: 0.5rem 0.75rem;
+}
+
+/* Make form fields and labels tighter */
+#editor-holder .form-group {
+    margin-bottom: 0.75rem; /* Reduces space between fields */
+    padding-bottom: 0.75rem;
+}
+
+#editor-holder .form-control {
+    padding: 0.25rem 0.5rem; /* Reduces the height of input boxes */
+    height: auto;
+}
+
+/* Tighten up button spacing and padding */
+#editor-holder .btn {
+    padding: 0.25rem 0.6rem;
+}
+
+/* Make array item headers more compact */
+[data-schematype="array"] .card-header h5 {
+    font-size: 0.9rem; /* Smaller font for array item titles */
+    margin-bottom: 0;
+}
