@@ -1260,34 +1260,65 @@ ${JSON.stringify(documentData.tables, null, 2)}
 async function parseAndCleanGeminiResponse(response, cardType) {
   try {
     console.log('🔧 Parsing Gemini response...');
-    
+
     // Parse the Gemini API response format
     const parsedResponse = JSON.parse(response);
-    
+
+    // Detailed diagnostic logging
+    console.log('🔍 DIAGNOSTIC: Gemini response structure:', {
+      hasCandidates: !!parsedResponse.candidates,
+      candidatesCount: parsedResponse.candidates?.length || 0,
+      hasContent: !!parsedResponse.candidates?.[0]?.content,
+      hasParts: !!parsedResponse.candidates?.[0]?.content?.parts,
+      partsCount: parsedResponse.candidates?.[0]?.content?.parts?.length || 0,
+      hasText: !!parsedResponse.candidates?.[0]?.content?.parts?.[0]?.text,
+      finishReason: parsedResponse.candidates?.[0]?.finishReason,
+      safetyRatings: parsedResponse.candidates?.[0]?.safetyRatings
+    });
+
+    // Check for safety blocks or other issues
+    if (parsedResponse.candidates?.[0]?.finishReason) {
+      const finishReason = parsedResponse.candidates[0].finishReason;
+      console.log('📋 Finish reason:', finishReason);
+
+      if (finishReason === 'SAFETY') {
+        console.error('🚫 Response blocked by safety filters');
+        console.error('Safety ratings:', JSON.stringify(parsedResponse.candidates[0].safetyRatings, null, 2));
+      } else if (finishReason === 'RECITATION') {
+        console.error('🚫 Response blocked due to recitation');
+      } else if (finishReason !== 'STOP') {
+        console.warn('⚠️ Unusual finish reason:', finishReason);
+      }
+    }
+
     // Extract text content from Gemini's response structure
     let textContent = '';
     if (parsedResponse.candidates?.[0]?.content?.parts?.[0]?.text) {
       textContent = parsedResponse.candidates[0].content.parts[0].text;
     } else {
       console.error('❌ Unexpected Gemini response structure');
+      console.error('📄 Full response (first 1000 chars):', JSON.stringify(parsedResponse).substring(0, 1000));
       return null;
     }
-    
+
     console.log('📝 Extracted text content length:', textContent.length);
-    
+    console.log('📝 Text preview (first 300 chars):', textContent.substring(0, 300));
+
     // Clean the text content to extract JSON
     const cleanedJson = extractJsonFromText(textContent, cardType);
-    
+
     if (cleanedJson) {
       console.log('✅ Successfully parsed and validated JSON');
       return cleanedJson;
     }
-    
+
     console.error('❌ No valid JSON found in response');
+    console.error('📄 Full text content (first 1000 chars):', textContent.substring(0, 1000));
     return null;
-    
+
   } catch (error) {
     console.error('❌ Error parsing Gemini response:', error);
+    console.error('Stack trace:', error.stack);
     return null;
   }
 }
