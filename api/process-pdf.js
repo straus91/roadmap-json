@@ -972,10 +972,9 @@ async function generateExampleFromSchema(schema, cardType) {
             "URL": "string"
           };
         } else if (ref.includes('date')) {
-          return {
-            "Published": "YYYY-MM-DD",
-            "Updated": "YYYY-MM-DD"
-          };
+          // ROADMAP.date.json defines date as a PRIMITIVE (string or integer), NOT an object
+          // Return a simple date string as the example
+          return "2025-01-01";
         } else if (ref.includes('reference')) {
           return {
             "Title": "string",
@@ -1354,6 +1353,20 @@ function cleanEmptyValues(obj, depth = 0) {
         } catch (e) {
           // Not valid JSON, keep original value
           cleanedValue = value;
+        }
+      }
+    }
+
+    // Generic unwrapper: if object has single key with primitive value, unwrap it
+    // This catches cases like {"Published": "2024-12-09"} → "2024-12-09"
+    if (typeof cleanedValue === 'object' && !Array.isArray(cleanedValue) && cleanedValue !== null) {
+      const keys = Object.keys(cleanedValue);
+      if (keys.length === 1) {
+        const innerValue = cleanedValue[keys[0]];
+        // Only unwrap if inner value is primitive (string, number, boolean, null)
+        if (typeof innerValue !== 'object' || innerValue === null) {
+          cleanedValue = innerValue;
+          console.log(`🔧 Unwrapped single-key nested object in field "${key}": {${keys[0]}: ...} → ${JSON.stringify(innerValue)}`);
         }
       }
     }
