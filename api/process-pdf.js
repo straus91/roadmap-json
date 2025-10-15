@@ -1743,7 +1743,7 @@ export default async function handler(req, res) {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 32768,
         },
         safetySettings: [
           {
@@ -1751,7 +1751,7 @@ export default async function handler(req, res) {
             threshold: "BLOCK_MEDIUM_AND_ABOVE"
           },
           {
-            category: "HARM_CATEGORY_HATE_SPEECH", 
+            category: "HARM_CATEGORY_HATE_SPEECH",
             threshold: "BLOCK_MEDIUM_AND_ABOVE"
           }
         ]
@@ -1781,7 +1781,7 @@ export default async function handler(req, res) {
         contents: [{ parts: contentParts }],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 32768,
         },
         safetySettings: [
           {
