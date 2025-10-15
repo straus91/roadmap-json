@@ -2451,21 +2451,23 @@ async function handlePdfUpload(event) {
         return;
     }
 
-    // Step 1: Analyze PDF and auto-detect schema type
-    showAlert('Analyzing PDF content...', 'info', 0);
-    try {
-        pdfState.detectedType = await analyzeAndSelectSchema(file);
-        pdfState.cardType = pdfState.detectedType;
-
-        // Update UI to show detection
-        setPdfCardType(pdfState.cardType);
-        updatePdfDetectionDisplay();
-
-        console.log('✅ Auto-detected card type:', pdfState.cardType);
-    } catch (error) {
-        console.error('Error during PDF analysis:', error);
-        // Continue with current selection if analysis fails
-    }
+    // Step 1: Use manually selected card type (auto-detection disabled)
+    console.log('✅ Using manually selected card type:', pdfState.cardType);
+    // Auto-detection disabled - using manual selection from buttons
+    // showAlert('Analyzing PDF content...', 'info', 0);
+    // try {
+    //     pdfState.detectedType = await analyzeAndSelectSchema(file);
+    //     pdfState.cardType = pdfState.detectedType;
+    //
+    //     // Update UI to show detection
+    //     setPdfCardType(pdfState.cardType);
+    //     updatePdfDetectionDisplay();
+    //
+    //     console.log('✅ Auto-detected card type:', pdfState.cardType);
+    // } catch (error) {
+    //     console.error('Error during PDF analysis:', error);
+    //     // Continue with current selection if analysis fails
+    // }
 
     // Step 2: Fetch the schema
     showAlert('Fetching schema...', 'info', 0);
