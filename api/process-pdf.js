@@ -1304,6 +1304,17 @@ async function parseAndCleanGeminiResponse(response, cardType) {
     console.log('📝 Extracted text content length:', textContent.length);
     console.log('📝 Text preview (first 300 chars):', textContent.substring(0, 300));
 
+    // Log the FULL response for debugging (will help us see the actual error)
+    if (textContent.length < 50000) {
+      console.log('📄 FULL GEMINI RESPONSE:');
+      console.log(textContent);
+      console.log('📄 END OF FULL RESPONSE');
+    } else {
+      console.log('⚠️ Response too large to log fully:', textContent.length, 'chars');
+      console.log('📄 First 5000 chars:', textContent.substring(0, 5000));
+      console.log('📄 Last 5000 chars:', textContent.substring(textContent.length - 5000));
+    }
+
     // Clean the text content to extract JSON
     const cleanedJson = extractJsonFromText(textContent, cardType);
 
@@ -1313,7 +1324,6 @@ async function parseAndCleanGeminiResponse(response, cardType) {
     }
 
     console.error('❌ No valid JSON found in response');
-    console.error('📄 Full text content (first 1000 chars):', textContent.substring(0, 1000));
     return null;
 
   } catch (error) {
