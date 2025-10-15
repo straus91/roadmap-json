@@ -1281,6 +1281,99 @@ ${JSON.stringify(documentData.tables, null, 2)}
 **FINAL OUTPUT (A single, valid JSON object only):**`;
 }
 
+/**
+ * Post-processing function to clean empty/null values from JSON output
+ * Removes: empty strings, empty objects, empty arrays, null values, and fixes stringified JSON bugs
+ *
+ * @param {*} obj - The JSON object to clean
+ * @param {number} depth - Current recursion depth (prevents infinite recursion)
+ * @returns {*} - Cleaned JSON object with empty values removed
+ */
+function cleanEmptyValues(obj, depth = 0) {
+  const MAX_DEPTH = 50;  // Prevent infinite recursion
+  if (depth > MAX_DEPTH) {
+    console.warn('⚠️ Max recursion depth reached in cleanEmptyValues');
+    return obj;
+  }
+
+  // Handle null and undefined
+  if (obj === null || obj === undefined) {
+    return undefined;  // Will be removed by parent
+  }
+
+  // Handle primitive types - preserve meaningful values
+  if (typeof obj !== 'object') {
+    // Keep numeric zeros and false booleans (they are meaningful)
+    if (obj === 0 || obj === false) return obj;
+    // Remove empty strings
+    if (obj === '') return undefined;
+    return obj;
+  }
+
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    const cleaned = obj
+      .map(item => cleanEmptyValues(item, depth + 1))  // Recurse on each item
+      .filter(item => {
+        // Remove undefined, null, empty strings, empty objects/arrays
+        if (item === null || item === undefined) return false;
+        if (item === '') return false;
+        if (typeof item === 'object' && !Array.isArray(item) && Object.keys(item).length === 0) return false;
+        if (Array.isArray(item) && item.length === 0) return false;
+        return true;
+      });
+
+    // Return undefined if array is now empty (will be removed by parent)
+    return cleaned.length === 0 ? undefined : cleaned;
+  }
+
+  // Handle objects
+  const cleaned = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    // Fix stringified JSON bug first (e.g., "{"Published":"2024-12-09"}" -> "2024-12-09")
+    let cleanedValue = value;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          // If parsed object has only one key, extract its value
+          if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const keys = Object.keys(parsed);
+            if (keys.length === 1) {
+              cleanedValue = parsed[keys[0]];
+              console.log(`🔧 Fixed stringified JSON in field "${key}": ${trimmed.substring(0, 50)}... → ${cleanedValue}`);
+            } else {
+              cleanedValue = parsed;
+            }
+          } else {
+            cleanedValue = parsed;
+          }
+        } catch (e) {
+          // Not valid JSON, keep original value
+          cleanedValue = value;
+        }
+      }
+    }
+
+    // Recurse on the value
+    cleanedValue = cleanEmptyValues(cleanedValue, depth + 1);
+
+    // Skip if value is now undefined/null/empty
+    if (cleanedValue === null || cleanedValue === undefined) continue;
+    if (cleanedValue === '') continue;
+    if (typeof cleanedValue === 'object' && !Array.isArray(cleanedValue) && Object.keys(cleanedValue).length === 0) continue;
+    if (Array.isArray(cleanedValue) && cleanedValue.length === 0) continue;
+
+    // Keep the cleaned value
+    cleaned[key] = cleanedValue;
+  }
+
+  return cleaned;
+}
+
 // Parse and clean Gemini response to extract valid JSON
 async function parseAndCleanGeminiResponse(response, cardType) {
   try {
@@ -1814,15 +1907,20 @@ export default async function handler(req, res) {
 
     // Parse and clean the Gemini response
     const cleanedJson = await parseAndCleanGeminiResponse(fullResponse, cardType);
-    
+
     if (!cleanedJson) {
       console.error('❌ Failed to parse valid JSON from Gemini response');
       return res.status(500).json({ error: 'Failed to generate valid JSON from AI response' });
     }
 
+    // Post-process to remove empty values and fix stringified JSON bugs
+    console.log('🧹 Post-processing: Cleaning empty values and fixing stringified JSON...');
+    const finalJson = cleanEmptyValues(cleanedJson);
+    console.log('✅ Post-processing complete');
+
     // Return the clean, validated JSON response
     console.log('✅ Sending clean JSON response');
-    res.status(200).json(cleanedJson);
+    res.status(200).json(finalJson);
 
   } catch (error) {
     console.error('Backend error:', error);
