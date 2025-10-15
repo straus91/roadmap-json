@@ -950,20 +950,45 @@ async function generateExampleFromSchema(schema, cardType) {
 
       // Check if external reference (no "#" means external file)
       if (!ref.startsWith('#')) {
-        // External reference like "ROADMAP.indexing.json"
-        if (visited.has(ref)) return "circular reference";
+        // External reference like "ROADMAP.person.json" or "ROADMAP.org.json"
+        // Instead of fetching and expanding, use simplified placeholders to reduce prompt size
+        console.log(`📦 Using simplified placeholder for external ref: ${ref}`);
 
-        const externalSchema = await fetchExternalSchema(ref);
-        if (!externalSchema) {
-          return "external schema unavailable";
+        // Return simplified structure based on common external schema types
+        if (ref.includes('person')) {
+          return {
+            "Name": "string",
+            "Email": "string",
+            "Address": "string",
+            "ORCID": "string",
+            "URL": "string"
+          };
+        } else if (ref.includes('org')) {
+          return {
+            "Name": "string",
+            "Contact name": "string",
+            "Email": "string",
+            "Address": "string",
+            "URL": "string"
+          };
+        } else if (ref.includes('date')) {
+          return {
+            "Published": "YYYY-MM-DD",
+            "Updated": "YYYY-MM-DD"
+          };
+        } else if (ref.includes('reference')) {
+          return {
+            "Title": "string",
+            "Authors": "string",
+            "Journal": "string",
+            "Year": 0,
+            "DOI": "string",
+            "URL": "string"
+          };
+        } else {
+          // Generic simplified object for unknown external refs
+          return { "field": "string" };
         }
-
-        const newVisited = new Set(visited);
-        newVisited.add(ref);
-
-        // Recursively generate value from the fetched external schema
-        // This handles ALL JSON Schema types: objects, arrays, anyOf, simple types, etc.
-        return await generateValue(externalSchema, newVisited, depth + 1);
       }
 
       // Internal reference like "#/$defs/person"
