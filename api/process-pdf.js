@@ -951,43 +951,21 @@ async function generateExampleFromSchema(schema, cardType) {
       // Check if external reference (no "#" means external file)
       if (!ref.startsWith('#')) {
         // External reference like "ROADMAP.person.json" or "ROADMAP.org.json"
-        // Instead of fetching and expanding, use simplified placeholders to reduce prompt size
-        console.log(`📦 Using simplified placeholder for external ref: ${ref}`);
+        // Fetch the actual ROADMAP schema file to ensure correctness
+        console.log(`🌐 Fetching external schema: ${ref}`);
 
-        // Return simplified structure based on common external schema types
-        if (ref.includes('person')) {
-          return {
-            "Name": "string",
-            "Email": "string",
-            "Address": "string",
-            "ORCID": "string",
-            "URL": "string"
-          };
-        } else if (ref.includes('org')) {
-          return {
-            "Name": "string",
-            "Contact name": "string",
-            "Email": "string",
-            "Address": "string",
-            "URL": "string"
-          };
-        } else if (ref.includes('date')) {
-          // ROADMAP.date.json defines date as a PRIMITIVE (string or integer), NOT an object
-          // Return a simple date string as the example
-          return "2025-01-01";
-        } else if (ref.includes('reference')) {
-          return {
-            "Title": "string",
-            "Authors": "string",
-            "Journal": "string",
-            "Year": 0,
-            "DOI": "string",
-            "URL": "string"
-          };
-        } else {
-          // Generic simplified object for unknown external refs
-          return { "field": "string" };
+        // Fetch actual external schema (uses caching)
+        const externalSchema = await fetchExternalSchema(ref);
+
+        if (externalSchema) {
+          console.log(`✅ Using fetched schema for ${ref}`);
+          // Recursively generate example from the ACTUAL schema structure
+          return await generateValue(externalSchema, visited, depth + 1);
         }
+
+        // Fallback if fetch fails (network issue, invalid schema, etc.)
+        console.warn(`⚠️ Failed to fetch external schema ${ref}, using primitive fallback`);
+        return "string";  // Safe primitive fallback
       }
 
       // Internal reference like "#/$defs/person"
