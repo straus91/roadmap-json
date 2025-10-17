@@ -47,6 +47,7 @@ let editor = null;
 let currentCardType = null;
 let isJsonPreviewVisible = false;
 let schemaProcessor = null;
+let showEmptyOptionalFields = false;  // Track show_opt_in setting
 
 // PDF processing state (consolidated structure)
 const pdfState = {
@@ -56,6 +57,66 @@ const pdfState = {
     schemaUrl: null,
     detectedType: CARD_TYPES.MODEL
 };
+
+// Store selected PDF file globally (for 2-step upload/process workflow)
+let selectedPdfFile = null;
+
+// ==============================================================================
+// PDF SELECT/PROCESS FUNCTIONS (2-step workflow)
+// ==============================================================================
+
+// PDF Selection Handler (Step 1: Select file)
+function handlePdfSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+        showAlert('Please select a valid PDF file.', 'danger');
+        return;
+    }
+
+    // Validate file size (50MB limit for client-side processing)
+    const maxSizeInMB = 50;
+    if (file.size > maxSizeInMB * 1024 * 1024) {
+        showAlert('File size exceeds ' + maxSizeInMB + 'MB limit.', 'danger');
+        return;
+    }
+
+    // Store the selected file
+    selectedPdfFile = file;
+
+    // Update UI to show file is selected
+    const filenameDiv = document.getElementById('pdf-selected-filename');
+    filenameDiv.textContent = 'Selected: ' + file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + ' MB)';
+    filenameDiv.style.display = 'block';
+
+    // Enable the "Process PDF" button
+    document.getElementById('process-pdf-btn').disabled = false;
+
+    showAlert('PDF selected. Click Process PDF to continue.', 'success', 3000);
+}
+
+// PDF Processing Handler (Step 2: Process the selected file)
+async function processPdfFile() {
+    if (!selectedPdfFile) {
+        showAlert('Please select a PDF file first.', 'danger');
+        return;
+    }
+
+    // Call the original handlePdfUpload with the selected file
+    await handlePdfUpload({target: {files: [selectedPdfFile], value: ''}});
+
+    // Reset for next use
+    selectedPdfFile = null;
+    document.getElementById('pdf-file-input').value = '';
+    document.getElementById('pdf-selected-filename').style.display = 'none';
+    document.getElementById('process-pdf-btn').disabled = true;
+}
+
+// ==============================================================================
+// END PDF SELECT/PROCESS FUNCTIONS
+// ==============================================================================
 
 // Debug processing state (consolidated structure)
 const debugState = {
@@ -211,7 +272,7 @@ async function initializeEditor(initialData = null) {
             no_additional_properties: false,
             disable_edit_json: true,
             disable_properties: false,
-            show_opt_in: true,
+            show_opt_in: showEmptyOptionalFields,
             compact: true,
             object_layout: 'normal',
             // Additional options to help with dropdown rendering
@@ -387,7 +448,7 @@ function toggleView(viewType) {
 function toggleJsonPreview() {
     isJsonPreviewVisible = !isJsonPreviewVisible;
     const panel = document.getElementById('json-preview-panel');
-    
+
     if (isJsonPreviewVisible) {
         panel.style.display = 'block';
         updateJsonPreview();
@@ -398,7 +459,7 @@ function toggleJsonPreview() {
 
 function updateJsonPreview() {
     if (!isJsonPreviewVisible || !editor) return;
-    
+
     try {
         const data = editor.getValue();
         const previewContent = document.getElementById('json-preview-content');
@@ -408,6 +469,44 @@ function updateJsonPreview() {
         const previewContent = document.getElementById('json-preview-content');
         previewContent.textContent = 'Preview not available - editor still loading';
     }
+}
+
+function toggleEmptyFields() {
+    if (!editor) {
+        showAlert('Editor not initialized yet', 'warning');
+        return;
+    }
+
+    // Toggle the state
+    showEmptyOptionalFields = !showEmptyOptionalFields;
+
+    // Update button text
+    const buttonText = document.getElementById('toggle-empty-fields-text');
+    const buttonIcon = document.querySelector('#toggle-empty-fields-btn i');
+
+    if (showEmptyOptionalFields) {
+        buttonText.textContent = 'Hide Empty Optional Fields';
+        buttonIcon.className = 'fa fa-eye mr-2';
+    } else {
+        buttonText.textContent = 'Show Empty Optional Fields';
+        buttonIcon.className = 'fa fa-eye-slash mr-2';
+    }
+
+    // Save current editor data before reinitializing
+    const currentData = editor.getValue();
+
+    // Destroy current editor
+    editor.destroy();
+
+    // Reinitialize editor with new show_opt_in setting
+    console.log('🔄 Reinitializing editor with show_opt_in:', showEmptyOptionalFields);
+    initializeEditor(currentData);
+
+    // Show feedback to user
+    const message = showEmptyOptionalFields
+        ? 'Now showing all optional fields (including empty ones)'
+        : 'Now hiding empty optional fields for cleaner view';
+    showAlert(message, 'info');
 }
 
 // Validation
@@ -449,27 +548,37 @@ function downloadJSON() {
         showAlert('Editor not ready yet. Please wait and try again.', 'warning');
         return;
     }
-    
+
+    // Validate before download (non-blocking warning)
+    const isValid = validateForm(false);  // Silent validation
+    if (!isValid) {
+        const proceed = confirm('⚠️ Validation errors detected in your data.\n\nThe JSON may not be fully compliant with the ROADMAP schema.\n\nDo you want to download anyway?');
+        if (!proceed) {
+            showAlert('Download cancelled. Please fix validation errors and try again.', 'info');
+            return;
+        }
+    }
+
     try {
         const editorData = editor.getValue();
-        
+
         // Construct the complete ROADMAP JSON structure
         const roadmapData = {
             $schema: `ROADMAP-${currentCardType}-2025-05.json`
         };
-        
+
         // Add the appropriate section
         if (currentCardType === CARD_TYPES.MODEL) {
             roadmapData.Model = editorData;
         } else if (currentCardType === CARD_TYPES.DATASET) {
             roadmapData.Dataset = editorData;
         }
-        
+
         // Create and download file
         const jsonString = JSON.stringify(roadmapData, null, 2);
         const blob = new Blob([jsonString], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        
+
         const a = document.createElement('a');
         a.href = url;
         a.download = `roadmap-${currentCardType}-${new Date().toISOString().split('T')[0]}.json`;
@@ -477,9 +586,9 @@ function downloadJSON() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
+
         showAlert('✅ JSON file downloaded successfully!', 'success');
-        
+
     } catch (error) {
         console.error('Download error:', error);
         showAlert('Error creating download file: ' + error.message, 'danger');
@@ -1321,10 +1430,20 @@ function downloadTXT() {
         showAlert('Editor not ready yet. Please wait and try again.', 'warning');
         return;
     }
-    
+
+    // Validate before download (non-blocking warning)
+    const isValid = validateForm(false);  // Silent validation
+    if (!isValid) {
+        const proceed = confirm('⚠️ Validation errors detected in your data.\n\nThe TXT file may not be fully compliant with the ROADMAP schema.\n\nDo you want to download anyway?');
+        if (!proceed) {
+            showAlert('Download cancelled. Please fix validation errors and try again.', 'info');
+            return;
+        }
+    }
+
     try {
         const editorData = editor.getValue();
-        
+
         // Convert to TXT format
         let txtData;
         if (currentCardType === CARD_TYPES.MODEL) {
@@ -1332,12 +1451,12 @@ function downloadTXT() {
         } else if (currentCardType === CARD_TYPES.DATASET) {
             txtData = convertRoadmapToTxtDataset(editorData);
         }
-        
+
         // Create and download file
         const txtString = JSON.stringify(txtData, null, 0);
         const blob = new Blob([txtString], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
-        
+
         const a = document.createElement('a');
         a.href = url;
         a.download = `roadmap-${currentCardType}-${new Date().toISOString().split('T')[0]}.txt`;
@@ -1345,7 +1464,7 @@ function downloadTXT() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
+
         showAlert('✅ TXT file downloaded successfully!', 'success');
         
     } catch (error) {
@@ -2444,8 +2563,8 @@ async function handlePdfUpload(event) {
         return;
     }
 
-    // Validate file size (10MB limit)
-    const maxSizeInMB = 10;
+    // Validate file size (50MB limit for client-side processing)
+    const maxSizeInMB = 50;
     if (file.size > maxSizeInMB * 1024 * 1024) {
         showAlert(`File size exceeds ${maxSizeInMB}MB limit. Please select a smaller PDF file.`, 'danger');
         return;
@@ -2482,24 +2601,12 @@ async function handlePdfUpload(event) {
         console.log('✅ Schema loaded from:', schemaUrl);
     } catch (error) {
         console.error('Error fetching schema:', error);
-        showAlert('Warning: Could not fetch custom schema, using local fallback', 'warning', 3000);
-        // Backend will use local schemas as fallback
+        showAlert('Error: Could not fetch custom schema from URL', 'error', 5000);
+        return; // Cannot proceed without schema
     }
 
-    // Step 3: Upload PDF with schema
-    showAlert('Processing PDF... This may take a moment.', 'info', 0);
-
-    const formData = new FormData();
-    formData.append('pdf', file);
-    formData.append('mode', pdfState.processingMode);
-    formData.append('cardType', pdfState.cardType);
-
-    // Send schema as JSON string if available
-    if (customSchema) {
-        formData.append('customSchema', JSON.stringify(customSchema));
-    }
-
-    console.log('🔍 DEBUG: Sending to backend:', {
+    // Step 3: Process PDF with client-side extraction + Gemini AI
+    console.log('🔍 DEBUG: Processing configuration:', {
         mode: pdfState.processingMode,
         cardType: pdfState.cardType,
         schemaSource: pdfState.schemaSource,
@@ -2508,20 +2615,38 @@ async function handlePdfUpload(event) {
     });
 
     try {
-        // Send the file to the streaming serverless function
-        const response = await fetch('/api/process-pdf', {
-            method: 'POST',
-            body: formData,
-        });
+        // ========== NEW CLIENT-SIDE PROCESSING ==========
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error occurred' }));
-            throw new Error(errorData.error || `Server error: ${response.status}`);
+        // Validate API key is configured
+        if (!isApiKeyConfigured()) {
+            throw new Error('Gemini API key not configured. Please enter your API key at the top of the page.');
         }
 
-        // Get the complete JSON response from backend
-        const structuredJson = await response.json();
-        console.log('✅ Received clean JSON response from backend');
+        // Step 3a: Extract PDF data using PDF.js (client-side)
+        showAlert('Extracting text from PDF...', 'info', 0);
+
+        const pdfData = await extractPdfData(file, (progress) => {
+            // Update UI with extraction progress
+            if (progress.stage === 'extracting') {
+                showAlert(progress.message, 'info', 0);
+            }
+        });
+
+        console.log('✅ PDF extraction complete');
+        console.log('📝 Text length:', pdfData.text.length, 'characters');
+        console.log('📋 Tables found:', pdfData.tables.length);
+
+        // Step 3b: Process with Gemini AI (direct API call)
+        showAlert('Processing with Gemini AI... This may take a moment.', 'info', 0);
+
+        const structuredJson = await processPdfWithGemini(
+            pdfData,
+            customSchema,           // Schema fetched earlier
+            pdfState.cardType,      // 'model' or 'dataset'
+            pdfState.processingMode // 'text-only' or 'multimodal'
+        );
+
+        console.log('✅ Gemini processing complete');
 
         // Store PDF metadata for potential saving
         if (structuredJson._metadata) {
@@ -2576,22 +2701,32 @@ async function handlePdfUpload(event) {
         event.target.value = '';
 
     } catch (error) {
-        console.error('PDF Upload Error:', error);
-        
+        console.error('PDF Processing Error:', error);
+
         // Hide the loading indicator
         document.querySelector('.alert.custom-alert')?.remove();
-        
-        // Show error message
-        let errorMessage = 'Error processing PDF: ' + error.message;
-        
-        if (error.message.includes('API key')) {
-            errorMessage = 'PDF processing is not configured. Please contact your administrator.';
-        } else if (error.message.includes('Failed to fetch')) {
-            errorMessage = 'Network error. Please check your connection and try again.';
+
+        // Enhanced error messages for client-side processing
+        let errorMessage = error.message;
+
+        if (error.message.includes('API key') || error.message.includes('not configured')) {
+            errorMessage = '🔑 API Key Required: Please enter your Gemini API key at the top of the page to use PDF processing.';
+        } else if (error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED')) {
+            errorMessage = '⚠️ API Quota Exceeded: You have reached your Gemini API usage limits. Please wait a few minutes or check your quota at https://aistudio.google.com/';
+        } else if (error.message.includes('SAFETY') || error.message.includes('safety filter')) {
+            errorMessage = '🚫 Content Blocked: The PDF content was blocked by Gemini safety filters. Please try a different PDF or adjust the content.';
+        } else if (error.message.includes('Invalid API key') || error.message.includes('API_KEY_INVALID')) {
+            errorMessage = '❌ Invalid API Key: Please check your Gemini API key and try again. Get a new key at https://aistudio.google.com/app/apikey';
+        } else if (error.message.includes('PDF') || error.message.includes('extraction')) {
+            errorMessage = '📄 PDF Error: ' + error.message;
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            errorMessage = '🌐 Network Error: Please check your internet connection and try again.';
+        } else {
+            errorMessage = 'Error processing PDF: ' + error.message;
         }
-        
+
         showAlert(errorMessage, 'danger');
-        
+
         // Clear the file input
         event.target.value = '';
     }
@@ -2967,8 +3102,8 @@ async function handleDebugPdfUpload(event) {
         customSchema = await fetchAndCacheSchema(schemaUrl);
         console.log('✅ Schema loaded from:', schemaUrl);
     } catch (error) {
-        console.error('Error fetching schema:', error);
-        // Backend will use local schemas as fallback
+        console.error('Error fetching custom schema:', error);
+        showAlert('Warning: Could not fetch custom schema, using GitHub default', 'warning', 4000);
     }
 
     // Step 3: Process PDF

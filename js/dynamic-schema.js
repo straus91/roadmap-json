@@ -607,7 +607,8 @@ class DynamicSchemaProcessor {
             displaySource = 'GitHub (Latest)';
             sourceUrl = this.GITHUB_SCHEMAS[cardType];
         } else if (source === 'base') {
-            displaySource = 'Local Files';
+            displaySource = 'GitHub (Base)';
+            sourceUrl = this.GITHUB_SCHEMAS[cardType];
         } else {
             displaySource = 'Custom URL';
             sourceUrl = source;

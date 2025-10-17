@@ -1,33 +1,26 @@
 {
   "name": "roadmap-model-card-editor",
-  "version": "1.0.0",
-  "description": "ROADMAP Model Card Editor with PDF processing capabilities",
-  "type": "module",
+  "version": "2.0.0",
+  "description": "ROADMAP Model Card Editor - Fully Static with Client-Side PDF Processing",
   "main": "index.html",
   "scripts": {
-    "start": "vercel dev",
-    "deploy": "vercel --prod"
-  },
-  "dependencies": {
-    "@google-cloud/documentai": "^8.11.0",
-    "better-sqlite3": "^9.6.0",
-    "express": "^5.1.0",
-    "formidable": "^3.5.1",
-    "uuid": "^10.0.0"
-  },
-  "devDependencies": {
-    "@vercel/node": "^3.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "serve": "npx http-server . -p 8080 -c-1"
   },
   "keywords": [
     "roadmap",
     "model-card",
     "ai",
     "medical-imaging",
-    "pdf-processing"
+    "pdf-processing",
+    "static-site",
+    "gemini-ai",
+    "client-side"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/roadmap-json.git"
+  },
+  "homepage": "https://yourusername.github.io/roadmap-json/"
 }
