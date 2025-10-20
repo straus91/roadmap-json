@@ -66,3 +66,12 @@ dev/
 test-results/
 .nyc_output/
 .vercel
+
+# AWS deployment artifacts
+aws-infrastructure/lambda/function.zip
+aws-infrastructure/deployment-output.json
+aws-infrastructure/lambda/node_modules/
+aws-infrastructure/lambda/package-lock.json
+
+# Claude Code settings
+.claude/
