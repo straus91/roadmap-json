@@ -30,76 +30,23 @@
             <p class="lead text-white">Create and edit ROADMAP-compliant JSON files for AI models and datasets</p>
         </header>
 
-        <!-- API Key Configuration -->
+        <!-- Backend Status -->
         <div class="row justify-content-center mb-4">
             <div class="col-lg-8">
-                <div class="card shadow-sm border-primary">
-                    <div class="card-header bg-primary text-white">
+                <div class="card shadow-sm border-success">
+                    <div class="card-header bg-success text-white">
                         <h5 class="mb-0">
-                            <i class="fa fa-key mr-2"></i>Gemini API Configuration
+                            <i class="fa fa-cloud mr-2"></i>Secure Cloud Backend
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p class="mb-3">
-                            <strong>PDF extraction requires a Google Gemini API key.</strong>
-                            Your key is stored locally in your browser and never sent to any server except Google's Gemini API.
-                        </p>
-
-                        <div class="form-group mb-3">
-                            <label for="gemini-api-key"><strong>Gemini API Key:</strong></label>
-                            <div class="input-group">
-                                <input
-                                    type="password"
-                                    class="form-control"
-                                    id="gemini-api-key"
-                                    placeholder="Enter your Gemini API key"
-                                    autocomplete="off"
-                                >
-                                <div class="input-group-append">
-                                    <button class="btn btn-outline-secondary" type="button" id="toggle-api-key-visibility">
-                                        <i class="fa fa-eye"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <small class="form-text text-muted">
-                                Your API key will be saved in browser localStorage for convenience.
-                            </small>
-                        </div>
-
-                        <div id="api-key-status" class="alert alert-warning mb-3" style="display: none;">
-                            <i class="fa fa-exclamation-triangle mr-2"></i>
-                            <span id="api-key-status-message"></span>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <button class="btn btn-success btn-block mb-2" id="save-api-key-btn" onclick="saveApiKey()">
-                                    <i class="fa fa-save mr-1"></i>Save API Key
-                                </button>
-                            </div>
-                            <div class="col-md-6">
-                                <button class="btn btn-outline-danger btn-block mb-2" id="clear-api-key-btn" onclick="clearApiKey()">
-                                    <i class="fa fa-trash mr-1"></i>Clear Saved Key
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="alert alert-info mb-0 mt-3">
+                        <div class="alert alert-success mb-0">
                             <h6 class="alert-heading">
-                                <i class="fa fa-info-circle mr-2"></i>Don't have an API key?
+                                <i class="fa fa-check-circle mr-2"></i>Ready to Use
                             </h6>
-                            <p class="mb-2">Get a free Gemini 2.5 Pro API key in 30 seconds:</p>
-                            <ol class="mb-2 small">
-                                <li>Visit <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a></li>
-                                <li>Sign in with your Google account</li>
-                                <li>Click "Create API Key" and copy it</li>
-                                <li>Paste it in the field above</li>
-                            </ol>
-                            <p class="mb-0 small">
-                                <strong>Free tier (Gemini 2.5 Pro):</strong> 5 requests/minute, 250K tokens/minute, 100 requests/day
-                            </p>
-                            <p class="mb-0 small text-muted">
-                                <i class="fa fa-clock-o mr-1"></i>Note: 5 RPM = ~1 request every 12 seconds. Perfect for testing and development!
+                            <p class="mb-0">
+                                This application uses a secure AWS backend for AI processing.
+                                No API key configuration needed - just start using the PDF extraction features below!
                             </p>
                         </div>
                     </div>

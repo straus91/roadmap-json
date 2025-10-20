@@ -130,7 +130,8 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 30
       MemorySize: 512
-      ReservedConcurrentExecutions: 10  # Limit concurrent executions (cost control)
+      # ReservedConcurrentExecutions removed - account doesn't have enough unreserved quota
+      # Cost control via API Gateway throttling instead (100 req/sec)
       Environment:
         Variables:
           GEMINI_SECRET_ARN: !Ref GeminiApiKeySecret
@@ -257,14 +258,15 @@ Resources:
       DeploymentId: !Ref ApiDeployment
       StageName: !Ref Environment
       Description: !Sub '${Environment} stage'
-      ThrottlingBurstLimit: 200  # Max burst requests
-      ThrottlingRateLimit: 100   # Max steady-state requests per second
       MethodSettings:
         - ResourcePath: '/*'
           HttpMethod: '*'
-          LoggingLevel: INFO
-          DataTraceEnabled: true
+          # Logging disabled - requires CloudWatch Logs role setup in account
+          # LoggingLevel: INFO
+          # DataTraceEnabled: true
           MetricsEnabled: true
+          ThrottlingBurstLimit: 200  # Max burst requests
+          ThrottlingRateLimit: 100   # Max steady-state requests per second
       Tags:
         - Key: Application
           Value: ROADMAP
@@ -278,7 +280,7 @@ Resources:
       FunctionName: !Ref GeminiProxyFunction
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::Account}:${RestApi}/*/*'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/*'
 
   # --------------------------------------------------------------------------
   # MONITORING & ALARMS
@@ -379,28 +381,9 @@ Resources:
         - !Ref AlertTopic
       TreatMissingData: notBreaching
 
-  # Budget Alert
-  BudgetAlarm:
-    Type: AWS::Budgets::Budget
-    Properties:
-      Budget:
-        BudgetName: !Sub 'roadmap-monthly-budget-${Environment}'
-        BudgetLimit:
-          Amount: !Ref MonthlyBudgetLimit
-          Unit: USD
-        TimeUnit: MONTHLY
-        BudgetType: COST
-        CostFilters:
-          TagKeyValue:
-            - !Sub 'user:Application$ROADMAP'
-      NotificationsWithSubscribers:
-        - Notification:
-            NotificationType: ACTUAL
-            ComparisonOperator: GREATER_THAN
-            Threshold: 80  # Alert at 80% of budget
-          Subscribers:
-            - SubscriptionType: EMAIL
-              Address: !Ref AlertEmail
+  # Budget Alert - Removed due to AWS Budgets CloudFormation instability
+  # You can manually create a budget in AWS Console: https://console.aws.amazon.com/billing/home#/budgets
+  # Recommended: Create $5/month budget with 80% alert threshold
 
 # ==============================================================================
 # OUTPUTS - Important values you'll need

@@ -1,9 +1,12 @@
 /**
  * Gemini API Client for ROADMAP Model Card Editor
- * Handles client-side API key management and direct Gemini API calls
+ * Routes requests through secure AWS backend
  */
 
-// API Key Management
+// AWS Backend Configuration
+const AWS_API_ENDPOINT = 'https://v928g5gem9.execute-api.us-west-2.amazonaws.com/prod/gemini';
+
+// Legacy API Key Management (kept for backward compatibility, but unused)
 const API_KEY_STORAGE_KEY = 'roadmap_gemini_api_key';
 
 /**
@@ -108,55 +111,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
 /**
  * Update PDF processing card state based on API key availability
+ * Note: Now using AWS backend, so PDF cards are always enabled
  */
 function updatePdfCardState() {
     const pdfCard = document.getElementById('process-pdf-card');
     const debugCard = document.getElementById('debug-pdf-card');
 
-    if (!isApiKeyConfigured()) {
-        // Disable PDF cards if no API key
-        if (pdfCard) {
-            pdfCard.style.opacity = '0.6';
-            pdfCard.style.pointerEvents = 'none';
-        }
-        if (debugCard) {
-            debugCard.style.opacity = '0.6';
-            debugCard.style.pointerEvents = 'none';
-        }
-    } else {
-        // Enable PDF cards
-        if (pdfCard) {
-            pdfCard.style.opacity = '1';
-            pdfCard.style.pointerEvents = 'auto';
-        }
-        if (debugCard) {
-            debugCard.style.opacity = '1';
-            debugCard.style.pointerEvents = 'auto';
-        }
+    // Always enable PDF cards (using secure backend)
+    if (pdfCard) {
+        pdfCard.style.opacity = '1';
+        pdfCard.style.pointerEvents = 'auto';
+    }
+    if (debugCard) {
+        debugCard.style.opacity = '1';
+        debugCard.style.pointerEvents = 'auto';
     }
 }
 
 /**
- * Call Gemini API directly from the browser
+ * Call Gemini API through secure AWS backend
  * @param {string} prompt - The prompt to send to Gemini
  * @param {Object} options - Additional options
  * @returns {Promise<Object>} - Gemini API response
  */
 async function callGeminiAPI(prompt, options = {}) {
-    const apiKey = getApiKey();
-
-    if (!apiKey) {
-        throw new Error('Gemini API key not configured. Please enter your API key above.');
-    }
-
     const {
         model = 'gemini-2.5-pro',
         temperature = 0.2,
         maxOutputTokens = 8192,
         images = []
     } = options;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     // Build content parts
     const contentParts = [{ text: prompt }];
@@ -208,13 +192,13 @@ async function callGeminiAPI(prompt, options = {}) {
         ]
     };
 
-    console.log('📤 Sending request to Gemini API...');
+    console.log('📤 Sending request to AWS backend...');
     console.log('📝 Model:', model);
     console.log('📝 Prompt length:', prompt.length, 'characters');
     console.log('🖼️ Images:', images.length);
 
     try {
-        const response = await fetch(url, {
+        const response = await fetch(AWS_API_ENDPOINT, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -224,11 +208,11 @@ async function callGeminiAPI(prompt, options = {}) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('❌ Gemini API error:', response.status, response.statusText);
+            console.error('❌ Backend API error:', response.status, response.statusText);
             console.error('❌ Error details:', errorText);
 
             // Parse error for better user messages
-            let errorMessage = 'Gemini API request failed';
+            let errorMessage = 'Backend API request failed';
             try {
                 const errorJson = JSON.parse(errorText);
                 if (errorJson.error?.message) {
@@ -242,22 +226,22 @@ async function callGeminiAPI(prompt, options = {}) {
         }
 
         const result = await response.json();
-        console.log('✅ Gemini API call successful');
+        console.log('✅ API call successful');
 
         return result;
 
     } catch (error) {
-        console.error('❌ Gemini API call failed:', error);
+        console.error('❌ API call failed:', error);
 
         // Provide helpful error messages
-        if (error.message.includes('API_KEY_INVALID') || error.message.includes('API key')) {
-            throw new Error('Invalid API key. Please check your Gemini API key and try again.');
-        }
         if (error.message.includes('quota')) {
-            throw new Error('API quota exceeded. Please check your Gemini API usage limits.');
+            throw new Error('API quota exceeded. Please try again later.');
         }
         if (error.message.includes('SAFETY')) {
             throw new Error('Content blocked by safety filters. Please try with different content.');
+        }
+        if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+            throw new Error('Network error. Please check your internet connection and try again.');
         }
 
         throw error;

@@ -5,9 +5,9 @@
 
 > **Create and edit ROADMAP-compliant JSON files for AI models and datasets in medical imaging.**
 
-A completely client-side web application that helps researchers document their AI models and datasets following the ROADMAP (Radiological AI Deployment for Medical Imaging) standard.
+A modern web application with secure cloud backend that helps researchers document their AI models and datasets following the ROADMAP (Radiological AI Deployment for Medical Imaging) standard.
 
-🌟 **[Try Live Demo](https://roadmap-json-extractor-e8vlz5526.vercel.app/)**
+🌟 **[Try Live Demo](https://straus91.github.io/roadmap-json/)** - Now with secure cloud backend!
 
 ---
 
@@ -19,19 +19,20 @@ This tool helps medical imaging researchers create **standardized documentation*
 
 - ✅ **No coding required** - Fill out forms instead of writing JSON manually
 - ✅ **AI-powered PDF extraction** - Upload a research paper and let AI extract the information
+- ✅ **Secure backend** - API keys protected server-side, no configuration needed
 - ✅ **Validates your data** - Catches errors before you publish
-- ✅ **100% private** - Everything runs in your browser (no data sent to servers)
-- ✅ **Free forever** - Static site, zero hosting costs
+- ✅ **Free to use** - Deployed on GitHub Pages with AWS backend
 
 ---
 
 ## ✨ Key Features
 
-### 📄 **AI-Powered PDF Extraction** (New!)
+### 📄 **AI-Powered PDF Extraction**
 - Upload a PDF of your research paper
 - AI automatically extracts model/dataset information
-- Uses your own Google Gemini API key (free tier available)
+- **Secure AWS backend** - No API key configuration needed
 - Supports both text-only and multimodal (images + text) processing
+- Powered by Google Gemini 2.5 Pro
 
 ### 📝 **Three Ways to Create Cards**
 1. **Create from PDF** - AI extracts info from research papers (new!)
@@ -53,9 +54,9 @@ This tool helps medical imaging researchers create **standardized documentation*
 ## 🚀 Quick Start
 
 ### Option 1: Use Online (Easiest)
-Just visit: **[https://roadmap-json-extractor-e8vlz5526.vercel.app/](https://roadmap-json-extractor-e8vlz5526.vercel.app/)**
+Just visit: **[https://straus91.github.io/roadmap-json/](https://straus91.github.io/roadmap-json/)**
 
-No installation needed!
+No installation or API key configuration needed!
 
 ### Option 2: Run Locally
 
@@ -81,24 +82,21 @@ open http://localhost:8000
 
 ### For PDF Extraction (Recommended)
 
-1. **Get a free Gemini API key** (30 seconds):
-   - Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
-   - Click "Create API Key"
-   - Paste it into the app (stored locally in your browser)
-
-2. **Upload your PDF**:
+1. **Upload your PDF**:
    - Choose Model or Dataset card type
    - Click "Select PDF File"
    - Click "Process PDF"
 
-3. **Review and edit**:
+2. **Review and edit**:
    - AI pre-fills the form with extracted information
    - Review and correct any mistakes
    - Add missing details
 
-4. **Download**:
+3. **Download**:
    - Click "Validate" to check for errors
    - Click "Download JSON" to save your ROADMAP card
+
+**That's it!** The secure backend handles all AI processing for you.
 
 ### For Manual Entry
 
@@ -118,16 +116,21 @@ open http://localhost:8000
 
 ## 🛠️ Technology Stack
 
-**100% Static Site** - No backend, no servers, no databases!
-
-- **Client-Side Only**: HTML5, CSS3, JavaScript (ES6+)
+**Frontend**: Static site hosted on GitHub Pages
+- **Client-Side**: HTML5, CSS3, JavaScript (ES6+)
 - **UI Framework**: Bootstrap 4
 - **Form Engine**: JSON Editor library
 - **PDF Processing**: PDF.js (client-side)
-- **AI Integration**: Google Gemini API (direct from browser)
 - **Schema Validation**: JSON Schema (fetched from GitHub)
 
-**All external dependencies loaded via CDN** - No npm install needed!
+**Backend**: Secure AWS infrastructure
+- **Compute**: AWS Lambda (Node.js 20)
+- **API Gateway**: RESTful API with CORS
+- **Secrets**: AWS Secrets Manager (API key storage)
+- **Monitoring**: CloudWatch Logs & Alarms
+- **AI Model**: Google Gemini 2.5 Pro
+
+**All external dependencies loaded via CDN** - No npm install needed for frontend!
 
 ---
 
@@ -152,26 +155,28 @@ roadmap-json/
 
 ## 🚢 Deployment
 
-This is a **100% static site** - deploy anywhere!
+**Frontend**: Static site deployed on GitHub Pages
+- Live at: https://straus91.github.io/roadmap-json/
+- Auto-deploys from `main` branch
 
-### Recommended Options:
-- **GitHub Pages** (free, 1-minute setup)
-- **Netlify** (free, drag & drop)
-- **Cloudflare Pages** (free, unlimited bandwidth)
-- **Any static file host**
+**Backend**: AWS infrastructure deployed in us-west-2
+- API Endpoint: `https://v928g5gem9.execute-api.us-west-2.amazonaws.com/prod/gemini`
+- Managed via CloudFormation
+- See [AWS Infrastructure Guide](aws-infrastructure/README.md) for details
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
+For deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 
 ## 🔒 Privacy & Security
 
-- **No backend** - Your data never leaves your browser
+- **Secure backend** - API keys stored in AWS Secrets Manager (never exposed to users)
 - **No analytics** - We don't track anything
-- **API keys stored locally** - In browser localStorage only
+- **HTTPS only** - All communication encrypted
 - **Open source** - Audit the code yourself
+- **Minimal data processing** - PDFs processed on-demand, nothing stored
 
-Your Gemini API key is only sent to Google's API (not to us), and all PDF processing happens in your browser.
+Your PDF content is sent to the AWS backend, which forwards it to Google's Gemini API for processing. No data is stored permanently.
 
 ---
 
