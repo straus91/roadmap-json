@@ -1,0 +1,30 @@
+{
+  "name": "roadmap-gemini-proxy",
+  "version": "1.0.0",
+  "description": "AWS Lambda function for ROADMAP Model Card Editor - Gemini API proxy",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint .",
+    "package": "npm ci --production && zip -r function.zip node_modules/ index.js package.json"
+  },
+  "keywords": [
+    "aws-lambda",
+    "gemini-api",
+    "roadmap",
+    "medical-imaging"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.699.0",
+    "@aws-sdk/client-cloudwatch": "^3.699.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,439 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ROADMAP Model Card Editor - Production MVP Backend'
+
+# ==============================================================================
+# PARAMETERS - Customize these for your deployment
+# ==============================================================================
+
+Parameters:
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: 'Your Google Gemini API key (starts with AIza)'
+    MinLength: 39
+    MaxLength: 39
+    AllowedPattern: '^AIza[0-9A-Za-z_-]{35}$'
+    ConstraintDescription: 'Must be a valid Gemini API key'
+
+  AlertEmail:
+    Type: String
+    Description: 'Email address for alerts (errors, costs)'
+    AllowedPattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    ConstraintDescription: 'Must be a valid email address'
+
+  Environment:
+    Type: String
+    Default: 'prod'
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: 'Environment name'
+
+  MonthlyBudgetLimit:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 100
+    Description: 'Monthly budget alert threshold in USD'
+
+# ==============================================================================
+# RESOURCES
+# ==============================================================================
+
+Resources:
+
+  # --------------------------------------------------------------------------
+  # SECRETS MANAGER - Secure API Key Storage
+  # --------------------------------------------------------------------------
+
+  GeminiApiKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'roadmap-gemini-api-key-${Environment}'
+      Description: 'Google Gemini API key for ROADMAP Model Card Editor'
+      SecretString: !Ref GeminiApiKey
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # Secret rotation configuration (optional - requires Lambda)
+  # SecretRotationSchedule:
+  #   Type: AWS::SecretsManager::RotationSchedule
+  #   Properties:
+  #     SecretId: !Ref GeminiApiKeySecret
+  #     RotationLambdaARN: !GetAtt RotationLambda.Arn
+  #     RotationRules:
+  #       AutomaticallyAfterDays: 90
+
+  # --------------------------------------------------------------------------
+  # IAM ROLE - Lambda Execution Role (Least Privilege)
+  # --------------------------------------------------------------------------
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'roadmap-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # Basic Lambda execution (CloudWatch Logs)
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        # Allow reading the Gemini API key from Secrets Manager
+        - PolicyName: SecretsManagerReadPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref GeminiApiKeySecret
+        # CloudWatch custom metrics (for monitoring)
+        - PolicyName: CloudWatchMetricsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: 'ROADMAP/Backend'
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+        - Key: Environment
+          Value: !Ref Environment
+
+  # --------------------------------------------------------------------------
+  # LAMBDA FUNCTION - Gemini API Proxy
+  # --------------------------------------------------------------------------
+
+  GeminiProxyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'roadmap-gemini-proxy-${Environment}'
+      Description: 'Proxies requests to Google Gemini API with secure API key'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 512
+      ReservedConcurrentExecutions: 10  # Limit concurrent executions (cost control)
+      Environment:
+        Variables:
+          GEMINI_SECRET_ARN: !Ref GeminiApiKeySecret
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: 'INFO'
+          # Don't log sensitive data
+          MASK_SENSITIVE_DATA: 'true'
+      Code:
+        ZipFile: |
+          // Placeholder - will be replaced by deployment script
+          exports.handler = async (event) => {
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ message: 'Deploy code via deployment script' })
+            };
+          };
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Lambda log group with retention
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${GeminiProxyFunction}'
+      RetentionInDays: 7  # Keep logs for 7 days (cost optimization)
+
+  # --------------------------------------------------------------------------
+  # API GATEWAY - REST API
+  # --------------------------------------------------------------------------
+
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'roadmap-api-${Environment}'
+      Description: 'REST API for ROADMAP Model Card Editor backend'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL  # Use EDGE for global deployment
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+        - Key: Environment
+          Value: !Ref Environment
+
+  # API Gateway Resource (/gemini)
+  GeminiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: 'gemini'
+
+  # POST method
+  GeminiPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref GeminiResource
+      HttpMethod: POST
+      AuthorizationType: NONE  # MVP: No auth. Add API key for production.
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GeminiProxyFunction.Arn}/invocations'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: 'Empty'
+
+  # OPTIONS method for CORS preflight
+  GeminiOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref GeminiResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+          ResponseModels:
+            application/json: 'Empty'
+
+  # API Gateway deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - GeminiPostMethod
+      - GeminiOptionsMethod
+    Properties:
+      RestApiId: !Ref RestApi
+      Description: !Sub 'Deployment for ${Environment}'
+
+  # API Gateway stage
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref RestApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: !Ref Environment
+      Description: !Sub '${Environment} stage'
+      ThrottlingBurstLimit: 200  # Max burst requests
+      ThrottlingRateLimit: 100   # Max steady-state requests per second
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Lambda permission for API Gateway
+  ApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GeminiProxyFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::Account}:${RestApi}/*/*'
+
+  # --------------------------------------------------------------------------
+  # MONITORING & ALARMS
+  # --------------------------------------------------------------------------
+
+  # SNS Topic for alerts
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'roadmap-alerts-${Environment}'
+      DisplayName: 'ROADMAP Backend Alerts'
+      Subscription:
+        - Endpoint: !Ref AlertEmail
+          Protocol: email
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CloudWatch Alarm: Lambda Errors
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'roadmap-lambda-errors-${Environment}'
+      AlarmDescription: 'Alert when Lambda function has high error rate'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 5  # Alert if >5 errors in 5 minutes
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref GeminiProxyFunction
+      AlarmActions:
+        - !Ref AlertTopic
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm: Lambda Throttles
+  LambdaThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'roadmap-lambda-throttles-${Environment}'
+      AlarmDescription: 'Alert when Lambda function is being throttled'
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref GeminiProxyFunction
+      AlarmActions:
+        - !Ref AlertTopic
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm: API Gateway 5XX Errors
+  ApiGateway5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'roadmap-api-5xx-errors-${Environment}'
+      AlarmDescription: 'Alert when API Gateway has server errors'
+      MetricName: 5XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub 'roadmap-api-${Environment}'
+      AlarmActions:
+        - !Ref AlertTopic
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm: High Latency
+  LambdaDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'roadmap-lambda-high-duration-${Environment}'
+      AlarmDescription: 'Alert when Lambda p95 duration >25 seconds'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      ExtendedStatistic: p95
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 25000  # 25 seconds (timeout is 30s)
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref GeminiProxyFunction
+      AlarmActions:
+        - !Ref AlertTopic
+      TreatMissingData: notBreaching
+
+  # Budget Alert
+  BudgetAlarm:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub 'roadmap-monthly-budget-${Environment}'
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetLimit
+          Unit: USD
+        TimeUnit: MONTHLY
+        BudgetType: COST
+        CostFilters:
+          TagKeyValue:
+            - !Sub 'user:Application$ROADMAP'
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80  # Alert at 80% of budget
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+
+# ==============================================================================
+# OUTPUTS - Important values you'll need
+# ==============================================================================
+
+Outputs:
+
+  ApiEndpoint:
+    Description: 'API Gateway endpoint URL for frontend'
+    Value: !Sub 'https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/gemini'
+    Export:
+      Name: !Sub 'roadmap-api-endpoint-${Environment}'
+
+  LambdaFunctionArn:
+    Description: 'Lambda function ARN'
+    Value: !GetAtt GeminiProxyFunction.Arn
+    Export:
+      Name: !Sub 'roadmap-lambda-arn-${Environment}'
+
+  SecretArn:
+    Description: 'Secrets Manager secret ARN'
+    Value: !Ref GeminiApiKeySecret
+    Export:
+      Name: !Sub 'roadmap-secret-arn-${Environment}'
+
+  AlertTopicArn:
+    Description: 'SNS topic for alerts'
+    Value: !Ref AlertTopic
+    Export:
+      Name: !Sub 'roadmap-alerts-topic-${Environment}'
+
+  ApiGatewayId:
+    Description: 'API Gateway ID'
+    Value: !Ref RestApi
+    Export:
+      Name: !Sub 'roadmap-api-id-${Environment}'
