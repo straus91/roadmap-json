@@ -35,8 +35,8 @@ const ENVIRONMENT = process.env.ENVIRONMENT || 'prod';
 // Gemini API configuration
 const GEMINI_API_ENDPOINT = 'generativelanguage.googleapis.com';
 const GEMINI_API_PATH = '/v1beta/models';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
-const MAX_OUTPUT_TOKENS = 8192;
+const DEFAULT_MODEL = 'gemini-2.5-pro';  // Upgraded for better accuracy with medical data
+const MAX_OUTPUT_TOKENS = 16384;  // Increased for longer, more detailed results
 
 // Cached API key
 let cachedApiKey = null;
@@ -55,8 +55,8 @@ exports.handler = async (event) => {
         // Get Gemini API key
         const apiKey = await getGeminiApiKey();
 
-        // Build extraction prompt
-        const prompt = buildExtractionPrompt(pdfData, schema, cardType, processingMode);
+        // Build extraction prompt (using comprehensive version from frontend)
+        const prompt = createExtractionPrompt(pdfData, schema, cardType, processingMode);
         console.log(`Prompt length: ${prompt.length} characters`);
 
         // Call Gemini API (can take 30-60+ seconds, no problem!)
@@ -168,16 +168,26 @@ async function getGeminiApiKey() {
 }
 
 /**
- * Build extraction prompt (simplified version from gemini-client.js)
+ * Create extraction prompt (comprehensive version from gemini-client.js)
+ * Generates detailed schema example with all fields to guide Gemini
  */
-function buildExtractionPrompt(pdfData, schema, cardType, processingMode) {
+function createExtractionPrompt(pdfData, schema, cardType, processingMode) {
     const cardTypeUpper = cardType.toUpperCase();
+    const cardTypeCapitalized = cardType.charAt(0).toUpperCase() + cardType.slice(1);
 
-    // Remove references
+    // Generate complete structure directly from GitHub schema with deep traversal
+    console.log('📝 Generating example structure from GitHub schema...');
+    const exampleStructure = generateSchemaExample(schema, cardType);
+    const exampleJson = JSON.stringify(exampleStructure, null, 2);
+    console.log(`✅ Generated example structure (${exampleJson.length} characters)`);
+
+    // Remove references section
     const cleanedText = removeReferences(pdfData.text || '');
 
-    // Truncate tables
-    const tablesText = truncateTablesForPrompt(pdfData.tables || [], 15000);
+    // Smart table handling - no truncation, use intelligent prioritization
+    const tablesText = pdfData.tables && pdfData.tables.length > 0
+        ? truncateTablesForPrompt(pdfData.tables, 100000)  // Very large limit, let smart scoring handle it
+        : '';
 
     return `Extract medical imaging research data into ROADMAP ${cardTypeUpper} card JSON format.
 
@@ -198,14 +208,156 @@ Use simple string format for values:
 Do NOT use nested objects in Value field
 
 **REQUIRED JSON STRUCTURE:**
-${JSON.stringify(generateSchemaExample(schema, cardType), null, 2)}
+${exampleJson}
 
 **DOCUMENT TEXT:**
-"""${cleanedText.substring(0, 15000)}"""
+"""${cleanedText}"""
 
-${tablesText ? `**TABLES:**\n${tablesText}` : ''}
+${tablesText ? `**TABLES:**
+${tablesText}` : ''}
 
-**OUTPUT:**`;
+${processingMode === 'multimodal' && pdfData.images && pdfData.images.length > 0 ? `**REFERENCED FIGURES (${pdfData.images.length} images will be provided):**
+${pdfData.images.map(img => `- Figure ${img.figureNumber} (Page ${img.page})`).join('\n')}
+
+Note: Visual content will be provided as additional input for analysis.` : ''}
+
+**OUTPUT (Valid JSON only):**`;
+}
+
+/**
+ * Generate complete example structure from GitHub schema with deep traversal
+ * @param {Object} schema - ROADMAP schema from GitHub
+ * @param {string} cardType - 'model' or 'dataset'
+ * @param {number} depth - Current recursion depth (max 5)
+ * @returns {Object} - Complete example structure with nested objects
+ */
+function generateSchemaExample(schema, cardType, depth = 0) {
+    const MAX_DEPTH = 5;
+    if (depth > MAX_DEPTH) {
+        console.warn('⚠️ Max schema depth reached, stopping recursion');
+        return {};
+    }
+
+    const cardTypeCapitalized = cardType.charAt(0).toUpperCase() + cardType.slice(1);
+
+    // Extract schema properties from GitHub schema structure
+    const schemaProperties = schema.properties?.[cardTypeCapitalized]?.properties ||
+                            schema.$defs?.[cardType]?.properties ||
+                            {};
+
+    console.log(`📋 Generating complete example for ${cardType}...`);
+    console.log(`   Total properties: ${Object.keys(schemaProperties).length}`);
+
+    const example = {};
+
+    // Generate ALL fields from schema to ensure complete extraction
+    for (const [key, prop] of Object.entries(schemaProperties)) {
+        example[key] = generatePropertyExample(prop, schema, depth + 1);
+    }
+
+    console.log(`   Generated ${Object.keys(example).length} fields in example`);
+
+    return {
+        [cardTypeCapitalized]: example
+    };
+}
+
+/**
+ * Generate example value for a single property based on its schema definition
+ * @param {Object} prop - Property schema definition
+ * @param {Object} schema - Full ROADMAP schema (for $ref resolution)
+ * @param {number} depth - Current recursion depth
+ * @returns {any} - Example value for this property
+ */
+function generatePropertyExample(prop, schema, depth) {
+    const MAX_DEPTH = 5;
+    if (depth > MAX_DEPTH) {
+        return null;
+    }
+
+    // Handle $ref (references to schema.$defs)
+    if (prop.$ref) {
+        const refPath = prop.$ref.replace('#/$defs/', '');
+        const referencedDef = schema.$defs?.[refPath];
+        if (referencedDef) {
+            return generatePropertyExample(referencedDef, schema, depth + 1);
+        }
+    }
+
+    // Handle different types
+    if (prop.type === 'string') {
+        // Use enum values if available (show first option as example)
+        if (prop.enum && prop.enum.length > 0) {
+            return prop.enum[0];
+        }
+        // Use examples if available
+        if (prop.examples && prop.examples.length > 0) {
+            return prop.examples[0];
+        }
+        // Use description as placeholder (NO angle brackets - breaks JSON)
+        if (prop.description) {
+            const desc = prop.description.substring(0, 50).replace(/[<>]/g, '');
+            return desc || "string value";
+        }
+        return "string value";
+
+    } else if (prop.type === 'array') {
+        // Generate array with example items
+        if (prop.items) {
+            // For enums: show 2-3 examples to indicate multiple values expected
+            if (prop.items.enum && prop.items.enum.length > 1) {
+                const count = Math.min(3, prop.items.enum.length);
+                return prop.items.enum.slice(0, count);  // ["AI", "BR", "CT"]
+            }
+
+            // For text fields without enum (RadLex, SNOMED, Keywords):
+            // Show empty array to avoid hallucination
+            if (!prop.items.enum && !prop.items.properties && !prop.items.$ref) {
+                return [];  // Empty array signals "optional, extract if found"
+            }
+
+            const exampleItem = generatePropertyExample(prop.items, schema, depth + 1);
+            return [exampleItem];
+        }
+        return [];
+
+    } else if (prop.type === 'object') {
+        // Recursively generate nested object
+        const nestedExample = {};
+        if (prop.properties) {
+            for (const [nestedKey, nestedProp] of Object.entries(prop.properties)) {
+                nestedExample[nestedKey] = generatePropertyExample(nestedProp, schema, depth + 1);
+            }
+        }
+        return nestedExample;
+
+    } else if (prop.type === 'number' || prop.type === 'integer') {
+        if (prop.examples && prop.examples.length > 0) {
+            return prop.examples[0];
+        }
+        return 0;
+
+    } else if (prop.type === 'boolean') {
+        return false;
+
+    } else if (prop.oneOf || prop.anyOf) {
+        // Use first option from oneOf/anyOf
+        const options = prop.oneOf || prop.anyOf;
+        if (options.length > 0) {
+            return generatePropertyExample(options[0], schema, depth + 1);
+        }
+    }
+
+    // Handle array type specified as array (not string 'array')
+    if (Array.isArray(prop.type) && prop.type.includes('array')) {
+        if (prop.items) {
+            const exampleItem = generatePropertyExample(prop.items, schema, depth + 1);
+            return [exampleItem];
+        }
+        return [];
+    }
+
+    return null;
 }
 
 /**
@@ -230,42 +382,93 @@ function removeReferences(text) {
 }
 
 /**
- * Truncate tables for prompt (simplified)
+ * Intelligently truncate tables to fit within character limit
+ * Prioritizes tables with numerical data and performance metrics (from gemini-client.js)
+ * @param {Array} tables - Array of table objects
+ * @param {number} maxChars - Maximum characters for all tables
+ * @returns {string} - Formatted table string
  */
 function truncateTablesForPrompt(tables, maxChars) {
     if (!tables || tables.length === 0) return '';
 
+    // Priority scoring: favor tables with numbers (likely performance/results)
+    const scoredTables = tables.map((table, index) => {
+        let score = 0;
+        const tableStr = JSON.stringify(table);
+
+        // Check for numerical data (higher priority)
+        const numberCount = (tableStr.match(/\d+\.?\d*/g) || []).length;
+        score += numberCount * 2;
+
+        // Check for keywords indicating results/performance
+        const keywords = ['accuracy', 'auc', 'precision', 'recall', 'sensitivity',
+                         'specificity', 'f1', 'performance', 'result', 'metric'];
+        keywords.forEach(keyword => {
+            if (tableStr.toLowerCase().includes(keyword)) score += 10;
+        });
+
+        // Smaller tables are easier to include
+        score += Math.max(0, 50 - table.rows.length);
+
+        return { table, index, score };
+    });
+
+    // Sort by score (highest priority first)
+    scoredTables.sort((a, b) => b.score - a.score);
+
+    // Build table string, adding tables until we hit limit
     let result = '';
     let currentLength = 0;
+    let includedCount = 0;
 
-    for (const table of tables) {
-        const tableJson = JSON.stringify(table, null, 2);
-        const tableStr = `TABLE (Page ${table.page}):\n${tableJson}\n\n`;
+    for (const {table, index} of scoredTables) {
+        const tableJson = JSON.stringify({
+            page: table.page,
+            headers: table.headers,
+            rows: table.rows
+        }, null, 2);
 
-        if (currentLength + tableStr.length > maxChars) break;
+        const tableStr = `TABLE ${index + 1} (Page ${table.page}, ${table.rows.length} rows):\n${tableJson}\n\n`;
 
-        result += tableStr;
-        currentLength += tableStr.length;
+        if (currentLength + tableStr.length > maxChars) {
+            // Try to include a sampled version
+            if (table.rows.length > 10) {
+                const sampledTable = {
+                    page: table.page,
+                    headers: table.headers,
+                    rows: [
+                        ...table.rows.slice(0, 5),
+                        ['... (rows truncated) ...'],
+                        ...table.rows.slice(-3)
+                    ]
+                };
+                const sampledStr = `TABLE ${index + 1} (Page ${table.page}, ${table.rows.length} rows - SAMPLED):\n${JSON.stringify(sampledTable, null, 2)}\n\n`;
+
+                if (currentLength + sampledStr.length <= maxChars) {
+                    result += sampledStr;
+                    currentLength += sampledStr.length;
+                    includedCount++;
+                }
+            }
+            // If we can't fit even a sample, we're done
+            break;
+        } else {
+            result += tableStr;
+            currentLength += tableStr.length;
+            includedCount++;
+        }
     }
+
+    const skippedCount = tables.length - includedCount;
+    if (skippedCount > 0) {
+        result += `\n[Note: ${skippedCount} additional table(s) omitted due to length constraints]\n`;
+    }
+
+    console.log(`📊 Table processing: Included ${includedCount}/${tables.length} tables (${currentLength.toLocaleString()} chars)`);
 
     return result;
 }
 
-/**
- * Generate schema example (simplified)
- */
-function generateSchemaExample(schema, cardType) {
-    const properties = schema.properties || {};
-    const example = {};
-
-    Object.entries(properties).forEach(([key, prop]) => {
-        if (prop.type === 'string') example[key] = `Example ${key}`;
-        else if (prop.type === 'array') example[key] = [];
-        else if (prop.type === 'object') example[key] = {};
-    });
-
-    return example;
-}
 
 /**
  * Call Gemini API
