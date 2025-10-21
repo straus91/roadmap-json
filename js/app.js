@@ -127,6 +127,66 @@ const debugState = {
     detectedType: CARD_TYPES.MODEL
 };
 
+// Store selected debug PDF file globally (for 2-step debug workflow)
+let selectedDebugPdfFile = null;
+
+// ==============================================================================
+// DEBUG PDF SELECT/PROCESS FUNCTIONS (2-step workflow)
+// ==============================================================================
+
+// Debug PDF Selection Handler (Step 1: Select file)
+function selectDebugPdf(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+        showAlert('Please select a valid PDF file.', 'danger');
+        return;
+    }
+
+    // Validate file size (50MB limit for client-side processing)
+    const maxSizeInMB = 50;
+    if (file.size > maxSizeInMB * 1024 * 1024) {
+        showAlert('File size exceeds ' + maxSizeInMB + 'MB limit.', 'danger');
+        return;
+    }
+
+    // Store the selected file
+    selectedDebugPdfFile = file;
+
+    // Update UI to show file is selected
+    document.getElementById('debug-filename-display').textContent = file.name;
+    document.getElementById('debug-filesize-display').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+    document.getElementById('debug-selected-filename').style.display = 'block';
+
+    // Enable the "Process Debug PDF" button
+    document.getElementById('process-debug-pdf-btn').disabled = false;
+
+    console.log('Debug PDF selected:', file.name);
+}
+
+// Debug PDF Processing Handler (Step 2: Process the selected file)
+async function processDebugPdf() {
+    if (!selectedDebugPdfFile) {
+        showAlert('Please select a PDF file first.', 'danger');
+        return;
+    }
+
+    // Call the original handleDebugPdfUpload with the selected file
+    await handleDebugPdfUpload({target: {files: [selectedDebugPdfFile], value: ''}});
+
+    // Reset for next use
+    selectedDebugPdfFile = null;
+    document.getElementById('debug-pdf-input').value = '';
+    document.getElementById('debug-selected-filename').style.display = 'none';
+    document.getElementById('process-debug-pdf-btn').disabled = true;
+}
+
+// ==============================================================================
+// END DEBUG PDF SELECT/PROCESS FUNCTIONS
+// ==============================================================================
+
 // Application initialization
 document.addEventListener('DOMContentLoaded', function() {
     console.log('ROADMAP Model Card Editor initialized');
