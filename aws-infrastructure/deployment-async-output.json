@@ -1,0 +1,9 @@
+{
+  "apiEndpoint": "https://eaubzj7nh1.execute-api.us-west-2.amazonaws.com/prod",
+  "jobsTable": "roadmap-jobs-prod",
+  "resultsBucket": "roadmap-results-prod-478659530235",
+  "environment": "prod",
+  "region": "us-west-2",
+  "stackName": "roadmap-async-prod",
+  "deploymentTime": "2025-10-21T04:45:12Z"
+}

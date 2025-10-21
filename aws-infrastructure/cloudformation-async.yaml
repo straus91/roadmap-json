@@ -1,0 +1,438 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ROADMAP Model Card Editor - Async PDF Processing Architecture (MVP)'
+
+Parameters:
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: Google Gemini API key
+    AllowedPattern: ^AIza[0-9A-Za-z_-]{35}$
+
+  AlertEmail:
+    Type: String
+    Description: Email address for operational alerts
+    AllowedPattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
+
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment
+
+Resources:
+  # ============================================================================
+  # DYNAMODB TABLE - Job Status Tracking
+  # ============================================================================
+  JobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'roadmap-jobs-${Environment}'
+      BillingMode: PAY_PER_REQUEST  # On-demand pricing (simpler for MVP)
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+        - AttributeName: userId  # For future multi-user support
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true  # Auto-delete old jobs after 7 days
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES  # Enable streams for future features
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true  # Backup for data safety
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # S3 BUCKET - Results Storage
+  # ============================================================================
+  ResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'roadmap-results-${Environment}-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled  # Keep versions for safety
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldResults
+            Status: Enabled
+            ExpirationInDays: 30  # Auto-delete after 30 days
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 7
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true  # No public access!
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256  # Encrypt at rest
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - 'https://straus91.github.io'
+              - 'http://localhost:8000'  # For local testing
+              - 'http://localhost:3000'  # Alternative port
+            AllowedMethods: [GET, PUT, POST]
+            AllowedHeaders: ['*']
+            MaxAge: 3000
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # SECRETS MANAGER - Gemini API Key
+  # ============================================================================
+  GeminiSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'roadmap-gemini-api-key-async-${Environment}'
+      Description: Gemini API key for async processing
+      SecretString: !Ref GeminiApiKey
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+
+  # ============================================================================
+  # IAM ROLE - Lambda Execution Role
+  # ============================================================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'roadmap-async-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:Query'
+                Resource:
+                  - !GetAtt JobsTable.Arn
+                  - !Sub '${JobsTable.Arn}/index/*'
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:DeleteObject'
+                Resource: !Sub '${ResultsBucket.Arn}/*'
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:GetSecretValue'
+                Resource: !Ref GeminiSecret
+        - PolicyName: CloudWatchMetrics
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'cloudwatch:PutMetricData'
+                Resource: '*'
+        - PolicyName: LambdaInvokeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource: '*'  # Will be restricted to ProcessJobFunction
+        - PolicyName: SQSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'sqs:SendMessage'
+                Resource: !GetAtt DeadLetterQueue.Arn
+
+  # ============================================================================
+  # LAMBDA FUNCTION - Submit Job
+  # ============================================================================
+  SubmitJobFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'roadmap-submit-job-${Environment}'
+      Runtime: nodejs20.x
+      Handler: submit-job.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 10  # Quick submission
+      MemorySize: 256
+      Environment:
+        Variables:
+          JOBS_TABLE: !Ref JobsTable
+          PROCESS_JOB_FUNCTION: !Ref ProcessJobFunction
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          // Placeholder - will be replaced by deploy script
+          exports.handler = async (event) => {
+            return { statusCode: 200, body: JSON.stringify({ message: 'Placeholder' }) };
+          };
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+
+  # Permission for SubmitJob to invoke ProcessJob
+  SubmitJobInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProcessJobFunction
+      Action: lambda:InvokeFunction
+      Principal: lambda.amazonaws.com
+      SourceArn: !GetAtt SubmitJobFunction.Arn
+
+  # ============================================================================
+  # LAMBDA FUNCTION - Process Job (Async Worker)
+  # ============================================================================
+  ProcessJobFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'roadmap-process-job-${Environment}'
+      Runtime: nodejs20.x
+      Handler: process-job.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300  # 5 minutes (plenty of time!)
+      MemorySize: 1024  # More memory for PDF processing
+      Environment:
+        Variables:
+          JOBS_TABLE: !Ref JobsTable
+          RESULTS_BUCKET: !Ref ResultsBucket
+          GEMINI_SECRET_ARN: !Ref GeminiSecret
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          // Placeholder - will be replaced by actual code
+          exports.handler = async (event) => {
+            return { statusCode: 200, body: JSON.stringify({ message: 'Placeholder' }) };
+          };
+      DeadLetterConfig:
+        TargetArn: !GetAtt DeadLetterQueue.Arn
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+
+  # ============================================================================
+  # LAMBDA FUNCTION - Get Status
+  # ============================================================================
+  GetStatusFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'roadmap-get-status-${Environment}'
+      Runtime: nodejs20.x
+      Handler: get-status.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          JOBS_TABLE: !Ref JobsTable
+          RESULTS_BUCKET: !Ref ResultsBucket
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          // Placeholder - will be replaced by actual code
+          exports.handler = async (event) => {
+            return { statusCode: 200, body: JSON.stringify({ message: 'Placeholder' }) };
+          };
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+
+  # ============================================================================
+  # SQS - Dead Letter Queue (Failed Jobs)
+  # ============================================================================
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'roadmap-dlq-${Environment}'
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Application
+          Value: ROADMAP
+
+  # ============================================================================
+  # API GATEWAY - REST API
+  # ============================================================================
+  ApiGateway:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub 'roadmap-async-api-${Environment}'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - 'https://straus91.github.io'
+          - 'http://localhost:8000'
+          - 'http://localhost:3000'
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: ['*']
+        MaxAge: 3000
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ApiGateway
+      StageName: prod
+      AutoDeploy: true
+
+  # Submit Job Endpoint
+  SubmitJobIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt SubmitJobFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  SubmitJobRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: 'POST /submit'
+      Target: !Sub 'integrations/${SubmitJobIntegration}'
+
+  SubmitJobPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SubmitJobFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+
+  # Get Status Endpoint
+  GetStatusIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt GetStatusFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  GetStatusRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: 'GET /status/{jobId}'
+      Target: !Sub 'integrations/${GetStatusIntegration}'
+
+  GetStatusPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetStatusFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+
+  # ============================================================================
+  # SNS TOPIC - Alerts
+  # ============================================================================
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'roadmap-async-alerts-${Environment}'
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+  # ============================================================================
+  # CLOUDWATCH ALARMS
+  # ============================================================================
+  ProcessJobErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'roadmap-process-job-errors-${Environment}'
+      AlarmDescription: Alert when process job function has errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProcessJobFunction
+      AlarmActions:
+        - !Ref AlertTopic
+
+  DLQDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'roadmap-dlq-depth-${Environment}'
+      AlarmDescription: Alert when dead letter queue has messages
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt DeadLetterQueue.QueueName
+      AlarmActions:
+        - !Ref AlertTopic
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiEndpoint'
+
+  JobsTableName:
+    Description: DynamoDB jobs table name
+    Value: !Ref JobsTable
+
+  ResultsBucketName:
+    Description: S3 results bucket name
+    Value: !Ref ResultsBucket
+
+  SubmitJobFunctionArn:
+    Description: Submit job Lambda function ARN
+    Value: !GetAtt SubmitJobFunction.Arn
+
+  ProcessJobFunctionArn:
+    Description: Process job Lambda function ARN
+    Value: !GetAtt ProcessJobFunction.Arn
+
+  GetStatusFunctionArn:
+    Description: Get status Lambda function ARN
+    Value: !GetAtt GetStatusFunction.Arn

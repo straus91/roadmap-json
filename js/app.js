@@ -2634,17 +2634,31 @@ async function handlePdfUpload(event) {
         console.log('📝 Text length:', pdfData.text.length, 'characters');
         console.log('📋 Tables found:', pdfData.tables.length);
 
-        // Step 3b: Process with Gemini AI (direct API call)
-        showAlert('Processing with Gemini AI... This may take a moment.', 'info', 0);
+        // Step 3b: Process with Gemini AI (async job processing)
+        showAlert('Submitting PDF for processing... This may take 30-60 seconds.', 'info', 0);
 
-        const structuredJson = await processPdfWithGemini(
+        // Progress callback for async processing
+        const progressCallback = (progress) => {
+            let message = 'Processing PDF...';
+            if (progress.status === 'submitting') {
+                message = 'Submitting PDF for processing...';
+            } else if (progress.status === 'polling') {
+                message = `Processing PDF... (${progress.progress || 0}% complete)`;
+            } else if (progress.status === 'processing') {
+                message = `Processing PDF with Gemini AI... (${progress.progress || 50}%)`;
+            }
+            showAlert(message, 'info', 0);
+        };
+
+        const structuredJson = await processPdfAsync(
             pdfData,
             customSchema,           // Schema fetched earlier
             pdfState.cardType,      // 'model' or 'dataset'
-            pdfState.processingMode // 'text-only' or 'multimodal'
+            pdfState.processingMode, // 'text-only' or 'multimodal'
+            progressCallback        // Progress updates
         );
 
-        console.log('✅ Gemini processing complete');
+        console.log('✅ Async PDF processing complete');
 
         // Store PDF metadata for potential saving
         if (structuredJson._metadata) {
