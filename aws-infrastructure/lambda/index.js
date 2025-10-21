@@ -478,19 +478,47 @@ exports.handler = async (event, context) => {
         // Publish error metric
         await publishMetric('LambdaInvocationError', 1);
 
-        // Determine appropriate error response
+        // Extract detailed error information from Gemini API responses
+        let geminiDetails = null;
+        try {
+            // Check if error message contains Gemini JSON error
+            const geminiErrorMatch = error.message.match(/HTTP \d+: ({[\s\S]*?})\n/);
+            if (geminiErrorMatch) {
+                geminiDetails = JSON.parse(geminiErrorMatch[1]);
+            }
+        } catch (parseError) {
+            // Ignore parsing errors
+        }
+
+        // Determine appropriate error response with detailed messages
         let statusCode = 500;
         let errorMessage = 'Internal server error';
+        let errorType = 'INTERNAL_ERROR';
 
         if (error.message.includes('API key')) {
             statusCode = 503;
-            errorMessage = 'Service temporarily unavailable';
-        } else if (error.message.includes('Rate limit')) {
+            errorMessage = 'Service temporarily unavailable - API key issue';
+            errorType = 'API_KEY_ERROR';
+        } else if (error.message.includes('Rate limit') || error.message.includes('RESOURCE_EXHAUSTED')) {
             statusCode = 429;
-            errorMessage = 'Rate limit exceeded, please try again later';
+            errorMessage = 'Gemini API rate limit exceeded';
+            errorType = 'RATE_LIMIT';
         } else if (error.message.includes('timeout')) {
             statusCode = 504;
-            errorMessage = 'Request timeout';
+            errorMessage = 'Request timeout - Gemini API took too long to respond';
+            errorType = 'TIMEOUT';
+        } else if (error.message.includes('503') || error.message.includes('overloaded') || error.message.includes('UNAVAILABLE')) {
+            statusCode = 503;
+            errorMessage = 'Gemini API is overloaded or unavailable';
+            errorType = 'SERVICE_UNAVAILABLE';
+        } else if (error.message.includes('400') || error.message.includes('INVALID_ARGUMENT')) {
+            statusCode = 400;
+            errorMessage = 'Invalid request to Gemini API';
+            errorType = 'INVALID_REQUEST';
+        } else if (geminiDetails) {
+            // Use Gemini's error message if available
+            errorMessage = geminiDetails.error?.message || error.message;
+            errorType = geminiDetails.error?.status || 'GEMINI_ERROR';
         }
 
         return {
@@ -501,7 +529,16 @@ exports.handler = async (event, context) => {
             },
             body: JSON.stringify({
                 error: errorMessage,
-                requestId
+                errorType: errorType,
+                geminiError: geminiDetails?.error || null,
+                requestId,
+                // Include helpful context in development/debugging
+                ...(process.env.LOG_LEVEL === 'DEBUG' && {
+                    debugInfo: {
+                        originalError: error.message,
+                        duration: duration
+                    }
+                })
             })
         };
     }

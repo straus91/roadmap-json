@@ -2704,26 +2704,109 @@ async function handlePdfUpload(event) {
         // Hide the loading indicator
         document.querySelector('.alert.custom-alert')?.remove();
 
-        // Enhanced error messages for client-side processing
-        let errorMessage = error.message;
-
-        if (error.message.includes('API key') || error.message.includes('not configured')) {
-            errorMessage = '🔑 API Key Required: Please enter your Gemini API key at the top of the page to use PDF processing.';
-        } else if (error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED')) {
-            errorMessage = '⚠️ API Quota Exceeded: You have reached your Gemini API usage limits. Please wait a few minutes or check your quota at https://aistudio.google.com/';
-        } else if (error.message.includes('SAFETY') || error.message.includes('safety filter')) {
-            errorMessage = '🚫 Content Blocked: The PDF content was blocked by Gemini safety filters. Please try a different PDF or adjust the content.';
-        } else if (error.message.includes('Invalid API key') || error.message.includes('API_KEY_INVALID')) {
-            errorMessage = '❌ Invalid API Key: Please check your Gemini API key and try again. Get a new key at https://aistudio.google.com/app/apikey';
-        } else if (error.message.includes('PDF') || error.message.includes('extraction')) {
-            errorMessage = '📄 PDF Error: ' + error.message;
-        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            errorMessage = '🌐 Network Error: Please check your internet connection and try again.';
-        } else {
-            errorMessage = 'Error processing PDF: ' + error.message;
+        // Try to parse backend error details for more specific error messages
+        let backendError = null;
+        try {
+            // Check if error.message contains backend JSON error details
+            if (error.message && error.message.includes('{')) {
+                const jsonStart = error.message.indexOf('{');
+                const jsonStr = error.message.substring(jsonStart);
+                backendError = JSON.parse(jsonStr);
+            }
+        } catch (parseError) {
+            // Ignore parsing errors
         }
 
-        showAlert(errorMessage, 'danger');
+        // Enhanced error messages with backend error details
+        let errorMessage = error.message;
+        let errorDetails = '';
+
+        // Check for specific error types from backend
+        if (backendError?.errorType) {
+            switch (backendError.errorType) {
+                case 'SERVICE_UNAVAILABLE':
+                    errorMessage = '⚠️ Gemini API Overloaded';
+                    errorDetails = 'Google\'s Gemini servers are currently overloaded or experiencing high traffic. This is temporary and not a problem with your setup.';
+                    if (backendError.geminiError?.message) {
+                        errorDetails += `\n\nGoogle says: "${backendError.geminiError.message}"`;
+                    }
+                    errorDetails += '\n\n💡 What to do: Wait 1-2 minutes and try again.';
+                    break;
+
+                case 'TIMEOUT':
+                    errorMessage = '⏱️ Request Timeout';
+                    errorDetails = 'The Gemini API took longer than 30 seconds to respond. This can happen with complex PDFs or during high server load.';
+                    errorDetails += '\n\n💡 What to do:\n• Wait a minute and try again\n• Try a shorter or simpler PDF\n• If it persists, Gemini may be experiencing delays';
+                    break;
+
+                case 'RATE_LIMIT':
+                    errorMessage = '🚦 Rate Limit Exceeded';
+                    errorDetails = 'You\'ve made too many requests to the Gemini API in a short time.';
+                    errorDetails += '\n\n💡 What to do: Wait 60 seconds before trying again.';
+                    break;
+
+                case 'INVALID_REQUEST':
+                    errorMessage = '❌ Invalid Request';
+                    errorDetails = 'The request to Gemini API was invalid.';
+                    if (backendError.geminiError?.message) {
+                        errorDetails += `\n\nDetails: ${backendError.geminiError.message}`;
+                    }
+                    break;
+
+                case 'API_KEY_ERROR':
+                    errorMessage = '🔑 API Key Issue';
+                    errorDetails = 'There\'s a problem with the API key configuration on the backend.';
+                    errorDetails += '\n\n💡 Contact support if this persists.';
+                    break;
+
+                default:
+                    if (backendError.error) {
+                        errorMessage = '❌ Backend Error';
+                        errorDetails = backendError.error;
+                        if (backendError.geminiError?.message) {
+                            errorDetails += `\n\nGemini API: ${backendError.geminiError.message}`;
+                        }
+                    }
+            }
+        }
+        // Fallback to message-based detection for other errors
+        else if (error.message.includes('API key') || error.message.includes('not configured')) {
+            errorMessage = '🔑 API Key Required';
+            errorDetails = 'API key configuration issue. Please contact support.';
+        } else if (error.message.includes('quota') || error.message.includes('RESOURCE_EXHAUSTED')) {
+            errorMessage = '⚠️ API Quota Exceeded';
+            errorDetails = 'You have reached your Gemini API usage limits.\n\n💡 Check your quota at https://aistudio.google.com/';
+        } else if (error.message.includes('SAFETY') || error.message.includes('safety filter')) {
+            errorMessage = '🚫 Content Blocked';
+            errorDetails = 'The PDF content was blocked by Gemini safety filters.\n\n💡 Try a different PDF or check the content.';
+        } else if (error.message.includes('PDF') || error.message.includes('extraction')) {
+            errorMessage = '📄 PDF Processing Error';
+            errorDetails = error.message;
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            errorMessage = '🌐 Network Error';
+            errorDetails = 'Please check your internet connection and try again.';
+        } else if (!errorDetails) {
+            errorMessage = '❌ Processing Error';
+            errorDetails = error.message;
+        }
+
+        // Add request ID if available for debugging
+        if (backendError?.requestId) {
+            errorDetails += `\n\n🔍 Request ID: ${backendError.requestId}`;
+        }
+
+        // Combine message and details
+        const fullMessage = errorDetails ? `${errorMessage}\n\n${errorDetails}` : errorMessage;
+
+        // Log full error details to console for debugging
+        console.error('📊 Full error details:', {
+            message: errorMessage,
+            details: errorDetails,
+            backendError: backendError,
+            originalError: error
+        });
+
+        showAlert(fullMessage, 'danger');
 
         // Clear the file input
         event.target.value = '';
