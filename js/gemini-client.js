@@ -145,7 +145,7 @@ function updatePdfCardState() {
  */
 async function callGeminiAPI(prompt, options = {}) {
     const {
-        model = 'gemini-2.5-pro',
+        model = 'gemini-2.5-flash',
         temperature = 0.2,
         maxOutputTokens = 8192,
         images = []
@@ -307,7 +307,7 @@ async function processPdfWithGemini(pdfData, schema, cardType, processingMode = 
     const prompt = createExtractionPrompt(pdfData, schema, cardType, processingMode);
 
     // Determine which model to use
-    const model = 'gemini-2.5-pro';
+    const model = 'gemini-2.5-flash';
 
     // Call Gemini API
     const response = await callGeminiAPI(prompt, {

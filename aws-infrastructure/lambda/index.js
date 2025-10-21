@@ -30,7 +30,7 @@ const {
 const CONFIG = {
     GEMINI_API_ENDPOINT: 'generativelanguage.googleapis.com',
     GEMINI_API_PATH: '/v1beta/models',
-    DEFAULT_MODEL: 'gemini-2.5-pro',
+    DEFAULT_MODEL: 'gemini-2.5-flash',
     DEFAULT_TEMPERATURE: 0.2,
     DEFAULT_MAX_TOKENS: 8192,
     MAX_RETRIES: 3,

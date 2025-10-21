@@ -13,7 +13,7 @@ const sampleEvent = {
     },
     body: JSON.stringify({
         prompt: 'Test prompt: What is 2+2? Respond with just the number.',
-        model: 'gemini-2.5-pro',
+        model: 'gemini-2.5-flash',
         temperature: 0.2,
         maxOutputTokens: 1024,
         images: []
