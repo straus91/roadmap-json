@@ -3216,17 +3216,7 @@ async function handleDebugPdfUpload(event) {
     document.getElementById('debug-results-preview').textContent = 'Waiting for processing...';
 
     try {
-        const formData = new FormData();
-        formData.append('pdf', file);
-        formData.append('mode', debugState.processingMode);
-        formData.append('cardType', debugState.cardType);
-
-        // Send schema as JSON string if available
-        if (customSchema) {
-            formData.append('customSchema', JSON.stringify(customSchema));
-        }
-
-        console.log('🔍 DEBUG: Sending to backend:', {
+        console.log('🔍 DEBUG: Processing configuration:', {
             mode: debugState.processingMode,
             cardType: debugState.cardType,
             schemaSource: debugState.schemaSource,
@@ -3234,21 +3224,98 @@ async function handleDebugPdfUpload(event) {
             hasCustomSchema: !!customSchema
         });
 
-        // Call debug API endpoint
-        const response = await fetch('/api/debug-pdf', {
-            method: 'POST',
-            body: formData
+        // Step 3a: Extract PDF data using PDF.js (client-side)
+        document.getElementById('debug-status').innerHTML = `
+            <div class="alert alert-info">
+                <i class="fa fa-spinner fa-spin mr-2"></i>Extracting PDF data...
+            </div>
+        `;
+
+        const pdfData = await extractPdfData(file, (progress) => {
+            if (progress.stage === 'extracting') {
+                document.getElementById('debug-status').innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fa fa-spinner fa-spin mr-2"></i>${progress.message}
+                    </div>
+                `;
+            }
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        console.log('✅ PDF extraction complete for debug mode');
+        console.log('📝 Text length:', pdfData.text.length, 'characters');
+        console.log('📋 Tables found:', pdfData.tables.length);
+        console.log('🖼️ Images found:', pdfData.images.length);
 
-        const debugData = await response.json();
-        console.log('🔍 Debug data received:', debugData);
+        // Display client-side extraction results immediately
+        const debugDataClientSide = {
+            extractedText: pdfData.text,
+            extractedTables: pdfData.tables,
+            allImagesFound: pdfData.images,
+            referencedImages: pdfData.images.slice(0, 10), // First 10 images
+            figureReferences: [],
+            metadata: {
+                textLength: pdfData.text.length,
+                tableCount: pdfData.tables.length,
+                imageCount: pdfData.images.length
+            }
+        };
 
-        // Update debug displays
-        updateDebugDisplays(debugData);
+        // Show immediate extraction results
+        updateDebugDisplays(debugDataClientSide);
+
+        // Step 3b: Process with Gemini AI via async API
+        document.getElementById('debug-status').innerHTML = `
+            <div class="alert alert-primary">
+                <i class="fa fa-spinner fa-spin mr-2"></i>Submitting to Gemini AI... (this may take 30-60 seconds)
+            </div>
+        `;
+
+        // Progress callback for async processing
+        const progressCallback = (progress) => {
+            let message = 'Processing...';
+            if (progress.status === 'submitting') {
+                message = 'Submitting PDF for processing...';
+            } else if (progress.status === 'polling') {
+                message = `Processing with Gemini AI... (${progress.progress || 0}% complete)`;
+            } else if (progress.status === 'processing') {
+                message = `Processing with Gemini AI... (${progress.progress || 50}%)`;
+            }
+
+            document.getElementById('debug-status').innerHTML = `
+                <div class="alert alert-primary">
+                    <i class="fa fa-spinner fa-spin mr-2"></i>${message}
+                </div>
+            `;
+        };
+
+        const structuredJson = await processPdfAsync(
+            pdfData,
+            customSchema,
+            debugState.cardType,
+            debugState.processingMode,
+            progressCallback
+        );
+
+        console.log('✅ Debug async processing complete');
+
+        // Update with final AI results
+        const debugDataFinal = {
+            ...debugDataClientSide,
+            gemini_result: structuredJson,
+            processing_summary: {
+                status: 'completed',
+                cardType: debugState.cardType,
+                processingMode: debugState.processingMode
+            }
+        };
+
+        updateDebugDisplays(debugDataFinal);
+
+        document.getElementById('debug-status').innerHTML = `
+            <div class="alert alert-success">
+                <i class="fa fa-check-circle mr-2"></i>Debug processing complete!
+            </div>
+        `;
 
     } catch (error) {
         console.error('Debug processing error:', error);
@@ -3333,21 +3400,22 @@ function updateDebugDisplays(debugData) {
     }
 
     // Results preview (if AI has been called)
-    if (debugData.roadmapResults) {
+    const aiResults = debugData.gemini_result || debugData.roadmapResults;
+    if (aiResults) {
         document.getElementById('results-status').innerHTML = '<span class="badge badge-success">Complete</span>';
         const resultsDisplay = `=== AI EXTRACTION RESULTS ===\n\n` +
-            `Card Type: ${summary.card_type || 'unknown'}\n` +
-            `Result Length: ${JSON.stringify(debugData.roadmapResults).length.toLocaleString()} chars\n\n` +
+            `Card Type: ${summary.cardType || summary.card_type || 'unknown'}\n` +
+            `Processing Mode: ${summary.processingMode || summary.processing_mode || 'unknown'}\n` +
+            `Result Length: ${JSON.stringify(aiResults).length.toLocaleString()} chars\n\n` +
             `--- EXTRACTED JSON ---\n\n` +
-            JSON.stringify(debugData.roadmapResults, null, 2);
+            JSON.stringify(aiResults, null, 2);
         document.getElementById('debug-results-preview').textContent = resultsDisplay;
     } else {
-        document.getElementById('results-status').innerHTML = '<span class="badge badge-info">Preview Only</span>';
+        document.getElementById('results-status').innerHTML = '<span class="badge badge-info">Extracting...</span>';
         document.getElementById('debug-results-preview').textContent =
-            '=== DEBUG MODE ===\n\n' +
-            'This is a debug preview showing what would be sent to the AI.\n' +
-            'No actual AI extraction has been performed.\n\n' +
-            'To perform full extraction, use the main PDF upload on the home screen.';
+            '=== EXTRACTION IN PROGRESS ===\n\n' +
+            'Waiting for Gemini AI to process the PDF...\n\n' +
+            'Results will appear here when processing is complete.';
     }
 
     // Update overall status with comprehensive processing info
