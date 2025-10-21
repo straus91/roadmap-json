@@ -501,6 +501,43 @@ function truncateTablesForPrompt(tables, maxChars) {
 }
 
 /**
+ * Remove references/bibliography section from PDF text
+ * @param {string} text - PDF text content
+ * @returns {string} - Text with references section removed
+ */
+function removeReferences(text) {
+    // Common reference section headers in medical papers
+    const referencePatterns = [
+        /\n\s*REFERENCES\s*\n/i,
+        /\n\s*References\s*\n/i,
+        /\n\s*BIBLIOGRAPHY\s*\n/i,
+        /\n\s*Bibliography\s*\n/i,
+        /\n\s*Literature Cited\s*\n/i,
+        /\n\s*Works Cited\s*\n/i,
+        /\n\s*CITED LITERATURE\s*\n/i
+    ];
+
+    let earliestMatch = text.length;
+
+    // Find the earliest reference section
+    for (const pattern of referencePatterns) {
+        const match = text.search(pattern);
+        if (match !== -1 && match < earliestMatch) {
+            earliestMatch = match;
+        }
+    }
+
+    // Cut text before references
+    if (earliestMatch < text.length) {
+        const removed = text.length - earliestMatch;
+        console.log(`✂️ Removed references section (${removed.toLocaleString()} chars)`);
+        return text.substring(0, earliestMatch);
+    }
+
+    return text;
+}
+
+/**
  * Create extraction prompt for Gemini
  * @param {Object} pdfData - Extracted PDF data
  * @param {Object} schema - ROADMAP schema from GitHub
@@ -519,58 +556,29 @@ function createExtractionPrompt(pdfData, schema, cardType, processingMode) {
 
     console.log(`✅ Generated example structure (${exampleJson.length} characters)`);
 
-    return `You are an expert AI system specializing in extracting structured information from medical imaging research papers for ROADMAP ${cardTypeUpper} cards.
+    return `Extract medical imaging research data into ROADMAP ${cardTypeUpper} card JSON format.
 
-**TASK:** Extract information for a ${cardTypeUpper} card in valid JSON format.
+**EXTRACTION RULES:**
+• Extract ALL authors with affiliations, keywords, and exact numerical values - never summarize
+• For Content/Keywords fields: extract ALL applicable codes/terms as arrays
+• RadLex/SNOMED codes: ONLY if explicitly stated in PDF - do NOT guess or generate
+• Omit fields with no data (no empty arrays/objects)
+• Return ONLY valid JSON (no markdown, no explanations)
 
-**CRITICAL INSTRUCTIONS:**
-• Extract ALL authors with affiliations - do not summarize
-• Extract exact numerical values and statistical measures - never summarize or approximate
-• For tables: Extract complete data, labels, classifications, performance metrics
-• Include publication details, performance metrics, and technical specifications
-• For Content codes: Extract ALL applicable 2-letter codes (e.g., ["CT", "MR", "BR"] not just one)
-• For Keywords: Extract ALL keywords mentioned (e.g., ["Breast", "MRI", "Deep Learning"] not just one)
-• **CRITICAL: For RadLex/SNOMED codes - ONLY extract if explicitly stated in the PDF**
-• **DO NOT invent, guess, or generate ontology codes (RadLex RID*, SNOMED numbers)**
-• **If RadLex/SNOMED codes are not explicitly mentioned in the PDF, OMIT these fields entirely**
-• Only include fields where you find actual data in the document
-• Skip empty arrays, empty objects, and fields you cannot populate from the PDF
-• Output must be valid JSON with proper ROADMAP structure
-• Return ONLY valid JSON (no markdown, no explanations, no additional text)
-
-**FIELD-SPECIFIC GUIDANCE:**
-• Content: Array of ALL applicable 2-letter codes. Example: ["CT", "MR", "BR"]
-• Keywords: Extract ALL keywords. Example: ["Breast", "MRI", "Deep Learning"]
-• Authors: Extract ALL author names with exact affiliations
-• RadLex/SNOMED: **ONLY if explicitly stated in PDF** - DO NOT GUESS
-• Dates: Use exact dates from PDF (YYYY-MM-DD format or year)
-• Counts/Numbers: Extract exact values - never estimate
-
-**RESULTS FIELD GUIDANCE (CRITICAL):**
-The ROADMAP schema uses a simple structure for Results/Performance metrics:
-• "Result Information": Description of the result (e.g., "AUC comparison on test dataset")
-• "Metric": Array of metric names (e.g., ["Area under the receiver operating characteristic curve"])
-• "Value": **SIMPLE STRING** containing all values (e.g., "Small 2D CNN: 0.88, Radiologists: 0.86")
-• "Uncertainty": Confidence intervals as string (e.g., "95% CI: 0.81-0.93 vs 0.78-0.91")
-• "Subset": Dataset subset (e.g., "Test dataset")
-
-**DO NOT create nested structures**:
-❌ "Value": [{"Model": "X", "Value": "Y"}] - WRONG
-✅ "Value": "Model X: Y, Model Z: W" - CORRECT
-
-**Example Results entry**:
-{
-  "Result Information": "AUC comparison between Small 2D CNN and Radiologists on test dataset",
-  "Metric": ["Area under the receiver operating characteristic curve"],
-  "Value": "Small 2D CNN + augmentation: 0.88, Radiologists: 0.86",
-  "Uncertainty": "Small 2D CNN: 95% CI 0.81–0.93, Radiologists: 95% CI 0.78–0.91"
-}
+**RESULTS FORMAT:**
+Use simple string format for values:
+- "Result Information": description
+- "Metric": array of metric names
+- "Value": simple string with all values (e.g., "Model A: 0.88, Model B: 0.86")
+- "Uncertainty": confidence intervals as string
+- "Subset": dataset subset
+Do NOT use nested objects in Value field
 
 **REQUIRED JSON STRUCTURE:**
 ${exampleJson}
 
 **DOCUMENT TEXT:**
-"""${pdfData.text.substring(0, 15000)}"""
+"""${removeReferences(pdfData.text).substring(0, 15000)}"""
 
 ${pdfData.tables && pdfData.tables.length > 0 ? `**TABLES:**
 ${truncateTablesForPrompt(pdfData.tables, 15000)}` : ''}
