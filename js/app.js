@@ -2617,10 +2617,8 @@ async function handlePdfUpload(event) {
     try {
         // ========== NEW CLIENT-SIDE PROCESSING ==========
 
-        // Validate API key is configured
-        if (!isApiKeyConfigured()) {
-            throw new Error('Gemini API key not configured. Please enter your API key at the top of the page.');
-        }
+        // Note: No API key validation needed - using secure AWS backend
+        // All Gemini API calls are routed through Lambda which handles authentication
 
         // Step 3a: Extract PDF data using PDF.js (client-side)
         showAlert('Extracting text from PDF...', 'info', 0);

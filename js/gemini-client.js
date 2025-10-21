@@ -413,6 +413,94 @@ function cleanEmptyFields(obj) {
 }
 
 /**
+ * Intelligently truncate tables to fit within character limit
+ * Prioritizes tables with numerical data and performance metrics
+ * @param {Array} tables - Array of table objects
+ * @param {number} maxChars - Maximum characters for all tables
+ * @returns {string} - Formatted table string
+ */
+function truncateTablesForPrompt(tables, maxChars) {
+    if (!tables || tables.length === 0) return '';
+
+    // Priority scoring: favor tables with numbers (likely performance/results)
+    const scoredTables = tables.map((table, index) => {
+        let score = 0;
+        const tableStr = JSON.stringify(table);
+
+        // Check for numerical data (higher priority)
+        const numberCount = (tableStr.match(/\d+\.?\d*/g) || []).length;
+        score += numberCount * 2;
+
+        // Check for keywords indicating results/performance
+        const keywords = ['accuracy', 'auc', 'precision', 'recall', 'sensitivity',
+                         'specificity', 'f1', 'performance', 'result', 'metric'];
+        keywords.forEach(keyword => {
+            if (tableStr.toLowerCase().includes(keyword)) score += 10;
+        });
+
+        // Smaller tables are easier to include
+        score += Math.max(0, 50 - table.rows.length);
+
+        return { table, index, score };
+    });
+
+    // Sort by score (highest priority first)
+    scoredTables.sort((a, b) => b.score - a.score);
+
+    // Build table string, adding tables until we hit limit
+    let result = '';
+    let currentLength = 0;
+    let includedCount = 0;
+
+    for (const {table, index} of scoredTables) {
+        const tableJson = JSON.stringify({
+            page: table.page,
+            headers: table.headers,
+            rows: table.rows
+        }, null, 2);
+
+        const tableStr = `TABLE ${index + 1} (Page ${table.page}, ${table.rows.length} rows):\n${tableJson}\n\n`;
+
+        if (currentLength + tableStr.length > maxChars) {
+            // Try to include a sampled version
+            if (table.rows.length > 10) {
+                const sampledTable = {
+                    page: table.page,
+                    headers: table.headers,
+                    rows: [
+                        ...table.rows.slice(0, 5),
+                        ['... (rows truncated) ...'],
+                        ...table.rows.slice(-3)
+                    ]
+                };
+                const sampledStr = `TABLE ${index + 1} (Page ${table.page}, ${table.rows.length} rows - SAMPLED):\n${JSON.stringify(sampledTable, null, 2)}\n\n`;
+
+                if (currentLength + sampledStr.length <= maxChars) {
+                    result += sampledStr;
+                    currentLength += sampledStr.length;
+                    includedCount++;
+                }
+            }
+            // If we can't fit even a sample, we're done
+            break;
+        } else {
+            result += tableStr;
+            currentLength += tableStr.length;
+            includedCount++;
+        }
+    }
+
+    const skippedCount = tables.length - includedCount;
+    if (skippedCount > 0) {
+        result += `\n[Note: ${skippedCount} additional table(s) omitted due to length constraints]\n`;
+    }
+
+    console.log(`📊 Table truncation: Included ${includedCount}/${tables.length} tables (${currentLength.toLocaleString()} chars)`);
+
+    return result;
+}
+
+/**
  * Create extraction prompt for Gemini
  * @param {Object} pdfData - Extracted PDF data
  * @param {Object} schema - ROADMAP schema from GitHub
@@ -485,7 +573,7 @@ ${exampleJson}
 """${pdfData.text.substring(0, 15000)}"""
 
 ${pdfData.tables && pdfData.tables.length > 0 ? `**TABLES:**
-${JSON.stringify(pdfData.tables, null, 2)}` : ''}
+${truncateTablesForPrompt(pdfData.tables, 15000)}` : ''}
 
 ${processingMode === 'multimodal' && pdfData.images && pdfData.images.length > 0 ? `**REFERENCED FIGURES (${pdfData.images.length} images will be provided):**
 ${pdfData.images.map(img => `- Figure ${img.figureNumber} (Page ${img.page})`).join('\n')}

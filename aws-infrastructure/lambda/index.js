@@ -35,7 +35,7 @@ const CONFIG = {
     DEFAULT_MAX_TOKENS: 8192,
     MAX_RETRIES: 3,
     RETRY_DELAYS: [1000, 2000, 4000], // Exponential backoff in ms
-    MAX_PROMPT_LENGTH: 50000, // Characters
+    MAX_PROMPT_LENGTH: 100000, // Characters (increased from 50K to handle table-heavy PDFs)
     MAX_IMAGES: 10,
     CLOUDWATCH_NAMESPACE: 'ROADMAP/Backend',
     LOG_LEVEL: process.env.LOG_LEVEL || 'INFO'
