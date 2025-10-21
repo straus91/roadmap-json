@@ -284,7 +284,7 @@ async function httpsRequest(url, options, postData, retryCount = 0) {
         });
 
         req.on('error', reject);
-        req.setTimeout(25000, () => {
+        req.setTimeout(28000, () => {
             req.destroy();
             reject(new Error('Request timeout'));
         });
