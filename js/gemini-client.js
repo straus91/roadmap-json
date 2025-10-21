@@ -84,26 +84,35 @@ function showApiKeyStatus(message, type = 'info') {
  * Toggle API key visibility
  */
 document.addEventListener('DOMContentLoaded', function() {
-    // Load saved API key on page load
-    const savedKey = getApiKey();
-    if (savedKey) {
-        document.getElementById('gemini-api-key').value = savedKey;
-        showApiKeyStatus('API key loaded from browser storage', 'success');
-    }
+    // API key UI removed - using AWS backend
+    // No client-side API key configuration needed
 
-    // Toggle password visibility
-    document.getElementById('toggle-api-key-visibility').addEventListener('click', function() {
-        const input = document.getElementById('gemini-api-key');
-        const icon = this.querySelector('i');
+    // Legacy code for API key toggle - check if elements exist first
+    const apiKeyInput = document.getElementById('gemini-api-key');
+    const toggleButton = document.getElementById('toggle-api-key-visibility');
 
-        if (input.type === 'password') {
-            input.type = 'text';
-            icon.className = 'fa fa-eye-slash';
-        } else {
-            input.type = 'password';
-            icon.className = 'fa fa-eye';
+    if (apiKeyInput && toggleButton) {
+        // Load saved API key on page load
+        const savedKey = getApiKey();
+        if (savedKey) {
+            apiKeyInput.value = savedKey;
+            showApiKeyStatus('API key loaded from browser storage', 'success');
         }
-    });
+
+        // Toggle password visibility
+        toggleButton.addEventListener('click', function() {
+            const input = document.getElementById('gemini-api-key');
+            const icon = this.querySelector('i');
+
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fa fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fa fa-eye';
+            }
+        });
+    }
 
     // Update PDF card state on load
     updatePdfCardState();
@@ -142,54 +151,13 @@ async function callGeminiAPI(prompt, options = {}) {
         images = []
     } = options;
 
-    // Build content parts
-    const contentParts = [{ text: prompt }];
-
-    // Add images if provided (for multimodal mode)
-    if (images && images.length > 0) {
-        images.forEach(image => {
-            if (image.base64) {
-                contentParts.push({
-                    text: `\n\nFigure ${image.figureNumber || 'N/A'} (Page ${image.page || 'N/A'}):`
-                });
-                contentParts.push({
-                    inlineData: {
-                        mimeType: image.mimeType || 'image/jpeg',
-                        data: image.base64
-                    }
-                });
-            }
-        });
-    }
-
+    // Build request body in simple format expected by Lambda backend
     const requestBody = {
-        contents: [{
-            parts: contentParts
-        }],
-        generationConfig: {
-            temperature: temperature,
-            maxOutputTokens: maxOutputTokens,
-            topK: 40,
-            topP: 0.95
-        },
-        safetySettings: [
-            {
-                category: "HARM_CATEGORY_HARASSMENT",
-                threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                category: "HARM_CATEGORY_HATE_SPEECH",
-                threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-                threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            }
-        ]
+        prompt: prompt,
+        model: model,
+        temperature: temperature,
+        maxOutputTokens: maxOutputTokens,
+        images: images || []
     };
 
     console.log('📤 Sending request to AWS backend...');
