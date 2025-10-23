@@ -21,8 +21,8 @@ class DynamicSchemaProcessor {
     // GitHub URLs for latest ROADMAP schemas (same as backend)
     get GITHUB_SCHEMAS() {
         return {
-            model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.model.json',
-            dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.dataset.json'
+            model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/model.json',
+            dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/dataset.json'
         };
     }
 
@@ -38,7 +38,7 @@ class DynamicSchemaProcessor {
         }
 
         try {
-            const url = `https://raw.githubusercontent.com/cekahn/ROADMAP/main/${filename}`;
+            const url = `https://raw.githubusercontent.com/cekahn/ROADMAP/main/Schema%20component%20files/${filename}`;
             console.log(`  🌐 Fetching: ${filename}`);
 
             const response = await fetch(url);

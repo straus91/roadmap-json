@@ -6,8 +6,8 @@
 
 // Schema URLs
 const GITHUB_SCHEMAS = {
-    model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.model.json',
-    dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/ROADMAP.dataset.json'
+    model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/model.json',
+    dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/dataset.json'
 };
 
 // UI Timing Constants
