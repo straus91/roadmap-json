@@ -38,6 +38,12 @@ const GEMINI_API_PATH = '/v1beta/models';
 const DEFAULT_MODEL = 'gemini-2.5-pro';  // Upgraded for better accuracy with medical data
 const MAX_OUTPUT_TOKENS = 16384;  // Increased for longer, more detailed results
 
+// Retry configuration for API rate limits and overload
+const MAX_RETRIES = 10;  // Maximum retry attempts for 429/503 errors
+const INITIAL_RETRY_DELAY_MS = 1000;  // Start with 1 second
+const MAX_RETRY_DELAY_MS = 60000;  // Max 60 seconds between retries
+const BACKOFF_MULTIPLIER = 2;  // Exponential backoff multiplier
+
 // Cached API key
 let cachedApiKey = null;
 
@@ -59,9 +65,9 @@ exports.handler = async (event) => {
         const prompt = createExtractionPrompt(pdfData, schema, cardType, processingMode);
         console.log(`Prompt length: ${prompt.length} characters`);
 
-        // Call Gemini API (can take 30-60+ seconds, no problem!)
+        // Call Gemini API with retry logic (can take 30-60+ seconds, no problem!)
         const startTime = Date.now();
-        const geminiResponse = await callGeminiAPI(apiKey, prompt, {
+        const geminiResponse = await callGeminiAPIWithRetry(apiKey, prompt, {
             model: DEFAULT_MODEL,
             maxOutputTokens: MAX_OUTPUT_TOKENS
         });
@@ -469,6 +475,89 @@ function truncateTablesForPrompt(tables, maxChars) {
     return result;
 }
 
+
+/**
+ * Call Gemini API with automatic retry for rate limits and overload
+ */
+async function callGeminiAPIWithRetry(apiKey, prompt, options = {}) {
+    let lastError = null;
+    let delay = INITIAL_RETRY_DELAY_MS;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            console.log(attempt > 0 ? `🔄 Retry attempt ${attempt}/${MAX_RETRIES}` : '📤 Calling Gemini API...');
+
+            const response = await callGeminiAPI(apiKey, prompt, options);
+
+            if (attempt > 0) {
+                console.log(`✅ Succeeded after ${attempt} retries`);
+            }
+
+            return response;
+
+        } catch (error) {
+            lastError = error;
+            const errorMessage = error.message || '';
+
+            // Try to parse error response to check status code
+            let statusCode = null;
+            let retryAfter = null;
+
+            // Extract status code from error message (format: "HTTP 429: {...}")
+            const statusMatch = errorMessage.match(/HTTP (\d+):/);
+            if (statusMatch) {
+                statusCode = parseInt(statusMatch[1]);
+            }
+
+            // Try to parse JSON error for retry delay
+            try {
+                const jsonMatch = errorMessage.match(/HTTP \d+: ({.*})/s);
+                if (jsonMatch) {
+                    const errorData = JSON.parse(jsonMatch[1]);
+
+                    // Google provides retry delay in the error
+                    if (errorData.error?.details) {
+                        const retryInfo = errorData.error.details.find(d => d['@type']?.includes('RetryInfo'));
+                        if (retryInfo?.retryDelay) {
+                            // Parse delay like "14.543836516s" to milliseconds
+                            const delayMatch = retryInfo.retryDelay.match(/([\d.]+)s/);
+                            if (delayMatch) {
+                                retryAfter = Math.ceil(parseFloat(delayMatch[1]) * 1000);
+                            }
+                        }
+                    }
+                }
+            } catch (parseError) {
+                // Ignore parsing errors
+            }
+
+            // Check if this is a retryable error (429 quota or 503 overload)
+            const isRetryable = statusCode === 429 || statusCode === 503;
+
+            if (!isRetryable || attempt >= MAX_RETRIES) {
+                console.error(`❌ Non-retryable error or max retries reached: ${errorMessage.substring(0, 200)}`);
+                throw error;
+            }
+
+            // Calculate delay: use Google's suggested delay or exponential backoff
+            if (retryAfter) {
+                delay = Math.min(retryAfter, MAX_RETRY_DELAY_MS);
+                console.log(`⏱️  Rate limited (${statusCode}), waiting ${(delay/1000).toFixed(1)}s as suggested by API...`);
+            } else {
+                // Exponential backoff with jitter
+                const jitter = Math.random() * 0.3 * delay;  // Add 0-30% jitter
+                delay = Math.min(delay * BACKOFF_MULTIPLIER + jitter, MAX_RETRY_DELAY_MS);
+                console.log(`⏱️  Error ${statusCode}, backing off for ${(delay/1000).toFixed(1)}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+            }
+
+            // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+
+    // Should never reach here, but just in case
+    throw lastError;
+}
 
 /**
  * Call Gemini API
