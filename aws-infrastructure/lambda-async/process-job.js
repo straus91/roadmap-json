@@ -36,7 +36,7 @@ const ENVIRONMENT = process.env.ENVIRONMENT || 'prod';
 const GEMINI_API_ENDPOINT = 'generativelanguage.googleapis.com';
 const GEMINI_API_PATH = '/v1beta/models';
 const DEFAULT_MODEL = 'gemini-2.5-flash';  // Flash for better rate limits (15 RPM vs 2 RPM for Pro)
-const MAX_OUTPUT_TOKENS = 16384;  // Increased for longer, more detailed results
+const MAX_OUTPUT_TOKENS = 65536;  // Gemini 2.5 Flash max output (4x increase from 16K)
 
 // Retry configuration for API rate limits and overload
 const MAX_RETRIES = 10;  // Maximum retry attempts for 429/503 errors
