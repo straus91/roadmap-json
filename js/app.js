@@ -1878,11 +1878,24 @@ function addExamplesToFields() {
     }
     
     // Wait for actual form fields to be generated (not just structural elements)
+    let retryCount = 0;
+    const MAX_RETRIES = 20;  // Stop after 20 retries (~10 seconds)
+
     const checkForRealFields = () => {
         const realFields = editorContainer.querySelectorAll('[data-schemapath*="Name"], [data-schemapath*="Method"], [data-schemapath*="Version"], [data-schemapath*="License"]');
-        
+
         if (realFields.length === 0) {
-            console.log('Waiting for actual form fields to be generated...');
+            retryCount++;
+
+            if (retryCount >= MAX_RETRIES) {
+                console.error('❌ Timeout waiting for form fields to generate. Editor may have failed to initialize.');
+                // Clear any loading indicators
+                document.querySelector('.alert.custom-alert')?.remove();
+                showAlert('⚠️ Editor Failed to Load\n\nThe editor could not initialize properly. This may be due to invalid data from PDF processing.\n\n💡 Please try uploading your PDF again.', 'warning');
+                return;
+            }
+
+            console.log(`Waiting for actual form fields to be generated... (${retryCount}/${MAX_RETRIES})`);
             setTimeout(checkForRealFields, 500);
             return;
         }

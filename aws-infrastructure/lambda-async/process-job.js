@@ -612,7 +612,7 @@ async function callGeminiAPI(apiKey, prompt, options = {}) {
         });
 
         req.on('error', reject);
-        req.setTimeout(120000, () => {  // 2 minutes timeout (plenty of time!)
+        req.setTimeout(300000, () => {  // 5 minutes timeout (matches Lambda max timeout)
             req.destroy();
             reject(new Error('Request timeout'));
         });
