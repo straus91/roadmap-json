@@ -35,7 +35,7 @@ const ENVIRONMENT = process.env.ENVIRONMENT || 'prod';
 // Gemini API configuration
 const GEMINI_API_ENDPOINT = 'generativelanguage.googleapis.com';
 const GEMINI_API_PATH = '/v1beta/models';
-const DEFAULT_MODEL = 'gemini-2.5-pro';  // Upgraded for better accuracy with medical data
+const DEFAULT_MODEL = 'gemini-2.5-flash';  // Flash for better rate limits (15 RPM vs 2 RPM for Pro)
 const MAX_OUTPUT_TOKENS = 16384;  // Increased for longer, more detailed results
 
 // Retry configuration for API rate limits and overload
@@ -203,6 +203,17 @@ function createExtractionPrompt(pdfData, schema, cardType, processingMode) {
 • RadLex/SNOMED codes: ONLY if explicitly stated in PDF - do NOT guess or generate
 • Omit fields with no data (no empty arrays/objects)
 • Return ONLY valid JSON (no markdown, no explanations)
+
+**PARTITION EXTRACTION (Dataset Cards):**
+For dataset partitions (training/validation/test splits), extract:
+• Patient Count: total number of unique patients
+• Exam Count: total number of imaging exams/studies
+• Image Count: total number of images
+• Age Range: min-max age of patients (e.g., "18-85 years")
+• Sex Distribution: breakdown by gender (e.g., "52% female, 48% male")
+• Demographics: racial/ethnic composition if stated
+• Subset Criterion: how this partition differs (e.g., "Images with confirmed diagnosis")
+Look for this data in tables with headers like "Training Set", "Validation Set", "Test Set", "Dataset Statistics", "Cohort Characteristics"
 
 **RESULTS FORMAT:**
 Use simple string format for values:
@@ -406,9 +417,11 @@ function truncateTablesForPrompt(tables, maxChars) {
         const numberCount = (tableStr.match(/\d+\.?\d*/g) || []).length;
         score += numberCount * 2;
 
-        // Check for keywords indicating results/performance
+        // Check for keywords indicating results/performance/partitions
         const keywords = ['accuracy', 'auc', 'precision', 'recall', 'sensitivity',
-                         'specificity', 'f1', 'performance', 'result', 'metric'];
+                         'specificity', 'f1', 'performance', 'result', 'metric',
+                         'training', 'validation', 'test', 'partition', 'split',
+                         'cohort', 'patient', 'exam', 'demographics', 'dataset'];
         keywords.forEach(keyword => {
             if (tableStr.toLowerCase().includes(keyword)) score += 10;
         });
