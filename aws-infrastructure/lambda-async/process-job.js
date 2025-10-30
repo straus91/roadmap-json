@@ -204,6 +204,38 @@ function createExtractionPrompt(pdfData, schema, cardType, processingMode) {
 • Omit fields with no data (no empty arrays/objects)
 • Return ONLY valid JSON (no markdown, no explanations)
 
+**INDEXING EXTRACTION:**
+
+Keywords - Extract from paper's Keywords section (priority order):
+1. Look for "Keywords:", "Key words:", "Index terms:" (usually after abstract)
+2. If found: extract exactly as written by authors (use FIRST found location only)
+3. If not found: extract 5-15 specific technical terms from document content
+
+INCLUDE: Imaging modalities, anatomical structures, pathologies, AI architectures, clinical tasks
+EXCLUDE: "Deep Learning", "Machine Learning", "Artificial Intelligence", "Study", "Method", "Research"
+
+Content Codes - RSNA 2-letter codes (extract ALL that apply to paper's CENTRAL topics):
+Strategy: 1) Look for codes in PDF text/metadata, 2) If not found, infer from paper focus
+• AI: machine learning, deep learning, neural networks (if central topic)
+• BR: breast imaging, mammography (if central topic)
+• BQ: radiomics, quantitative imaging, biomarkers
+• CA: cardiac, heart, coronary imaging
+• CH: chest, lung, thoracic imaging
+• CT: computed tomography (if modality is focus)
+• MR: MRI, magnetic resonance (if modality is focus)
+• US: ultrasound, sonography (if modality is focus)
+• NR: neuroradiology, brain, spine, CNS
+• OB: obstetric, fetal, prenatal imaging
+• OI: oncologic imaging, cancer imaging
+• PD: pediatric, children, neonatal
+
+⚠️ IMPORTANT: Only include codes CENTRAL to the paper (in title/abstract/main focus).
+Don't include codes for concepts just briefly mentioned.
+
+Example: "AI breast cancer detection" → [AI, BR, OI] ✓
+Example: "Brain tumor study using MRI" → [NR, OI, MR] ✓
+Example: "CT quality paper that mentions AI once" → [CT, PH] (NOT AI) ✓
+
 **PARTITION EXTRACTION (Dataset Cards):**
 For dataset partitions (training/validation/test splits), extract:
 • Patient Count: total number of unique patients
@@ -215,14 +247,34 @@ For dataset partitions (training/validation/test splits), extract:
 • Subset Criterion: how this partition differs (e.g., "Images with confirmed diagnosis")
 Look for this data in tables with headers like "Training Set", "Validation Set", "Test Set", "Dataset Statistics", "Cohort Characteristics"
 
-**RESULTS FORMAT:**
-Use simple string format for values:
-- "Result Information": description
-- "Metric": array of metric names
-- "Value": simple string with all values (e.g., "Model A: 0.88, Model B: 0.86")
-- "Uncertainty": confidence intervals as string
-- "Subset": dataset subset
-Do NOT use nested objects in Value field
+**METRICS EXTRACTION (CLAIM 2024 Compliant):**
+
+Metric names (array): Extract performance metric TYPES from this list:
+"accuracy", "sensitivity", "specificity", "area under the receiver operating characteristic curve",
+"Dice similarity coefficient", "F1 score", "precision", "recall", "mean absolute error",
+"confusion matrix", "calibration curve", "precision-recall curve"
+
+Metrics description (string): Combine ALL numerical results into ONE comprehensive description.
+⚠️ Keep concise (<300 words) while including all required elements.
+
+Required elements (if present in paper):
+✓ Metric values with precision (0.92 not "92%")
+✓ 95% Confidence intervals or standard deviation
+✓ Data partition (test/validation/training)
+✓ Sample sizes (n=X images, Y patients)
+✓ Demographic subgroups (sex, age, disease type)
+✓ Statistical significance (p-values)
+✓ Comparison to baseline/reference standard
+
+Format: "[Metric]: [Value] (95% CI: [range]) on [partition] (n=[size]). [Subgroup]: [value]. [Next metric]..."
+
+Extract from (priority order):
+1. Results tables (Table 2, Table 3 - primary source) ⚠️ If tables poorly formatted, use Results text
+2. Results section text
+3. Abstract summary
+
+Example output:
+"AUC-ROC: 0.94 (95% CI: 0.91-0.96) on test set (n=1,000 images, 500 patients). Sensitivity: 0.92 (95% CI: 0.88-0.95), Specificity: 0.87 (95% CI: 0.82-0.91). Female patients: AUC 0.95, Male patients: AUC 0.93 (p=0.04). Dice coefficient: 0.88±0.05. Outperformed radiologist baseline (AUC 0.82, p<0.001)."
 
 **REQUIRED JSON STRUCTURE:**
 ${exampleJson}
