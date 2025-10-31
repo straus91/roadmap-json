@@ -6,8 +6,8 @@
 
 // Schema URLs
 const GITHUB_SCHEMAS = {
-    model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/model.json',
-    dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/dataset.json'
+    model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/schema/2025-11/model.json',
+    dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/schema/2025-11/dataset.json'
 };
 
 // UI Timing Constants
@@ -287,6 +287,103 @@ function updateEditorUI(cardType) {
     document.getElementById('form-title').textContent = title + ' Information';
 }
 
+/**
+ * Migrate old schema format to new 2025-11 schema format
+ * Handles property name changes between schema versions
+ * @param {any} data - Data to migrate
+ * @param {string} cardType - 'model' or 'dataset'
+ * @returns {any} - Migrated data
+ */
+function migrateToNewSchema(data, cardType) {
+    if (!data || typeof data !== 'object') return data;
+
+    // Only Model schema has breaking changes (so far)
+    if (cardType !== 'model') return data;
+
+    // Deep clone to avoid mutating original
+    const migrated = JSON.parse(JSON.stringify(data));
+
+    // Migrate Metrics structure: "Metric names" → "Metrics", "Metrics description" → "Comments"
+    if (migrated.Metrics && typeof migrated.Metrics === 'object') {
+        if (migrated.Metrics["Metric names"]) {
+            migrated.Metrics.Metrics = migrated.Metrics["Metric names"];
+            delete migrated.Metrics["Metric names"];
+            console.log('📋 Migrated: "Metric names" → "Metrics"');
+        }
+        if (migrated.Metrics["Metrics description"]) {
+            migrated.Metrics.Comments = migrated.Metrics["Metrics description"];
+            delete migrated.Metrics["Metrics description"];
+            console.log('📋 Migrated: "Metrics description" → "Comments"');
+        }
+    }
+
+    return migrated;
+}
+
+/**
+ * Recursively clean empty values from data
+ * Removes:
+ * - Empty strings from arrays
+ * - Empty arrays (after cleaning)
+ * - Object properties with empty string values
+ * @param {any} data - Data to clean
+ * @returns {any} - Cleaned data
+ */
+function cleanEmptyValues(data) {
+    // Handle null/undefined
+    if (data === null || data === undefined) {
+        return data;
+    }
+
+    // Handle arrays
+    if (Array.isArray(data)) {
+        // Remove empty strings AND string "null" from backend
+        const cleaned = data
+            .filter(item => item !== "" && item !== "null")
+            .map(item => cleanEmptyValues(item));
+        return cleaned;
+    }
+
+    // Handle objects
+    if (typeof data === 'object') {
+        const cleaned = {};
+        for (const [key, value] of Object.entries(data)) {
+            // Skip properties with empty string values OR string "null"
+            if (value === "" || value === "null") {
+                continue;
+            }
+
+            // Recursively clean the value
+            const cleanedValue = cleanEmptyValues(value);
+
+            // Skip null or undefined values (likely from cleaning nested objects)
+            if (cleanedValue === null || cleanedValue === undefined) {
+                continue;
+            }
+
+            // Skip empty arrays (they would fail minItems validation anyway)
+            if (Array.isArray(cleanedValue) && cleanedValue.length === 0) {
+                continue;
+            }
+
+            // Skip empty objects (they would fail minProperties validation)
+            if (typeof cleanedValue === 'object' && !Array.isArray(cleanedValue) && Object.keys(cleanedValue).length === 0) {
+                continue;
+            }
+
+            cleaned[key] = cleanedValue;
+        }
+        return cleaned;
+    }
+
+    // Return primitive values as-is (unless it's string "null")
+    if (data === "null") {
+        return ""; // Convert string "null" to empty string so it gets filtered
+    }
+
+    return data;
+}
+
 async function initializeEditor(initialData = null) {
     const editorHolder = document.getElementById('editor-holder');
     editorHolder.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div><p class="mt-2 text-muted">Loading schema...</p></div>';
@@ -297,7 +394,7 @@ async function initializeEditor(initialData = null) {
         // Get custom schema URL if provided
         const customUrl = document.getElementById('custom-schema-url')?.value.trim() || null;
         
-        // Get schema (base or custom)
+        // Get schema (base or custom) - getSchema returns processed schema for JSONEditor
         const schema = await schemaProcessor.getSchema(currentCardType, customUrl);
 
         if (!schema) {
@@ -305,12 +402,32 @@ async function initializeEditor(initialData = null) {
             return;
         }
 
+        // Get original unprocessed schema for normalization (before JSONEditor conversion)
+        const originalSchema = schemaProcessor.baseSchemas[currentCardType] || schema;
+
         // *** Normalize initial data to match schema field names (case-insensitive) ***
         let normalizedData = initialData || {};
         if (initialData && Object.keys(initialData).length > 0) {
+            // Migrate old schema format to new 2025-11 format
+            console.log('📋 Migrating schema format...');
+            let migratedData = migrateToNewSchema(initialData, currentCardType);
+
             console.log('🔄 Starting normalization of initial data...');
-            normalizedData = normalizeJsonToSchema(initialData, schema);
+            normalizedData = normalizeJsonToSchema(migratedData, originalSchema, true);  // skipWrapper=true for editor
             console.log('📝 Normalized data keys:', normalizedData ? Object.keys(normalizedData) : 'null');
+
+            // Auto-inject $schema from original schema if defined
+            if (originalSchema.properties && originalSchema.properties.$schema && originalSchema.properties.$schema.const) {
+                if (!normalizedData.$schema) {
+                    normalizedData.$schema = originalSchema.properties.$schema.const;
+                    console.log(`📋 Auto-injected $schema: ${normalizedData.$schema}`);
+                }
+            }
+
+            // Clean empty values to prevent validation errors
+            console.log('🧹 Cleaning empty values from data...');
+            normalizedData = cleanEmptyValues(normalizedData);
+            console.log('✅ Empty values cleaned');
         }
 
         // Update schema info display
@@ -336,7 +453,7 @@ async function initializeEditor(initialData = null) {
             compact: true,
             object_layout: 'normal',
             // Additional options to help with dropdown rendering
-            use_default_values: true,
+            use_default_values: false,
             remove_empty_properties: false,
             array_controls_top: true,
             object_controls_top: false
@@ -623,11 +740,17 @@ function downloadJSON() {
         const editorData = editor.getValue();
 
         // Construct the complete ROADMAP JSON structure
-        const roadmapData = {
-            $schema: `ROADMAP-${currentCardType}-2025-05.json`
-        };
+        const roadmapData = {};
 
-        // Add the appropriate section
+        // Use $schema from editor data (auto-injected value from schema)
+        if (editorData.$schema) {
+            roadmapData.$schema = editorData.$schema;
+        } else {
+            // Fallback for old data that doesn't have $schema
+            roadmapData.$schema = `ROADMAP-${currentCardType}-2025-05.json`;
+        }
+
+        // Add the appropriate section (editor stores unwrapped data, so wrap it)
         if (currentCardType === CARD_TYPES.MODEL) {
             roadmapData.Model = editorData;
         } else if (currentCardType === CARD_TYPES.DATASET) {
@@ -737,9 +860,10 @@ function resolveSchemaRef(ref, schema) {
  *
  * @param {object} data - The JSON data to normalize
  * @param {object} schema - The JSON schema to match against
+ * @param {boolean} skipWrapper - If true, returns unwrapped data for direct editor use
  * @returns {object} Normalized JSON data with corrected field names
  */
-function normalizeJsonToSchema(data, schema) {
+function normalizeJsonToSchema(data, schema, skipWrapper = false) {
   // Guard against null/undefined/non-objects
   if (data === null || data === undefined) {
     console.warn('⚠️ Normalization received null/undefined data');
@@ -812,13 +936,19 @@ function normalizeJsonToSchema(data, schema) {
       }
 
       const normalized = normalizeObject(innerData, targetSchema.properties, fieldMap, schema);
-      const result = {};
-      result[wrapperKey] = normalized;
-      console.log('✅ JSON normalization complete (already wrapped)');
-      return result;
+
+      if (skipWrapper) {
+        console.log('✅ JSON normalization complete (unwrapped for editor)');
+        return normalized;
+      } else {
+        const result = {};
+        result[wrapperKey] = normalized;
+        console.log('✅ JSON normalization complete (already wrapped)');
+        return result;
+      }
     } else {
-      console.log(`📦 Data is unwrapped, will wrap in "${wrapperKey}"`);
-      // Data is unwrapped, normalize then wrap
+      console.log(`📦 Data is unwrapped`);
+      // Data is unwrapped, normalize
 
       // Create case-insensitive lookup map
       const fieldMap = {};
@@ -829,10 +959,16 @@ function normalizeJsonToSchema(data, schema) {
       }
 
       const normalized = normalizeObject(data, targetSchema.properties, fieldMap, schema);
-      const result = {};
-      result[wrapperKey] = normalized;
-      console.log('✅ JSON normalization complete (wrapped)');
-      return result;
+
+      if (skipWrapper) {
+        console.log('✅ JSON normalization complete (kept unwrapped for editor)');
+        return normalized;
+      } else {
+        const result = {};
+        result[wrapperKey] = normalized;
+        console.log('✅ JSON normalization complete (wrapped)');
+        return result;
+      }
     }
   }
 
@@ -1900,41 +2036,27 @@ function addExamplesToFields() {
             return;
         }
         
-        console.log('=== Adding examples to fields ===');
-        console.log(`Found ${realFields.length} actual form fields generated`);
-        
         // Find all input fields with meaningful schema paths
         const meaningfulInputs = editorContainer.querySelectorAll('input[data-schemapath]:not([data-schemapath="root"]), textarea[data-schemapath]:not([data-schemapath="root"])');
-        console.log(`Found ${meaningfulInputs.length} inputs with meaningful schema paths`);
-        
+
         // Also find inputs within labeled containers (for nested objects)
         const containerInputs = editorContainer.querySelectorAll('[data-schemapath*="."] input, [data-schemapath*="."] textarea');
-        console.log(`Found ${containerInputs.length} inputs in nested containers`);
-        
+
         let examplesAdded = 0;
-        
+
         // Combine all potential inputs
         const allInputs = [...meaningfulInputs, ...containerInputs];
         const uniqueInputs = [...new Set(allInputs)]; // Remove duplicates
-        
-        console.log(`Processing ${uniqueInputs.length} unique input fields`);
-        
+
         uniqueInputs.forEach((input, index) => {
-            const pathElement = input.closest('[data-schemapath]');
-            const schemaPath = pathElement?.getAttribute('data-schemapath');
-            console.log(`Input ${index}: type=${input.type}, path=${schemaPath}`);
-            
             if (addExampleToField(input)) {
                 examplesAdded++;
             }
         });
         
-        console.log(`✅ Added examples to ${examplesAdded} fields`);
-        
         // Handle array items that get added dynamically
         const addButtons = editorContainer.querySelectorAll('button[title*="Add"], .json-editor-btn-add, button[class*="add"]');
-        console.log(`Found ${addButtons.length} add buttons for dynamic content`);
-        
+
         addButtons.forEach(button => {
             // Remove existing listener to avoid duplicates
             button.removeEventListener('click', handleAddButtonClick);
@@ -1986,12 +2108,10 @@ function addExampleToField(inputElement) {
         }
         
         const schemaPath = pathElement.getAttribute('data-schemapath');
-        console.log('Processing field with schema path:', schemaPath);
-        
+
         const examples = getExamplesFromSchema(schemaPath);
         
         if (examples && examples.length > 0) {
-            console.log('✅ Found examples for field at', schemaPath, ':', examples);
             // Create examples container
             let examplesContainer = inputElement.parentNode.querySelector('.field-examples');
             if (!examplesContainer) {
@@ -2032,13 +2152,10 @@ function addExampleToField(inputElement) {
                 inputElement.parentNode.appendChild(examplesContainer);
                 return true;
             }
-        } else {
-            console.log('No examples found for field at path:', schemaPath);
         }
-        
+
         return false;
     } catch (error) {
-        console.log('Could not add examples to field:', error);
         return false;
     }
 }
@@ -2052,33 +2169,26 @@ function getExamplesFromSchema(schemaPath) {
         const originalSchema = schemaProcessor.baseSchemas[currentCardType] || schemaProcessor.loadedSchemas[currentCardType];
         
         if (!processedSchema || !originalSchema) return null;
-        
-        console.log('Looking for examples in schema path:', schemaPath);
-        
+
         // Try to find examples in the original ROADMAP schema structure
         const examples = findExamplesInOriginalSchema(originalSchema, schemaPath, currentCardType);
         if (examples) {
-            console.log('Found examples:', examples);
             return examples;
         }
-        
+
         return null;
     } catch (error) {
-        console.log('Error getting examples from schema:', error);
         return null;
     }
 }
 
 function findExamplesInOriginalSchema(schema, schemaPath, cardType) {
     try {
-        console.log(`=== Finding examples for path: ${schemaPath} ===`);
-        
         // For ROADMAP schemas, look in the $defs section
         const sectionName = cardType.toLowerCase();
         const sectionDef = schema.$defs?.[sectionName];
-        
+
         if (!sectionDef || !sectionDef.properties) {
-            console.log(`No section definition found for ${sectionName}`);
             return null;
         }
         
@@ -2751,24 +2861,10 @@ async function handlePdfUpload(event) {
 
         // Use the user-selected card type instead of trying to detect from response
         const cardType = pdfState.cardType;
-        let editorData = {};
 
-        // Extract data based on user selection
-        if (cardType === CARD_TYPES.MODEL) {
-            if (structuredJson.Model) {
-                editorData = structuredJson.Model;
-            } else {
-                // Fallback: use root level data if no nested Model key
-                editorData = structuredJson;
-            }
-        } else if (cardType === CARD_TYPES.DATASET) {
-            if (structuredJson.Dataset) {
-                editorData = structuredJson.Dataset;
-            } else {
-                // Fallback: use root level data if no nested Dataset key
-                editorData = structuredJson;
-            }
-        }
+        // Pass the data as-is to editor initialization
+        // The normalizeJsonToSchema function will handle wrapping/unwrapping as needed
+        const editorData = structuredJson;
 
         // Show success message
         showAlert(`✅ Successfully extracted ${cardType} information from PDF!`, 'success');

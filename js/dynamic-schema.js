@@ -18,11 +18,11 @@ class DynamicSchemaProcessor {
         this.CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
     }
 
-    // GitHub URLs for latest ROADMAP schemas (same as backend)
+    // GitHub URLs for latest ROADMAP schemas (2025-11 version)
     get GITHUB_SCHEMAS() {
         return {
-            model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/model.json',
-            dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/dataset.json'
+            model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/schema/2025-11/model.json',
+            dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/schema/2025-11/dataset.json'
         };
     }
 
@@ -317,23 +317,40 @@ class DynamicSchemaProcessor {
         const capitalizedType = cardType.charAt(0).toUpperCase() + cardType.slice(1);
         const lowercaseType = cardType.toLowerCase();
 
-        // Strategy 1: Try properties.Dataset or properties.Model (GitHub/new format)
+        // Strategy 0: Check if properties.Model/Dataset has $ref, resolve it (2025-11 format)
+        if (schema.properties?.[capitalizedType]?.$ref) {
+            const refPath = schema.properties[capitalizedType].$ref.replace('#/$defs/', '');
+            if (schema.$defs?.[refPath]?.properties) {
+                console.log(`✅ Found properties via $ref: $defs.${refPath} (2025-11 format)`);
+                return {
+                    properties: schema.$defs[refPath].properties,
+                    required: schema.$defs[refPath].required || [],
+                    defs: schema.$defs,
+                    source: `$defs.${refPath} (via $ref)`
+                };
+            }
+        }
+
+        // Strategy 1: Try properties.Dataset or properties.Model with direct properties (old GitHub format)
         if (schema.properties?.[capitalizedType]?.properties) {
-            console.log(`✅ Found properties at: properties.${capitalizedType} (GitHub format)`);
+            console.log(`✅ Found properties at: properties.${capitalizedType} (old GitHub format)`);
             return {
                 properties: schema.properties[capitalizedType].properties,
+                required: schema.properties[capitalizedType].required || [],
                 defs: schema.$defs || {},
                 source: `properties.${capitalizedType}`
             };
         }
 
-        // Strategy 2: Try $defs.dataset or $defs.model (old local format)
-        if (schema.$defs?.[lowercaseType]?.properties) {
-            console.log(`✅ Found properties at: $defs.${lowercaseType} (legacy format)`);
+        // Strategy 2: Try $defs with both capitalized and lowercase (handle case variations)
+        const defKey = schema.$defs?.[capitalizedType] ? capitalizedType : lowercaseType;
+        if (schema.$defs?.[defKey]?.properties) {
+            console.log(`✅ Found properties at: $defs.${defKey} (legacy format)`);
             return {
-                properties: schema.$defs[lowercaseType].properties,
+                properties: schema.$defs[defKey].properties,
+                required: schema.$defs[defKey].required || [],
                 defs: schema.$defs,
-                source: `$defs.${lowercaseType}`
+                source: `$defs.${defKey}`
             };
         }
 
@@ -342,6 +359,7 @@ class DynamicSchemaProcessor {
             console.log(`⚠️ Using root properties as fallback`);
             return {
                 properties: schema.properties,
+                required: schema.required || [],
                 defs: schema.$defs || {},
                 source: 'root'
             };
@@ -383,10 +401,14 @@ class DynamicSchemaProcessor {
             const jsonEditorSchema = {
                 type: "object",
                 title: sectionName,
-                properties: allProcessedProps  // Use schema structure directly
+                properties: allProcessedProps,  // Use schema structure directly
+                required: schemaInfo.required || []  // Preserve required fields from original schema
             };
 
             console.log(`✅ Schema converted for ${cardType} with ${Object.keys(allProcessedProps).length} properties (GitHub structure preserved)`);
+            if (schemaInfo.required && schemaInfo.required.length > 0) {
+                console.log(`📋 Required fields: ${schemaInfo.required.join(', ')}`);
+            }
             return jsonEditorSchema;
 
         } catch (error) {
@@ -427,7 +449,7 @@ class DynamicSchemaProcessor {
         // Handle $ref references
         if (prop.$ref) {
             const refPath = prop.$ref.replace('#/$defs/', '');
-            
+
             if (visited.has(refPath)) {
                 console.warn(`Circular reference detected: ${refPath}`);
                 return {
@@ -437,7 +459,7 @@ class DynamicSchemaProcessor {
                     default: ""
                 };
             }
-            
+
             const refDef = defs[refPath];
             if (refDef) {
                 const newVisited = new Set(visited);
@@ -446,9 +468,18 @@ class DynamicSchemaProcessor {
             }
         }
 
+        // Try to flatten anyOf before marking as complex
+        if (prop.anyOf) {
+            const flattened = this.flattenAnyOf(prop, defs, visited);
+            if (flattened) {
+                // Successfully flattened - use the flattened version
+                prop = flattened;
+            }
+        }
+
         if (this.isComplexProperty(prop)) {
             return {
-                type: "string", 
+                type: "string",
                 title: prop.title || "Complex Field",
                 description: prop.description || "This field has been simplified for form display",
                 default: ""
@@ -460,43 +491,46 @@ class DynamicSchemaProcessor {
         if (prop.type === 'array' && prop.items) {
             processed.items = this.processProperty(prop.items, defs, visited, depth);
 
-            // Check if this is a simple object array that should use table format
-            const isSimpleObjectArray =
-                processed.items.type === 'object' &&
-                processed.items.properties &&
-                Object.keys(processed.items.properties).length <= 6 && // Not too many columns
-                Object.values(processed.items.properties).every(p =>
-                    ['string', 'number', 'integer', 'boolean'].includes(p.type)
-                );
+            // Check for enum arrays FIRST (checkboxes for Content, Metrics, etc.)
+            // Use processed.items.enum since items have been recursively processed
+            if (processed.items.enum && processed.items.enum.length > 5) {
+                processed.format = 'checkbox';
+                processed.uniqueItems = true;
+                console.log(`✅ Using checkbox format for enum array: ${prop.title || 'unnamed'} (${processed.items.enum.length} options)`);
+            }
+            // THEN check if this is a simple object array that should use table format
+            else {
+                const isSimpleObjectArray =
+                    processed.items.type === 'object' &&
+                    processed.items.properties &&
+                    Object.keys(processed.items.properties).length <= 6 && // Not too many columns
+                    Object.values(processed.items.properties).every(p =>
+                        ['string', 'number', 'integer', 'boolean'].includes(p.type)
+                    );
 
-            if (isSimpleObjectArray) {
-                // Use table format for simple, flat structures
-                processed.format = 'table';
-                console.log(`📊 Using table format for array: ${prop.title || 'unnamed'}`);
-            } else {
-                // Use intelligent header template for more complex arrays
-                if (processed.items.type === 'object' && processed.items.properties) {
-                    const props = processed.items.properties;
-                    if (props.Name) {
-                        processed.items.headerTemplate = "{{self.Name}}";
-                    } else if (props['Partition name']) {
-                        processed.items.headerTemplate = "{{self['Partition name']}}";
-                    } else if (props.Category) {
-                        processed.items.headerTemplate = "{{self.Category}}";
-                    } else {
-                        const titleCandidates = ['Criterion', 'Sex', 'Demographic', 'Title', 'Type'];
-                        const titleProps = titleCandidates.filter(p => props[p]);
-                        if (titleProps.length > 0) {
-                            processed.items.headerTemplate = titleProps.map(p => `{{self.${p}}}`).join(' - ');
+                if (isSimpleObjectArray) {
+                    // Use table format for simple, flat structures
+                    processed.format = 'table';
+                    console.log(`📊 Using table format for array: ${prop.title || 'unnamed'}`);
+                } else {
+                    // Use intelligent header template for more complex arrays
+                    if (processed.items.type === 'object' && processed.items.properties) {
+                        const props = processed.items.properties;
+                        if (props.Name) {
+                            processed.items.headerTemplate = "{{self.Name}}";
+                        } else if (props['Partition name']) {
+                            processed.items.headerTemplate = "{{self['Partition name']}}";
+                        } else if (props.Category) {
+                            processed.items.headerTemplate = "{{self.Category}}";
+                        } else {
+                            const titleCandidates = ['Criterion', 'Sex', 'Demographic', 'Title', 'Type'];
+                            const titleProps = titleCandidates.filter(p => props[p]);
+                            if (titleProps.length > 0) {
+                                processed.items.headerTemplate = titleProps.map(p => `{{self.${p}}}`).join(' - ');
+                            }
                         }
                     }
                 }
-            }
-
-            // Checkbox format for enum arrays with many options
-            if (prop.items.enum && prop.items.enum.length > 5) {
-                processed.format = 'checkbox';
-                processed.uniqueItems = true;
             }
         }
 
@@ -519,19 +553,61 @@ class DynamicSchemaProcessor {
 
     // Check if property is too complex for JSON Editor
     isComplexProperty(prop) {
-        // Skip properties with deep nesting
-        if (prop.anyOf || prop.oneOf || prop.allOf) return true;
-        
+        // anyOf is now handled by flattenAnyOf, so don't block it here
+        // Still block oneOf and allOf as they're truly complex
+        if (prop.oneOf || prop.allOf) return true;
+
         // Skip properties with complex conditional logic
         if (prop.if || prop.then || prop.else) return true;
-        
+
         // Skip properties with pattern properties
         if (prop.patternProperties) return true;
-        
+
         // Skip properties with additional properties of complex type
         if (prop.additionalProperties && typeof prop.additionalProperties === 'object') return true;
-        
+
         return false;
+    }
+
+    // Flatten anyOf to extract validation rules from the first string option
+    flattenAnyOf(prop, defs, visited) {
+        // Only process if anyOf exists
+        if (!prop.anyOf || !Array.isArray(prop.anyOf) || prop.anyOf.length === 0) {
+            return null;
+        }
+
+        // Strategy: Find first string option and extract its validation rules
+        const stringOption = prop.anyOf.find(opt => opt.type === 'string');
+
+        if (!stringOption) {
+            // No string option found - can't flatten to simple input
+            // Fall back to complex field behavior
+            return null;
+        }
+
+        // Create flattened schema based on string option
+        const flattened = {
+            type: 'string',
+            title: prop.title || stringOption.title || 'Field',
+            description: prop.description || stringOption.description || ''
+        };
+
+        // Preserve all validation rules from the string option
+        if (stringOption.pattern) flattened.pattern = stringOption.pattern;
+        if (stringOption.maxLength) flattened.maxLength = stringOption.maxLength;
+        if (stringOption.minLength) flattened.minLength = stringOption.minLength;
+        if (stringOption.format) flattened.format = stringOption.format;
+        if (stringOption.enum) flattened.enum = stringOption.enum;
+        if (stringOption.examples) flattened.examples = stringOption.examples;
+
+        // Set default
+        if (!flattened.default) {
+            flattened.default = '';
+        }
+
+        console.log(`📋 Flattened anyOf for "${flattened.title}": preserved pattern=${!!flattened.pattern}, format=${!!flattened.format}`);
+
+        return flattened;
     }
 
     // Helper method to generate intelligent headerTemplate for array objects

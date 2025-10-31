@@ -182,6 +182,8 @@ async function processPdfAsync(pdfData, schema, cardType, processingMode = 'text
     // Step 3: Return results
     if (finalStatus.result) {
         console.log('✅ PDF processing complete');
+        console.log('📦 Backend response keys:', Object.keys(finalStatus.result));
+        console.log('📦 Backend response:', finalStatus.result);
         return finalStatus.result;
     }
 

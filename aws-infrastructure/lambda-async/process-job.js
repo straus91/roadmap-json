@@ -277,6 +277,12 @@ Example output:
 "AUC-ROC: 0.94 (95% CI: 0.91-0.96) on test set (n=1,000 images, 500 patients). Sensitivity: 0.92 (95% CI: 0.88-0.95), Specificity: 0.87 (95% CI: 0.82-0.91). Female patients: AUC 0.95, Male patients: AUC 0.93 (p=0.04). Dice coefficient: 0.88±0.05. Outperformed radiologist baseline (AUC 0.82, p<0.001)."
 
 **REQUIRED JSON STRUCTURE:**
+
+⚠️ CRITICAL: Return FLAT JSON with fields at ROOT level (NOT wrapped in "${cardTypeCapitalized}" key).
+Your response must start with: { "Name": "...", "Link": "...
+NOT with: { "${cardTypeCapitalized}": { "Name": ...
+
+Example structure (fields at root level):
 ${exampleJson}
 
 **DOCUMENT TEXT:**
@@ -311,7 +317,7 @@ function generateSchemaExample(schema, cardType, depth = 0) {
 
     // Extract schema properties from GitHub schema structure
     const schemaProperties = schema.properties?.[cardTypeCapitalized]?.properties ||
-                            schema.$defs?.[cardType]?.properties ||
+                            schema.$defs?.[cardTypeCapitalized]?.properties ||
                             {};
 
     console.log(`📋 Generating complete example for ${cardType}...`);
@@ -326,9 +332,9 @@ function generateSchemaExample(schema, cardType, depth = 0) {
 
     console.log(`   Generated ${Object.keys(example).length} fields in example`);
 
-    return {
-        [cardTypeCapitalized]: example
-    };
+    // Return UNWRAPPED example so Gemini returns flat structure
+    // Frontend normalization will handle wrapping
+    return example;
 }
 
 /**
