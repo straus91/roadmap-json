@@ -11,7 +11,7 @@
  * This runs async, so it can take as long as needed (up to 5 minutes)
  *
  * @author Claude Code
- * @version 1.0.0-v44 (Remove Partitions and File format fields - they're optional and causing validation issues)
+ * @version 1.0.0-v46 (Remove broken responseSchema for datasets, keep smart cleanup from v45)
  */
 
 const https = require('https');
@@ -99,7 +99,8 @@ exports.handler = async (event) => {
         const startTime = Date.now();
         const geminiResponse = await callGeminiAPIWithRetry(apiKey, prompt, {
             model: DEFAULT_MODEL,
-            maxOutputTokens: MAX_OUTPUT_TOKENS
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
+            cardType  // V45: Pass cardType for responseSchema
         });
         const duration = Date.now() - startTime;
 
@@ -390,10 +391,35 @@ function cleanupDatasetFields(data) {
         data.Link = linkValue;
     }
 
-    // REMOVED v44: Strip File format field entirely (optional field, causing validation issues)
+    // V45: Smart File format cleanup - preserve valid data, only remove if unfixable
     if (data.Imaging?.['File format']) {
-        console.log(`⚠️ Removing File format field (${data.Imaging['File format'].length} values) - field is optional and causing validation issues`);
-        delete data.Imaging['File format'];
+        const validEnums = ['DICOM', 'JPEG', 'NiFTI', 'PNG', 'Other'];
+        const original = data.Imaging['File format'];
+        const cleaned = [];
+
+        for (const format of original) {
+            if (format === null || format === undefined) continue;  // Skip null/undefined
+
+            const formatStr = String(format).trim();
+            // Case-insensitive match to valid enums
+            const matched = validEnums.find(valid => valid.toLowerCase() === formatStr.toLowerCase());
+
+            if (matched && !cleaned.includes(matched)) {
+                cleaned.push(matched);  // Use correct capitalization
+            } else if (!cleaned.includes('Other')) {
+                // Map unknown formats to "Other"
+                cleaned.push('Other');
+                console.log(`🔧 V45: Mapped invalid file format "${formatStr}" → "Other"`);
+            }
+        }
+
+        if (cleaned.length > 0) {
+            data.Imaging['File format'] = cleaned;
+            console.log(`✅ V45: File format preserved (${cleaned.length} valid values)`);
+        } else {
+            delete data.Imaging['File format'];
+            console.log(`⚠️ V45: Removed File format (all values invalid)`);
+        }
     }
 
     // Fix Link URI format (must start with http:// or https://)
@@ -417,11 +443,46 @@ function cleanupDatasetFields(data) {
         });
     }
 
-    // REMOVED v44: Strip Partitions field entirely (optional field, causing validation issues)
-    if (data.Partitions) {
-        const partitionCount = Array.isArray(data.Partitions) ? data.Partitions.length : 1;
-        console.log(`⚠️ Removing Partitions field (${partitionCount} partition(s)) - field is optional and causing validation issues`);
-        delete data.Partitions;
+    // V45: Smart Partitions cleanup - remove empty objects, preserve valid ones
+    if (data.Partitions && Array.isArray(data.Partitions)) {
+        const validPartitionEnums = ['Training', 'Validation', 'Test', 'Hold-out',
+                                     'Independent test', 'External validation', 'Other'];
+        const original = data.Partitions;
+        const cleaned = [];
+        let emptyCount = 0;
+
+        for (const partition of original) {
+            // Check if empty object or missing required "Partition" property
+            if (!partition || typeof partition !== 'object' ||
+                Object.keys(partition).length === 0 || !partition.Partition) {
+                emptyCount++;
+                console.log(`🔧 V45: Removing empty/invalid partition object`);
+                continue;
+            }
+
+            // Validate and fix enum value
+            const partitionType = partition.Partition;
+            const validEnum = validPartitionEnums.find(valid =>
+                valid.toLowerCase() === partitionType.toLowerCase()
+            );
+
+            if (validEnum) {
+                partition.Partition = validEnum;  // Fix capitalization
+                cleaned.push(partition);
+            } else {
+                partition.Partition = 'Other';  // Map invalid to Other
+                cleaned.push(partition);
+                console.log(`🔧 V45: Mapped invalid partition type "${partitionType}" → "Other"`);
+            }
+        }
+
+        if (cleaned.length > 0) {
+            data.Partitions = cleaned;
+            console.log(`✅ V45: Partitions preserved (${cleaned.length} valid, ${emptyCount} removed)`);
+        } else {
+            delete data.Partitions;
+            console.log(`⚠️ V45: Removed Partitions (all ${emptyCount} objects were empty/invalid)`);
+        }
     }
 
     console.log('✅ Dataset-specific cleanup complete');
@@ -503,12 +564,18 @@ function createExtractionPrompt(pdfData, schema, cardType, processingMode) {
 
     return `Extract medical imaging research data into ROADMAP ${cardTypeUpper} card JSON format.
 
-**EXTRACTION RULES:**
+**EXTRACTION RULES (V45 - API ENFORCES ENUMS):**
 • Extract ALL authors with affiliations, keywords, and exact numerical values - never summarize
 • For Content/Keywords fields: extract ALL applicable codes/terms as arrays
 • RadLex/SNOMED codes: ONLY if explicitly stated in PDF - do NOT guess or generate
-• Omit fields with no data (no empty arrays/objects)
 • Return ONLY valid JSON (no markdown, no explanations)
+
+**CRITICAL: PARTITIONS FIELD (V45):**
+• If PDF has partition/split data: Include complete objects with ALL properties
+• Each partition object MUST have "Partition" property (required by schema)
+• NEVER return empty objects like [{}, {}] - this will cause validation errors
+• If uncertain about partition details: OMIT the entire Partitions field
+• Valid "Partition" values: Training, Validation, Test, Hold-out, Independent test, External validation, Other
 
 **$SCHEMA FIELD:**
 • DO NOT include "$schema" field in your response
@@ -1117,15 +1184,20 @@ async function callGeminiAPIWithRetry(apiKey, prompt, options = {}) {
 async function callGeminiAPI(apiKey, prompt, options = {}) {
     const model = options.model || DEFAULT_MODEL;
     const maxOutputTokens = options.maxOutputTokens || MAX_OUTPUT_TOKENS;
+    const cardType = options.cardType || 'dataset';  // Default to dataset if not specified
+
+    // V46: Build generationConfig - responseMimeType only, no responseSchema
+    const generationConfig = {
+        temperature: 0.2,
+        maxOutputTokens,
+        topK: 40,
+        topP: 0.95,
+        responseMimeType: 'application/json'  // Force valid JSON output
+    };
 
     const payload = {
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens,
-            topK: 40,
-            topP: 0.95
-        }
+        generationConfig
     };
 
     const postData = JSON.stringify(payload);

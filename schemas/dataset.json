@@ -592,8 +592,7 @@
 				},
 				"required": [
 					"Partition"
-				],
-				"additionalProperties": false
+				]
 			},
 			"examples": [
 				[
