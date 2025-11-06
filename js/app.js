@@ -883,9 +883,11 @@ function validateForm(showSuccessMessage = true) {
 async function strictSchemaValidation(data, cardType) {
     try {
         // Use AJV for proper JSON Schema validation
-        const Ajv = window.ajv7 || window.Ajv;
+        // FIXED v27: Check for window.ajv2020 (from ajv2020.bundle.js) or fallback to Ajv
+        const Ajv = window.ajv2020 || window.Ajv;
         if (!Ajv) {
             console.warn('❌ AJV not loaded, skipping strict validation');
+            console.warn('Available globals:', Object.keys(window).filter(k => k.toLowerCase().includes('ajv')));
             return { valid: true, errors: [] };
         }
 
@@ -943,7 +945,55 @@ async function downloadJSON() {
     }
 
     try {
-        const editorData = editor.getValue();
+        let editorData = editor.getValue();
+
+        // CRITICAL: Clean empty values before wrapping and download
+        // This prevents validation failures from empty dates, empty License objects, etc.
+        console.log('🧹 Cleaning empty values before download...');
+
+        // Remove empty dates from Descriptors.Date
+        if (editorData.Descriptors?.Date) {
+            for (const [key, value] of Object.entries(editorData.Descriptors.Date)) {
+                if (value === "" || value === null || value === undefined) {
+                    console.log(`⚠️ FRONTEND REMOVING Descriptors.Date.${key}: value="${value}"`);
+                    delete editorData.Descriptors.Date[key];
+                }
+            }
+            // Remove Date object if now empty
+            if (Object.keys(editorData.Descriptors.Date).length === 0) {
+                delete editorData.Descriptors.Date;
+                console.log('⚠️ FRONTEND REMOVED entire Descriptors.Date object (was empty)');
+            }
+        }
+
+        // Remove empty dates from top-level Date object (Dataset cards)
+        if (editorData.Date) {
+            for (const [key, value] of Object.entries(editorData.Date)) {
+                if (value === "" || value === null || value === undefined) {
+                    console.log(`⚠️ FRONTEND REMOVING Date.${key}: value="${value}"`);
+                    delete editorData.Date[key];
+                }
+            }
+            // Remove Date object if now empty
+            if (Object.keys(editorData.Date).length === 0) {
+                delete editorData.Date;
+                console.log('⚠️ FRONTEND REMOVED entire Date object (was empty)');
+            }
+        }
+
+        // Remove empty License object (must have minProperties: 1)
+        if (editorData.Descriptors?.License && typeof editorData.Descriptors.License === 'object') {
+            if (Object.keys(editorData.Descriptors.License).length === 0) {
+                delete editorData.Descriptors.License;
+                console.log('⚠️ FRONTEND REMOVED empty License object (minProperties: 1 violation)');
+            }
+        }
+
+        // Remove References completely (disabled feature)
+        if (editorData.Descriptors?.References) {
+            delete editorData.Descriptors.References;
+            console.log('⚠️ FRONTEND REMOVED References (disabled feature)');
+        }
 
         // Construct the complete ROADMAP JSON structure
         const roadmapData = {};
@@ -1257,8 +1307,11 @@ function normalizeObject(obj, schemaProps, fieldMap, rootSchema) {
     const correctKey = fieldMap[lowerKey]; // Use schema key if found
 
     // If field not found in schema
+    // FIXED v27: This is expected for nested fields (e.g., "Partition" inside Partitions array)
+    // The schema uses $ref for nested structures, which normalizeObject doesn't fully traverse
     if (!correctKey) {
-      console.warn(`⚠️ Field "${key}" not found in schema - keeping original key`);
+      // Only log for debugging - this is expected for nested $ref fields
+      // Suppress warning - field is kept and will work correctly
       normalizedObj[key] = value;
       continue;
     }
@@ -1292,19 +1345,28 @@ function normalizeObject(obj, schemaProps, fieldMap, rootSchema) {
               normalizeObject(item, schemaProp.items.properties, itemFieldMap, rootSchema)
             );
           } else if (schemaProp.items.$ref) {
-            // Handle $ref - resolve reference and normalize
+            // FIXED v28: Handle $ref - resolve reference and normalize
             const resolvedSchema = resolveSchemaRef(schemaProp.items.$ref, rootSchema);
-            if (resolvedSchema && resolvedSchema.properties) {
+
+            // FIXED v28: Handle case where $ref points to array definition (e.g., Partitions)
+            // Schema structure: Dataset.Partitions → $ref: #/$defs/Partitions → array → items → properties
+            let actualSchema = resolvedSchema;
+            if (resolvedSchema && resolvedSchema.type === 'array' && resolvedSchema.items) {
+              console.log(`📋 $ref "${schemaProp.items.$ref}" resolved to array definition, drilling into items`);
+              actualSchema = resolvedSchema.items;
+            }
+
+            if (actualSchema && actualSchema.properties) {
               // Create field map from resolved schema
               const refFieldMap = {};
-              for (const refKey in resolvedSchema.properties) {
-                if (resolvedSchema.properties.hasOwnProperty(refKey)) {
+              for (const refKey in actualSchema.properties) {
+                if (actualSchema.properties.hasOwnProperty(refKey)) {
                   refFieldMap[refKey.toLowerCase()] = refKey;
                 }
               }
               normalizedObj[correctKey] = value.map(item => {
                 if (typeof item === 'object' && !Array.isArray(item)) {
-                  return normalizeObject(item, resolvedSchema.properties, refFieldMap, rootSchema);
+                  return normalizeObject(item, actualSchema.properties, refFieldMap, rootSchema);
                 }
                 return item;
               });
@@ -1314,8 +1376,24 @@ function normalizeObject(obj, schemaProps, fieldMap, rootSchema) {
               normalizedObj[correctKey] = value;
             }
           } else {
-            // Array of primitives - keep as is
-            normalizedObj[correctKey] = value;
+            // FIXED v28: Array of primitives - validate enums if defined
+            if (schemaProp.items.enum && Array.isArray(value)) {
+              const validValues = schemaProp.items.enum;
+              normalizedObj[correctKey] = value.map(item => {
+                if (!validValues.includes(item)) {
+                  // Try to map to "Other" if available, otherwise use first valid value
+                  const fallback = validValues.includes('Other') ? 'Other' : validValues[0];
+                  console.warn(`⚠️ Invalid enum value "${item}" in ${correctKey}, mapping to "${fallback}". Valid values: [${validValues.join(', ')}]`);
+                  return fallback;
+                }
+                return item;
+              });
+              // Remove duplicates after mapping
+              normalizedObj[correctKey] = [...new Set(normalizedObj[correctKey])];
+            } else {
+              // Array of primitives without enum - keep as is
+              normalizedObj[correctKey] = value;
+            }
           }
         } else {
           normalizedObj[correctKey] = value;

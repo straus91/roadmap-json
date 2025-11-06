@@ -558,10 +558,111 @@ function createExtractionPrompt(pdfData, schema, cardType, processingMode) {
 
     return `Extract medical imaging research data into ROADMAP ${cardTypeUpper} card JSON format.
 
+**CRITICAL: $schema FIELD**
+• The $schema field MUST be exactly "${cardType}.json" (for ${cardTypeCapitalized} cards)
+• NOT a URL! Just the filename.
+• $schema appears ONLY at the root level
+• NEVER add $schema inside the "${cardTypeCapitalized}" object or any nested objects
+
+CORRECT:
+{
+  "$schema": "${cardType}.json",
+  "${cardTypeCapitalized}": {
+    // NO $schema here!
+  }
+}
+
+**DATE FORMATTING:**
+• Dates MUST be either:
+  - ISO format string: "YYYY-MM-DD" (e.g., "2024-03-15")
+  - Integer year only: 2024
+• If date is unknown/unavailable: OMIT the field entirely
+• NEVER use empty string "", NEVER use year-only string "2024"
+
+Examples:
+✓ "Published": "2024-03-15"
+✓ "Published": 2024
+✓ (omit Published field if unknown)
+✗ "Published": ""
+✗ "Published": "2024"
+
+**KEYWORDS - ATOMIC CONCEPTS ONLY:**
+• Each keyword should be a SINGLE concept (2-5 words max)
+• Extract multiple keywords instead of combining concepts
+• Remove redundant descriptions
+• Avoid acronyms in parentheses unless necessary
+
+Examples:
+✗ BAD: "Supervised Learning Type of Machine Learning"
+✓ GOOD: "Supervised Learning", "Machine Learning"
+
+✗ BAD: "Convolutional Neural Network (CNN) Architecture"
+✓ GOOD: "Convolutional Neural Network"
+
+**USE AND USER FIELDS:**
+• Each item: 4-64 characters (minimum 4, maximum 64)
+• Be specific and concise
+• Use title case for User roles
+• No incomplete words, no trailing spaces
+
+Use.Intended examples: "Image segmentation", "Detection and diagnosis", "Risk assessment", "Triage"
+User.Intended examples: "Diagnostic radiologist", "Physician", "Researcher", "Radiologist"
+
+✗ AVOID: "neuroanatomy i" (truncated), "Biomarker " (trailing space)
+✓ CORRECT: "Neuroanatomy analysis", "Biomarker discovery"
+
+**METRICS AND PERFORMANCE:**
+For Model cards, performance data goes inside "Model performance" object:
+
+CORRECT structure:
+"${cardTypeCapitalized}": {
+  "Model properties": { ... },
+  "Model performance": {
+    "Metrics": ["sensitivity", "specificity", "area under the receiver operating characteristic curve"],
+    "Comments": "Detailed performance description with values and confidence intervals..."
+  }
+}
+
+WRONG:
+"${cardTypeCapitalized}": {
+  "Metrics": [...]  // ✗ Wrong location
+}
+
+**OUTPUT CDEs:**
+• Field name is "CDE" (singular) even though it contains an array
+• NOT "CDEs"
+
+CORRECT: "CDE": ["RDE1203", "RDES174"]
+WRONG: "CDEs": [...]
+
+**RADLEX AND SNOMED CODES:**
+• Extract if explicitly mentioned in PDF
+• Use proper format: "RID[numbers]" for RadLex, numeric for SNOMED
+• Can include optional descriptions
+
+Examples:
+"RadLex": ["RID58", "RID1169"]
+"SNOMED": [10200004, 441802002]
+
+If not found in PDF: OMIT the field entirely (do not guess codes)
+
+**CONTENT CODES:**
+• Use only valid codes from this list:
+  "AI", "BR", "BQ", "CA", "CH", "CT", "DM", "ED", "ER", "GI", "GU",
+  "HN", "HP", "IN", "IR", "LM", "MI", "MK", "MR", "NM", "NR", "OB",
+  "OI", "OT", "PD", "PH", "PR", "SQ", "RO", "RS", "US", "VA"
+• Extract ALL applicable codes (minimum 1)
+• No duplicates
+
+Common mappings: MRI → "MR", CT scan → "CT", Ultrasound → "US"
+
+**DO NOT EXTRACT REFERENCES:**
+• Skip the References section entirely
+• Do not include bibliography or citations in the output
+
 **EXTRACTION RULES:**
 • Extract ALL authors with affiliations, keywords, and exact numerical values - never summarize
 • For Content/Keywords fields: extract ALL applicable codes/terms as arrays
-• RadLex/SNOMED codes: ONLY if explicitly stated in PDF - do NOT guess or generate
 • Omit fields with no data (no empty arrays/objects)
 • Return ONLY valid JSON (no markdown, no explanations)
 

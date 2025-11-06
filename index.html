@@ -19,6 +19,11 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     </script>
 
+    <!-- AJV JSON Schema Validator for strict validation (browser bundle) -->
+    <!-- FIXED v27: Use AJV 7 which has better browser support than AJV 8 -->
+    <script src="https://cdn.jsdelivr.net/npm/ajv@7/dist/ajv.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ajv-formats@2/dist/ajv-formats.min.js"></script>
+
     <!-- Custom CSS -->
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -598,10 +603,10 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     
     <!-- Custom JavaScript -->
-    <script src="js/pdf-extractor.js?v=27"></script>
-    <script src="js/gemini-client.js?v=27"></script>
-    <script src="js/async-api-client.js?v=27"></script>
-    <script src="js/dynamic-schema.js?v=27"></script>
-    <script src="js/app.js?v=27"></script>
+    <script src="js/pdf-extractor.js?v=28"></script>
+    <script src="js/gemini-client.js?v=28"></script>
+    <script src="js/async-api-client.js?v=28"></script>
+    <script src="js/dynamic-schema.js?v=28"></script>
+    <script src="js/app.js?v=28"></script>
 </body>
 </html>

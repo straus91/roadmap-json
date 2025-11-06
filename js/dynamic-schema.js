@@ -203,14 +203,16 @@ class DynamicSchemaProcessor {
         }
 
         let schema;
-        
+
         if (customUrl) {
             schema = await this.loadCustomSchema(cardType, customUrl);
         } else {
             schema = this.baseSchemas[cardType];
             this.loadedSchemas[cardType] = schema;
-            this.currentSchemaSource[cardType] = 'github';
-            console.log(`✅ Using GitHub schema for ${cardType}`);
+            // FIXED v27: Detect actual source instead of always saying "github"
+            // baseSchemas are loaded from local paths (schemas/*.json) via app.js FETCH_SCHEMA_URLS
+            this.currentSchemaSource[cardType] = 'local';
+            console.log(`✅ Using local schema for ${cardType} (from schemas/${cardType}.json)`);
         }
 
         // Convert to JSON Editor format
@@ -438,6 +440,11 @@ class DynamicSchemaProcessor {
         }
 
         for (const [key, prop] of Object.entries(properties)) {
+            // Skip References field - disabled per user request
+            if (key === 'References') {
+                console.log('⚠️ Skipping References field (disabled)');
+                continue;
+            }
             processed[key] = this.processProperty(prop, defs, visited, depth + 1);
         }
 
@@ -538,10 +545,23 @@ class DynamicSchemaProcessor {
             processed.properties = this.processProperties(prop.properties, defs, visited, depth);
         }
 
+        // Handle const constraints (e.g., $schema field)
+        if (prop.const !== undefined) {
+            processed.enum = [prop.const];
+            processed.default = prop.const;
+            processed.options = processed.options || {};
+            processed.options.hidden = true;  // Hide from UI since it's fixed
+        }
+
         if (!processed.default) {
-            if (prop.type === 'string') processed.default = '';
-            if (prop.type === 'array') processed.default = [];
-            if (prop.type === 'object') processed.default = {};
+            // Don't set default for date fields (empty string violates format)
+            if (prop.type === 'string' && prop.format !== 'date') {
+                processed.default = '';
+            }
+            // DISABLED: Don't set default empty arrays/objects as they cause validation issues
+            // Empty Date objects get filled with empty strings, empty License objects violate minProperties
+            // if (prop.type === 'array') processed.default = [];
+            // if (prop.type === 'object') processed.default = {};
         }
 
         if (prop.format === 'email') processed.format = 'email';
