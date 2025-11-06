@@ -4,10 +4,18 @@
 // CONFIGURATION & CONSTANTS
 // ==============================================================================
 
-// Schema URLs
-const GITHUB_SCHEMAS = {
-    model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/schema/2025-11/model.json',
-    dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/schema/2025-11/dataset.json'
+// Official RSNA schema URLs (used for $schema field in output JSON)
+// Switched from GitHub mirror to authoritative RSNA source for validation compliance
+const SCHEMA_URLS = {
+    model: 'https://atlas.rsna.org/schemas/2025-11/model.json',
+    dataset: 'https://atlas.rsna.org/schemas/2025-11/dataset.json'
+};
+
+// Local cached schemas (identical to RSNA official schemas, no CORS issues)
+// Downloaded from atlas.rsna.org to avoid cross-origin request blocking
+const FETCH_SCHEMA_URLS = {
+    model: 'schemas/model.json',
+    dataset: 'schemas/dataset.json'
 };
 
 // UI Timing Constants
@@ -60,6 +68,53 @@ const pdfState = {
 
 // Store selected PDF file globally (for 2-step upload/process workflow)
 let selectedPdfFile = null;
+
+// ==============================================================================
+// DATE LOGGING HELPER FUNCTION
+// ==============================================================================
+
+/**
+ * Helper function: Log ALL date fields comprehensively
+ * Logs Model Descriptors.Date, Dataset Date, and References dates
+ */
+function logAllDateFields(data, location) {
+    console.log(`\n🔍 ========== DATE FIELDS AT: ${location} ==========`);
+
+    // Check for both wrapped and unwrapped data structures
+    const actualData = data.Model || data.Dataset || data;
+
+    // Model cards: Descriptors.Date
+    if (actualData.Descriptors?.Date) {
+        console.log(`🔍 [${location}] Descriptors.Date.Published = ${JSON.stringify(actualData.Descriptors.Date.Published)} (type: ${typeof actualData.Descriptors.Date.Published})`);
+        console.log(`🔍 [${location}] Descriptors.Date.Created = ${JSON.stringify(actualData.Descriptors.Date.Created)} (type: ${typeof actualData.Descriptors.Date.Created})`);
+        console.log(`🔍 [${location}] Descriptors.Date.Updated = ${JSON.stringify(actualData.Descriptors.Date.Updated)} (type: ${typeof actualData.Descriptors.Date.Updated})`);
+    } else {
+        console.log(`🔍 [${location}] Descriptors.Date = NOT PRESENT`);
+    }
+
+    // Dataset cards: top-level Date
+    if (actualData.Date) {
+        console.log(`🔍 [${location}] Date.Published = ${JSON.stringify(actualData.Date.Published)} (type: ${typeof actualData.Date.Published})`);
+        console.log(`🔍 [${location}] Date.Created = ${JSON.stringify(actualData.Date.Created)} (type: ${typeof actualData.Date.Created})`);
+        console.log(`🔍 [${location}] Date.Updated = ${JSON.stringify(actualData.Date.Updated)} (type: ${typeof actualData.Date.Updated})`);
+    } else {
+        console.log(`🔍 [${location}] Date = NOT PRESENT`);
+    }
+
+    // References dates (both card types)
+    if (actualData.Descriptors?.References && Array.isArray(actualData.Descriptors.References)) {
+        const refDates = actualData.Descriptors.References.map((ref, i) => ({
+            index: i,
+            date: ref.Date,
+            type: typeof ref.Date
+        }));
+        console.log(`🔍 [${location}] References dates (${refDates.length} total):`, JSON.stringify(refDates));
+    } else {
+        console.log(`🔍 [${location}] Descriptors.References = NOT PRESENT`);
+    }
+
+    console.log(`🔍 ========== END DATE FIELDS AT: ${location} ==========\n`);
+}
 
 // ==============================================================================
 // PDF SELECT/PROCESS FUNCTIONS (2-step workflow)
@@ -384,13 +439,118 @@ function cleanEmptyValues(data) {
     return data;
 }
 
+/**
+ * Clean data before passing to JSON Editor to prevent editor-induced corruption
+ *
+ * JSON Editor auto-enforces schema constraints that can corrupt valid data:
+ * 1. maxLength: 128 on Name field → auto-truncates long names
+ * 2. Date format fields → editor may convert valid integers to empty strings
+ *
+ * This function pre-processes data to prevent these issues while maintaining validity.
+ */
+function cleanDataForEditor(data) {
+    if (!data || typeof data !== 'object') {
+        return data;
+    }
+
+    // Create a deep copy to avoid modifying original
+    const cleaned = JSON.parse(JSON.stringify(data));
+
+    // 🔍 LOG POINT 4: Before cleanDataForEditor (from S3)
+    logAllDateFields(cleaned, 'FRONTEND - BEFORE cleanDataForEditor');
+
+    // 1. Truncate Name to 128 char limit (prevent editor auto-truncation)
+    if (cleaned.Name && cleaned.Name.length > 128) {
+        console.log(`⚠️ Truncating Name from ${cleaned.Name.length} to 128 characters`);
+        cleaned.Name = cleaned.Name.substring(0, 125) + '...';
+    }
+
+    // 2. Remove empty/invalid date fields in Descriptors.Date
+    if (cleaned.Descriptors?.Date) {
+        for (const [key, value] of Object.entries(cleaned.Descriptors.Date)) {
+            if (value === "" || value === null || value === undefined) {
+                console.log(`⚠️ FRONTEND REMOVING Descriptors.Date.${key}: value="${value}" (type: ${typeof value})`);
+                delete cleaned.Descriptors.Date[key];
+            }
+        }
+        // Remove Date object if empty
+        if (Object.keys(cleaned.Descriptors.Date).length === 0) {
+            delete cleaned.Descriptors.Date;
+            console.log(`⚠️ FRONTEND REMOVED entire Descriptors.Date object (was empty after cleanup)`);
+        }
+    }
+
+    // 3. Clean References dates
+    if (cleaned.Descriptors?.References && Array.isArray(cleaned.Descriptors.References)) {
+        cleaned.Descriptors.References.forEach((ref, index) => {
+            if (ref.Date === "" || ref.Date === null || ref.Date === undefined) {
+                console.log(`⚠️ FRONTEND REMOVING References[${index}].Date: value="${ref.Date}" (type: ${typeof ref.Date})`);
+                delete ref.Date;
+            }
+        });
+    }
+
+    // 4. Clean Dataset dates if present (for dataset cards)
+    if (cleaned.Date) {
+        for (const [key, value] of Object.entries(cleaned.Date)) {
+            if (value === "" || value === null || value === undefined) {
+                console.log(`⚠️ FRONTEND REMOVING Date.${key}: value="${value}" (type: ${typeof value})`);
+                delete cleaned.Date[key];
+            }
+        }
+        if (Object.keys(cleaned.Date).length === 0) {
+            delete cleaned.Date;
+            console.log(`⚠️ FRONTEND REMOVED entire Date object (was empty after cleanup)`);
+        }
+    }
+
+    // 5. Dataset-specific field cleanup
+    if (cleaned.Partitions && Array.isArray(cleaned.Partitions)) {
+        cleaned.Partitions.forEach((partition, index) => {
+            // Remove null age ranges
+            if (partition.Total?.['Age range'] && Array.isArray(partition.Total['Age range'])) {
+                const hasNull = partition.Total['Age range'].some(arr =>
+                    Array.isArray(arr) && arr.some(val => val === null)
+                );
+                if (hasNull) {
+                    console.log(`⚠️ Removing invalid Age range in Partition[${index}]`);
+                    delete partition.Total['Age range'];
+                }
+            }
+        });
+    }
+
+    // 6. Fix stringified Link arrays
+    if (typeof cleaned.Link === 'string' && cleaned.Link.startsWith('[')) {
+        try {
+            const links = JSON.parse(cleaned.Link);
+            if (Array.isArray(links) && links.length > 0) {
+                console.log(`⚠️ Fixed stringified Link array before editor load`);
+                cleaned.Link = links[0];
+            }
+        } catch (e) {
+            // Ignore parse errors
+        }
+    }
+
+    // 🔍 LOG POINT 5: After cleanDataForEditor (ready for editor)
+    logAllDateFields(cleaned, 'FRONTEND - AFTER cleanDataForEditor');
+
+    return cleaned;
+}
+
 async function initializeEditor(initialData = null) {
     const editorHolder = document.getElementById('editor-holder');
     editorHolder.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div><p class="mt-2 text-muted">Loading schema...</p></div>';
-    
+
     console.log(`Initializing editor for ${currentCardType}`);
-    
-    try {
+
+    // 🔍 LOG POINT 6: At initializeEditor entry (raw data from Lambda)
+    if (initialData) {
+        logAllDateFields(initialData, 'FRONTEND - initializeEditor ENTRY');
+    }
+
+    try{
         // Get custom schema URL if provided
         const customUrl = document.getElementById('custom-schema-url')?.value.trim() || null;
         
@@ -416,19 +576,19 @@ async function initializeEditor(initialData = null) {
             normalizedData = normalizeJsonToSchema(migratedData, originalSchema, true);  // skipWrapper=true for editor
             console.log('📝 Normalized data keys:', normalizedData ? Object.keys(normalizedData) : 'null');
 
-            // Auto-inject $schema from original schema if defined
-            if (originalSchema.properties && originalSchema.properties.$schema && originalSchema.properties.$schema.const) {
-                if (!normalizedData.$schema) {
-                    normalizedData.$schema = originalSchema.properties.$schema.const;
-                    console.log(`📋 Auto-injected $schema: ${normalizedData.$schema}`);
-                }
-            }
+            // NOTE: $schema auto-injection removed - download handler adds it during export
+            // This prevents duplicate $schema fields (one from auto-injection, one from download wrapper)
 
             // Clean empty values to prevent validation errors
             console.log('🧹 Cleaning empty values from data...');
             normalizedData = cleanEmptyValues(normalizedData);
             console.log('✅ Empty values cleaned');
         }
+
+        // Clean data before passing to editor (prevents editor-induced corruption)
+        console.log('🛡️ Pre-processing data for JSON Editor...');
+        normalizedData = cleanDataForEditor(normalizedData);
+        console.log('✅ Data prepared for editor');
 
         // Update schema info display
         updateSchemaInfo();
@@ -719,21 +879,67 @@ function validateForm(showSuccessMessage = true) {
     }
 }
 
+// Strict JSON Schema validation using AJV
+async function strictSchemaValidation(data, cardType) {
+    try {
+        // Use AJV for proper JSON Schema validation
+        const Ajv = window.ajv7 || window.Ajv;
+        if (!Ajv) {
+            console.warn('❌ AJV not loaded, skipping strict validation');
+            return { valid: true, errors: [] };
+        }
+
+        console.log('✅ Using AJV for strict schema validation');
+
+        const ajv = new Ajv({
+            allErrors: true,
+            strict: false,
+            validateFormats: true
+        });
+
+        // Add format validators
+        if (window.ajvFormats) {
+            ajvFormats(ajv);
+            console.log('✅ AJV format validators loaded');
+        }
+
+        // Fetch the schema (use GitHub mirror to avoid CORS issues)
+        const schemaUrl = FETCH_SCHEMA_URLS[cardType];
+        const response = await fetch(schemaUrl);
+        const schema = await response.json();
+
+        // Compile and validate
+        const validate = ajv.compile(schema);
+        const valid = validate(data);
+
+        if (!valid) {
+            console.error('Validation errors:', validate.errors);
+            return {
+                valid: false,
+                errors: validate.errors.map(e => ({
+                    path: e.instancePath || '(root)',
+                    message: e.message,
+                    params: e.params
+                }))
+            };
+        }
+
+        return { valid: true, errors: [] };
+
+    } catch (error) {
+        console.error('Validation exception:', error);
+        return {
+            valid: false,
+            errors: [{ path: 'validation', message: error.message }]
+        };
+    }
+}
+
 // Download functionality
-function downloadJSON() {
+async function downloadJSON() {
     if (!editor) {
         showAlert('Editor not ready yet. Please wait and try again.', 'warning');
         return;
-    }
-
-    // Validate before download (non-blocking warning)
-    const isValid = validateForm(false);  // Silent validation
-    if (!isValid) {
-        const proceed = confirm('⚠️ Validation errors detected in your data.\n\nThe JSON may not be fully compliant with the ROADMAP schema.\n\nDo you want to download anyway?');
-        if (!proceed) {
-            showAlert('Download cancelled. Please fix validation errors and try again.', 'info');
-            return;
-        }
     }
 
     try {
@@ -742,19 +948,37 @@ function downloadJSON() {
         // Construct the complete ROADMAP JSON structure
         const roadmapData = {};
 
-        // Use $schema from editor data (auto-injected value from schema)
-        if (editorData.$schema) {
-            roadmapData.$schema = editorData.$schema;
-        } else {
-            // Fallback for old data that doesn't have $schema
-            roadmapData.$schema = `ROADMAP-${currentCardType}-2025-05.json`;
-        }
+        // Use official RSNA schema URL as required by schema const
+        roadmapData.$schema = SCHEMA_URLS[currentCardType];
 
         // Add the appropriate section (editor stores unwrapped data, so wrap it)
         if (currentCardType === CARD_TYPES.MODEL) {
             roadmapData.Model = editorData;
         } else if (currentCardType === CARD_TYPES.DATASET) {
             roadmapData.Dataset = editorData;
+        }
+
+        // Run strict schema validation
+        const validation = await strictSchemaValidation(roadmapData, currentCardType);
+
+        if (!validation.valid) {
+            const errorCount = validation.errors.length;
+            const errorList = validation.errors
+                .slice(0, 10)  // Show first 10 errors
+                .map(e => `  • ${e.path}: ${e.message}`)
+                .join('\n');
+
+            const moreErrors = errorCount > 10 ? `\n  ... and ${errorCount - 10} more errors` : '';
+
+            const message = `⚠️ SCHEMA VALIDATION FAILED\n\n` +
+                           `Found ${errorCount} validation error(s):\n\n${errorList}${moreErrors}\n\n` +
+                           `Your JSON may not work with external validators.\n\n` +
+                           `Download anyway? (Not recommended)`;
+
+            if (!confirm(message)) {
+                showAlert('Download cancelled. Please review and fix validation errors.', 'info');
+                return;
+            }
         }
 
         // Create and download file
@@ -2514,7 +2738,7 @@ function getSchemaUrl(cardType, source, customUrl) {
     if (source === 'custom' && customUrl && customUrl.trim()) {
         return customUrl.trim();
     }
-    return GITHUB_SCHEMAS[cardType];
+    return FETCH_SCHEMA_URLS[cardType];
 }
 
 // Resolve external $ref references in schema
