@@ -1,6 +1,8 @@
-// Dynamic Schema Processor - Loads schemas from GitHub or custom URLs
+// Dynamic Schema Processor - Loads schemas from local files or custom URLs
+// VERSION: v40 (Fixed: Load from local schemas/*.json instead of GitHub)
 class DynamicSchemaProcessor {
     constructor() {
+        console.log('🔧 DynamicSchemaProcessor v40 loaded (Fixed: local schema loading)');
         this.baseSchemas = {
             model: null,
             dataset: null
@@ -10,19 +12,19 @@ class DynamicSchemaProcessor {
             dataset: null
         };
         this.currentSchemaSource = {
-            model: 'github',
-            dataset: 'github'
+            model: 'local',
+            dataset: 'local'
         };
         this.schemaCache = null;
         this.schemaCacheTime = null;
         this.CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
     }
 
-    // GitHub URLs for latest ROADMAP schemas (2025-11 version)
-    get GITHUB_SCHEMAS() {
+    // Local schema file paths (loaded from schemas directory)
+    get LOCAL_SCHEMAS() {
         return {
-            model: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/schema/2025-11/model.json',
-            dataset: 'https://raw.githubusercontent.com/cekahn/ROADMAP/main/schema/2025-11/dataset.json'
+            model: 'schemas/model.json',
+            dataset: 'schemas/dataset.json'
         };
     }
 
@@ -104,24 +106,24 @@ class DynamicSchemaProcessor {
         return resolved;
     }
 
-    // Load base schemas from GitHub (with caching and external ref resolution)
+    // Load base schemas from local files (with caching and external ref resolution)
     async loadBaseSchemas() {
         try {
             // Check if we have a valid cached copy
             if (this.schemaCache && this.schemaCacheTime && (Date.now() - this.schemaCacheTime < this.CACHE_DURATION_MS)) {
-                console.log('📦 Using cached schemas from GitHub');
+                console.log('📦 Using cached schemas');
                 this.baseSchemas.model = this.schemaCache.model;
                 this.baseSchemas.dataset = this.schemaCache.dataset;
                 return true;
             }
 
-            console.log('🌐 Fetching schemas from GitHub...');
-            console.log('  Model:', this.GITHUB_SCHEMAS.model);
-            console.log('  Dataset:', this.GITHUB_SCHEMAS.dataset);
+            console.log('📂 Loading schemas from local files...');
+            console.log('  Model:', this.LOCAL_SCHEMAS.model);
+            console.log('  Dataset:', this.LOCAL_SCHEMAS.dataset);
 
             const [modelResponse, datasetResponse] = await Promise.all([
-                fetch(this.GITHUB_SCHEMAS.model),
-                fetch(this.GITHUB_SCHEMAS.dataset)
+                fetch(this.LOCAL_SCHEMAS.model),
+                fetch(this.LOCAL_SCHEMAS.dataset)
             ]);
 
             if (!modelResponse.ok) {
@@ -149,11 +151,11 @@ class DynamicSchemaProcessor {
             };
             this.schemaCacheTime = Date.now();
 
-            console.log('✅ Base schemas loaded from GitHub successfully');
+            console.log('✅ Base schemas loaded from local files successfully');
             console.log('   Cache will expire in 5 minutes');
             return true;
         } catch (error) {
-            console.error('❌ Failed to load schemas from GitHub:', error);
+            console.error('❌ Failed to load schemas from local files:', error);
             return false;
         }
     }
@@ -432,7 +434,7 @@ class DynamicSchemaProcessor {
     processProperties(properties, defs, visited = new Set(), depth = 0) {
         if (!properties || typeof properties !== 'object') return {};
         const processed = {};
-        const maxDepth = 10; // Prevent infinite recursion
+        const maxDepth = 15; // Increased from 10 for deeply nested schemas like Partitions
 
         if (depth > maxDepth) {
             console.warn(`Maximum depth ${maxDepth} exceeded, stopping recursion`);
@@ -457,7 +459,10 @@ class DynamicSchemaProcessor {
         if (prop.$ref) {
             const refPath = prop.$ref.replace('#/$defs/', '');
 
+            // Only flag as circular if this ref is CURRENTLY in the call stack
+            // (true recursion), not if we've just seen it before in a sibling property
             if (visited.has(refPath)) {
+                // This is a true circular reference (Subset -> Subset)
                 console.warn(`Circular reference detected: ${refPath}`);
                 return {
                     type: "string",
@@ -469,9 +474,15 @@ class DynamicSchemaProcessor {
 
             const refDef = defs[refPath];
             if (refDef) {
+                // Add to visited for THIS branch of recursion only
                 const newVisited = new Set(visited);
                 newVisited.add(refPath);
-                return this.processProperty(refDef, defs, newVisited, depth + 1);
+                // Increment depth to allow maxDepth protection
+                // (prevents infinite recursion when $refs have circular structures)
+                const result = this.processProperty(refDef, defs, newVisited, depth + 1);
+                // Note: We don't remove from visited because newVisited is a copy
+                // This allows the same $ref to be used in sibling properties
+                return result;
             }
         }
 
@@ -496,6 +507,9 @@ class DynamicSchemaProcessor {
         const processed = { ...prop };
 
         if (prop.type === 'array' && prop.items) {
+            // Array items are TEMPLATES reused for each element
+            // Pass visited Set to allow efficient ref reuse (siblings can share same $ref without re-processing)
+            // Depth parameter + visited Set together prevent both false positives and infinite recursion
             processed.items = this.processProperty(prop.items, defs, visited, depth);
 
             // Check for enum arrays FIRST (checkboxes for Content, Metrics, etc.)
