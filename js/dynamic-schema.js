@@ -1,8 +1,8 @@
 // Dynamic Schema Processor - Loads schemas from local files or custom URLs
-// VERSION: v40 (Fixed: Load from local schemas/*.json instead of GitHub)
+// VERSION: v41 (Fixed: Convert prefixItems to items array for JSON Editor compatibility)
 class DynamicSchemaProcessor {
     constructor() {
-        console.log('🔧 DynamicSchemaProcessor v40 loaded (Fixed: local schema loading)');
+        console.log('🔧 DynamicSchemaProcessor v41 loaded (Fixed: prefixItems → items array conversion)');
         this.baseSchemas = {
             model: null,
             dataset: null
@@ -483,6 +483,31 @@ class DynamicSchemaProcessor {
                 // Note: We don't remove from visited because newVisited is a copy
                 // This allows the same $ref to be used in sibling properties
                 return result;
+            }
+        }
+
+        // FIX: Convert prefixItems (JSON Schema 2020-12) to items array (draft-04)
+        // JSON Editor 2.8.0 only supports draft-03/04, doesn't recognize prefixItems
+        // This caused Age range integers to convert to null (issue found 2025-01-06)
+        if (prop.type === 'array' && prop.items && typeof prop.items === 'object') {
+            // Check for nested array with prefixItems (e.g., Age range structure)
+            if (prop.items.type === 'array' && prop.items.prefixItems) {
+                console.log(`🔄 Converting prefixItems to items array for: ${prop.title || 'nested array'}`);
+
+                const prefixItems = prop.items.prefixItems;
+                const additionalItems = prop.items.items;
+
+                // Build draft-04 compatible tuple: [type1, type2, ...]
+                const draft04Items = [...prefixItems];
+                if (additionalItems) {
+                    draft04Items.push(additionalItems);
+                }
+
+                // Replace prefixItems with items array
+                prop.items.items = draft04Items;
+                delete prop.items.prefixItems;
+
+                console.log(`  ✅ Converted to ${draft04Items.length}-element tuple: [${draft04Items.map(i => i.type || 'unknown').join(', ')}]`);
             }
         }
 

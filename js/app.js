@@ -47,6 +47,132 @@ const CARD_TYPES = {
 };
 
 // ==============================================================================
+// PARTITION DATA DIAGNOSTICS (V47)
+// ==============================================================================
+
+/**
+ * Validate partition data health (frontend version)
+ * Returns detailed diagnostics about partition data structure
+ */
+function validatePartitionsHealth(data, location) {
+    const report = {
+        location,
+        exists: false,
+        isArray: false,
+        arrayLength: 0,
+        validCount: 0,
+        emptyCount: 0,
+        invalidCount: 0,
+        items: [],
+        errors: []
+    };
+
+    if (!data.Partitions) {
+        report.errors.push('Partitions field is missing/undefined');
+        return report;
+    }
+
+    report.exists = true;
+
+    if (!Array.isArray(data.Partitions)) {
+        report.errors.push(`Partitions is not an array (type: ${typeof data.Partitions})`);
+        return report;
+    }
+
+    report.isArray = true;
+    report.arrayLength = data.Partitions.length;
+
+    // Analyze each partition object
+    data.Partitions.forEach((partition, index) => {
+        const itemReport = {
+            index,
+            isObject: typeof partition === 'object' && partition !== null,
+            isEmpty: false,
+            hasPartitionProperty: false,
+            partitionValue: null,
+            keys: [],
+            isValid: false
+        };
+
+        if (!itemReport.isObject) {
+            itemReport.error = `Item is not an object (type: ${typeof partition})`;
+            report.invalidCount++;
+        } else {
+            itemReport.keys = Object.keys(partition);
+            itemReport.isEmpty = itemReport.keys.length === 0;
+
+            if (itemReport.isEmpty) {
+                report.emptyCount++;
+                itemReport.error = 'Empty object {}';
+            } else {
+                itemReport.hasPartitionProperty = 'Partition' in partition;
+                itemReport.partitionValue = partition.Partition;
+
+                if (!itemReport.hasPartitionProperty) {
+                    report.invalidCount++;
+                    itemReport.error = 'Missing required "Partition" property';
+                } else if (!partition.Partition) {
+                    report.invalidCount++;
+                    itemReport.error = `Partition property is empty/null: ${partition.Partition}`;
+                } else {
+                    report.validCount++;
+                    itemReport.isValid = true;
+                }
+            }
+        }
+
+        report.items.push(itemReport);
+    });
+
+    return report;
+}
+
+/**
+ * Log comprehensive partition data diagnostics (frontend version)
+ * Logs partition structure, validity, and content at each checkpoint
+ */
+function logPartitionsDetailed(data, location) {
+    console.log(`\n🔍 ========== PARTITION DATA AT: ${location} ==========`);
+
+    const health = validatePartitionsHealth(data, location);
+
+    console.log(`📊 Partition Health Summary:`);
+    console.log(`   - Location: ${health.location}`);
+    console.log(`   - Exists: ${health.exists}`);
+    console.log(`   - Is Array: ${health.isArray}`);
+    console.log(`   - Array Length: ${health.arrayLength}`);
+    console.log(`   - Valid Items: ${health.validCount}`);
+    console.log(`   - Empty Objects: ${health.emptyCount}`);
+    console.log(`   - Invalid Items: ${health.invalidCount}`);
+
+    if (health.errors.length > 0) {
+        console.log(`❌ Errors: ${health.errors.join(', ')}`);
+    }
+
+    if (health.items.length > 0) {
+        console.log(`\n📋 Detailed Item Analysis:`);
+        health.items.forEach((item, idx) => {
+            console.log(`   [${idx}] ${item.isValid ? '✅' : '❌'} ${item.error || 'Valid'}`);
+            console.log(`       - Keys: [${item.keys.join(', ')}]`);
+            console.log(`       - Partition value: ${JSON.stringify(item.partitionValue)}`);
+            if (item.isObject && !item.isEmpty) {
+                console.log(`       - Full object: ${JSON.stringify(data.Partitions[idx])}`);
+            }
+        });
+    }
+
+    // Log full JSON structure for deep inspection
+    if (data.Partitions) {
+        console.log(`\n📦 Full Partitions JSON (${JSON.stringify(data.Partitions).length} chars):`);
+        console.log(JSON.stringify(data.Partitions, null, 2));
+    }
+
+    console.log(`🔍 ========== END PARTITION DATA AT: ${location} ==========\n`);
+
+    return health;
+}
+
+// ==============================================================================
 // STATE MANAGEMENT
 // ==============================================================================
 
@@ -456,7 +582,9 @@ function cleanDataForEditor(data) {
     // Create a deep copy to avoid modifying original
     const cleaned = JSON.parse(JSON.stringify(data));
 
-    // 🔍 LOG POINT 4: Before cleanDataForEditor (from S3)
+    // 🔍 CHECKPOINT 8: Before cleanDataForEditor (from S3)
+    console.log('\n🎯 FRONTEND CHECKPOINT 8: BEFORE cleanDataForEditor');
+    logPartitionsDetailed(cleaned, 'CHECKPOINT 8: BEFORE cleanDataForEditor');
     logAllDateFields(cleaned, 'FRONTEND - BEFORE cleanDataForEditor');
 
     // 1. Truncate Name to 128 char limit (prevent editor auto-truncation)
@@ -533,7 +661,9 @@ function cleanDataForEditor(data) {
         }
     }
 
-    // 🔍 LOG POINT 5: After cleanDataForEditor (ready for editor)
+    // 🔍 CHECKPOINT 9: After cleanDataForEditor (ready for editor)
+    console.log('\n🎯 FRONTEND CHECKPOINT 9: AFTER cleanDataForEditor');
+    logPartitionsDetailed(cleaned, 'CHECKPOINT 9: AFTER cleanDataForEditor');
     logAllDateFields(cleaned, 'FRONTEND - AFTER cleanDataForEditor');
 
     return cleaned;
@@ -571,10 +701,14 @@ async function initializeEditor(initialData = null) {
             // Migrate old schema format to new 2025-11 format
             console.log('📋 Migrating schema format...');
             let migratedData = migrateToNewSchema(initialData, currentCardType);
+            console.log('\n🔍 AFTER migrateToNewSchema:');
+            logPartitionsDetailed(migratedData, 'AFTER migrateToNewSchema');
 
             console.log('🔄 Starting normalization of initial data...');
             normalizedData = normalizeJsonToSchema(migratedData, originalSchema, true);  // skipWrapper=true for editor
             console.log('📝 Normalized data keys:', normalizedData ? Object.keys(normalizedData) : 'null');
+            console.log('\n🔍 AFTER normalizeJsonToSchema:');
+            logPartitionsDetailed(normalizedData, 'AFTER normalizeJsonToSchema');
 
             // NOTE: $schema auto-injection removed - download handler adds it during export
             // This prevents duplicate $schema fields (one from auto-injection, one from download wrapper)
@@ -583,12 +717,20 @@ async function initializeEditor(initialData = null) {
             console.log('🧹 Cleaning empty values from data...');
             normalizedData = cleanEmptyValues(normalizedData);
             console.log('✅ Empty values cleaned');
+            console.log('\n🔍 AFTER cleanEmptyValues:');
+            logPartitionsDetailed(normalizedData, 'AFTER cleanEmptyValues');
         }
 
         // Clean data before passing to editor (prevents editor-induced corruption)
         console.log('🛡️ Pre-processing data for JSON Editor...');
         normalizedData = cleanDataForEditor(normalizedData);
         console.log('✅ Data prepared for editor');
+        console.log('\n🔍 AFTER cleanDataForEditor (FINAL before editor):');
+        logPartitionsDetailed(normalizedData, 'AFTER cleanDataForEditor - FINAL');
+
+        // 🔍 CHECKPOINT 10: Before JSON Editor initialization
+        console.log('\n🎯 FRONTEND CHECKPOINT 10: BEFORE JSON EDITOR INIT');
+        logPartitionsDetailed(normalizedData, 'CHECKPOINT 10: BEFORE JSON EDITOR INIT');
 
         // Update schema info display
         updateSchemaInfo();
@@ -622,8 +764,18 @@ async function initializeEditor(initialData = null) {
         // Editor event listeners
         editor.on('ready', function() {
             console.log('✅ Editor ready for', currentCardType);
+
+            // 🔍 CHECKPOINT 11: After JSON Editor ready - check editor's internal state
+            console.log('\n🎯 FRONTEND CHECKPOINT 11: JSON EDITOR READY');
+            try {
+                const editorValue = editor.getValue();
+                logPartitionsDetailed(editorValue, 'CHECKPOINT 11: JSON EDITOR INTERNAL STATE');
+            } catch (e) {
+                console.error('❌ Failed to get editor value:', e);
+            }
+
             enableEditorControls();
-            
+
             // Fix dropdown positioning issues
             fixDropdownOverlapIssues();
             
@@ -847,29 +999,49 @@ function toggleEmptyFields() {
 }
 
 // Validation
-function validateForm(showSuccessMessage = true) {
+async function validateForm(showSuccessMessage = true) {
     if (!editor) {
         showAlert('Editor not ready yet. Please wait a moment and try again.', 'warning');
         return false;
     }
-    
+
     try {
-        const errors = editor.validate();
-        
-        if (errors.length === 0) {
+        // Get current editor data for validation
+        const editorData = editor.getValue();
+
+        // FIX: Wrap data same way as downloadJSON() does
+        // The schema expects {$schema: ..., Dataset: {...}} not unwrapped data
+        const roadmapData = {};
+        roadmapData.$schema = SCHEMA_URLS[currentCardType];
+
+        if (currentCardType === CARD_TYPES.MODEL) {
+            roadmapData.Model = editorData;
+        } else if (currentCardType === CARD_TYPES.DATASET) {
+            roadmapData.Dataset = editorData;
+        }
+
+        // Use strict AJV validation (same as download) on wrapped data
+        const validationResult = await strictSchemaValidation(roadmapData, currentCardType);
+
+        if (validationResult.valid) {
             if (showSuccessMessage) {
                 showAlert('✅ Validation successful! Your card is valid.', 'success');
             }
             return true;
         } else {
-            let errorMessage = 'Please fix the following validation errors:\n';
-            errors.slice(0, 5).forEach(error => {  // Show max 5 errors
-                errorMessage += `• ${error.path}: ${error.message}\n`;
+            // Format validation errors for display
+            let errorMessage = 'Please fix the following validation errors:\n\n';
+            validationResult.errors.slice(0, 5).forEach(error => {
+                const path = error.instancePath || 'root';
+                errorMessage += `• ${path}: ${error.message}\n`;
             });
-            if (errors.length > 5) {
-                errorMessage += `... and ${errors.length - 5} more errors`;
+            if (validationResult.errors.length > 5) {
+                errorMessage += `\n... and ${validationResult.errors.length - 5} more errors`;
             }
             showAlert(errorMessage, 'danger');
+
+            // Also log to console for debugging
+            console.log('Validation errors:', validationResult.errors);
             return false;
         }
     } catch (error) {
@@ -946,6 +1118,14 @@ async function downloadJSON() {
 
     try {
         let editorData = editor.getValue();
+
+        // 🔍 DIAGNOSTIC: Log Partitions data from editor
+        if (editorData.Partitions) {
+            console.log('🔍 FROM EDITOR: Partitions array length:', editorData.Partitions.length);
+            console.log('🔍 FROM EDITOR: Partitions data:', JSON.stringify(editorData.Partitions, null, 2));
+        } else {
+            console.log('⚠️ FROM EDITOR: No Partitions field found in editor data');
+        }
 
         // CRITICAL: Clean empty values before wrapping and download
         // This prevents validation failures from empty dates, empty License objects, etc.

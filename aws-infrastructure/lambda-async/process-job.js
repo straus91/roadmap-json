@@ -11,13 +11,13 @@
  * This runs async, so it can take as long as needed (up to 5 minutes)
  *
  * @author Claude Code
- * @version 1.0.0-v46 (Remove broken responseSchema for datasets, keep smart cleanup from v45)
+ * @version 1.0.0-v48 (Fix: Extract sex as Subsets array instead of "Sex distribution" in Total)
  */
 
 const https = require('https');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { SecretsManagerClient, GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager');
 
 // AWS clients
@@ -46,6 +46,128 @@ const BACKOFF_MULTIPLIER = 2;  // Exponential backoff multiplier
 
 // Cached API key
 let cachedApiKey = null;
+
+/**
+ * Helper function: Validate partition data health
+ * Returns detailed diagnostics about partition data structure
+ */
+function validatePartitionsHealth(data, location) {
+    const report = {
+        location,
+        exists: false,
+        isArray: false,
+        arrayLength: 0,
+        validCount: 0,
+        emptyCount: 0,
+        invalidCount: 0,
+        items: [],
+        errors: []
+    };
+
+    if (!data.Partitions) {
+        report.errors.push('Partitions field is missing/undefined');
+        return report;
+    }
+
+    report.exists = true;
+
+    if (!Array.isArray(data.Partitions)) {
+        report.errors.push(`Partitions is not an array (type: ${typeof data.Partitions})`);
+        return report;
+    }
+
+    report.isArray = true;
+    report.arrayLength = data.Partitions.length;
+
+    // Analyze each partition object
+    data.Partitions.forEach((partition, index) => {
+        const itemReport = {
+            index,
+            isObject: typeof partition === 'object' && partition !== null,
+            isEmpty: false,
+            hasPartitionProperty: false,
+            partitionValue: null,
+            keys: [],
+            isValid: false
+        };
+
+        if (!itemReport.isObject) {
+            itemReport.error = `Item is not an object (type: ${typeof partition})`;
+            report.invalidCount++;
+        } else {
+            itemReport.keys = Object.keys(partition);
+            itemReport.isEmpty = itemReport.keys.length === 0;
+
+            if (itemReport.isEmpty) {
+                report.emptyCount++;
+                itemReport.error = 'Empty object {}';
+            } else {
+                itemReport.hasPartitionProperty = 'Partition' in partition;
+                itemReport.partitionValue = partition.Partition;
+
+                if (!itemReport.hasPartitionProperty) {
+                    report.invalidCount++;
+                    itemReport.error = 'Missing required "Partition" property';
+                } else if (!partition.Partition) {
+                    report.invalidCount++;
+                    itemReport.error = `Partition property is empty/null: ${partition.Partition}`;
+                } else {
+                    report.validCount++;
+                    itemReport.isValid = true;
+                }
+            }
+        }
+
+        report.items.push(itemReport);
+    });
+
+    return report;
+}
+
+/**
+ * Helper function: Log comprehensive partition data diagnostics
+ * Logs partition structure, validity, and content at each checkpoint
+ */
+function logPartitionsDetailed(data, location) {
+    console.log(`\n🔍 ========== PARTITION DATA AT: ${location} ==========`);
+
+    const health = validatePartitionsHealth(data, location);
+
+    console.log(`📊 Partition Health Summary:`);
+    console.log(`   - Location: ${health.location}`);
+    console.log(`   - Exists: ${health.exists}`);
+    console.log(`   - Is Array: ${health.isArray}`);
+    console.log(`   - Array Length: ${health.arrayLength}`);
+    console.log(`   - Valid Items: ${health.validCount}`);
+    console.log(`   - Empty Objects: ${health.emptyCount}`);
+    console.log(`   - Invalid Items: ${health.invalidCount}`);
+
+    if (health.errors.length > 0) {
+        console.log(`❌ Errors: ${health.errors.join(', ')}`);
+    }
+
+    if (health.items.length > 0) {
+        console.log(`\n📋 Detailed Item Analysis:`);
+        health.items.forEach((item, idx) => {
+            console.log(`   [${idx}] ${item.isValid ? '✅' : '❌'} ${item.error || 'Valid'}`);
+            console.log(`       - Keys: [${item.keys.join(', ')}]`);
+            console.log(`       - Partition value: ${JSON.stringify(item.partitionValue)}`);
+            if (item.isObject && !item.isEmpty) {
+                console.log(`       - Full object: ${JSON.stringify(data.Partitions[idx])}`);
+            }
+        });
+    }
+
+    // Log full JSON structure for deep inspection
+    if (data.Partitions) {
+        console.log(`\n📦 Full Partitions JSON (${JSON.stringify(data.Partitions).length} chars):`);
+        console.log(JSON.stringify(data.Partitions, null, 2));
+    }
+
+    console.log(`🔍 ========== END PARTITION DATA AT: ${location} ==========\n`);
+
+    return health;
+}
 
 /**
  * Helper function: Log ALL date fields comprehensively
@@ -119,28 +241,39 @@ exports.handler = async (event) => {
             extractedData = extractedData.Dataset;
         }
 
-        // 🔍 LOG POINT 1: After AI extraction (raw output)
+        // 🔍 CHECKPOINT 1: After AI extraction (raw output from Gemini)
+        console.log('\n🎯 CHECKPOINT 1: RAW AI EXTRACTION');
+        logPartitionsDetailed(extractedData, 'CHECKPOINT 1: RAW AI EXTRACTION');
         logAllDateFields(extractedData, 'AFTER AI EXTRACTION');
 
         // Clean up invalid fields (empty dates, hallucinated cross-schema fields)
         extractedData = cleanupInvalidFields(extractedData);
 
-        // 🔍 LOG POINT 2: After cleanupInvalidFields
+        // 🔍 CHECKPOINT 2: After cleanupInvalidFields
+        console.log('\n🎯 CHECKPOINT 2: AFTER cleanupInvalidFields()');
+        logPartitionsDetailed(extractedData, 'CHECKPOINT 2: AFTER cleanupInvalidFields');
         logAllDateFields(extractedData, 'AFTER cleanupInvalidFields()');
 
         // Apply dataset-specific cleanup (partition structure, file formats, etc.)
         extractedData = cleanupDatasetFields(extractedData);
         console.log('✅ Data cleanup complete');
 
-        // 🔍 LOG POINT 3: Before S3 save (final Lambda output)
+        // 🔍 CHECKPOINT 3: Before S3 save (final Lambda output)
+        console.log('\n🎯 CHECKPOINT 3: BEFORE S3 UPLOAD');
+        logPartitionsDetailed(extractedData, 'CHECKPOINT 3: BEFORE S3 UPLOAD');
         logAllDateFields(extractedData, 'BEFORE S3 SAVE');
 
         // Save results to S3
         const s3Key = `results/${jobId}.json`;
+        const s3Body = JSON.stringify(extractedData, null, 2);
+
+        console.log(`\n📤 Uploading to S3: ${s3Key}`);
+        console.log(`   Body size: ${s3Body.length} bytes`);
+
         await s3Client.send(new PutObjectCommand({
             Bucket: RESULTS_BUCKET,
             Key: s3Key,
-            Body: JSON.stringify(extractedData, null, 2),
+            Body: s3Body,
             ContentType: 'application/json',
             Metadata: {
                 jobId,
@@ -150,7 +283,43 @@ exports.handler = async (event) => {
             }
         }));
 
-        console.log(`Results saved to S3: ${s3Key}`);
+        console.log(`✅ Results saved to S3: ${s3Key}`);
+
+        // 🔍 CHECKPOINT 4: Verify S3 storage - read back what was written
+        console.log(`\n🎯 CHECKPOINT 4: S3 VERIFICATION (Reading back from S3)`);
+        try {
+            const s3Response = await s3Client.send(new GetObjectCommand({
+                Bucket: RESULTS_BUCKET,
+                Key: s3Key
+            }));
+
+            // Read the stream
+            const chunks = [];
+            for await (const chunk of s3Response.Body) {
+                chunks.push(chunk);
+            }
+            const s3Content = Buffer.concat(chunks).toString('utf-8');
+            const s3Data = JSON.parse(s3Content);
+
+            console.log(`📥 S3 Read-back successful`);
+            console.log(`   Content size: ${s3Content.length} bytes`);
+            console.log(`   Size match: ${s3Content.length === s3Body.length ? '✅' : '❌'}`);
+
+            // Verify partition data in S3
+            logPartitionsDetailed(s3Data, 'CHECKPOINT 4: S3 STORED DATA');
+
+            // Deep comparison
+            if (JSON.stringify(extractedData) === JSON.stringify(s3Data)) {
+                console.log(`✅ S3 data matches exactly with what we uploaded`);
+            } else {
+                console.log(`⚠️ WARNING: S3 data differs from uploaded data!`);
+                console.log(`   Uploaded Partitions: ${JSON.stringify(extractedData.Partitions)}`);
+                console.log(`   S3 Stored Partitions: ${JSON.stringify(s3Data.Partitions)}`);
+            }
+
+        } catch (verifyError) {
+            console.error(`❌ S3 verification failed: ${verifyError.message}`);
+        }
 
         // Update job status to "completed"
         await updateJobStatus(jobId, 'completed', {
@@ -445,44 +614,74 @@ function cleanupDatasetFields(data) {
 
     // V45: Smart Partitions cleanup - remove empty objects, preserve valid ones
     if (data.Partitions && Array.isArray(data.Partitions)) {
+        console.log(`\n🔧 Starting V45 Smart Partitions Cleanup...`);
+        console.log(`   Initial partition count: ${data.Partitions.length}`);
+        console.log(`   Initial partition data: ${JSON.stringify(data.Partitions, null, 2)}`);
+
         const validPartitionEnums = ['Training', 'Validation', 'Test', 'Hold-out',
                                      'Independent test', 'External validation', 'Other'];
         const original = data.Partitions;
         const cleaned = [];
         let emptyCount = 0;
+        let fixedCount = 0;
 
-        for (const partition of original) {
+        for (let i = 0; i < original.length; i++) {
+            const partition = original[i];
+            console.log(`\n   Processing partition [${i}]:`);
+            console.log(`      Type: ${typeof partition}`);
+            console.log(`      Value: ${JSON.stringify(partition)}`);
+            console.log(`      Is object: ${typeof partition === 'object' && partition !== null}`);
+            console.log(`      Keys: [${partition && typeof partition === 'object' ? Object.keys(partition).join(', ') : 'N/A'}]`);
+
             // Check if empty object or missing required "Partition" property
             if (!partition || typeof partition !== 'object' ||
                 Object.keys(partition).length === 0 || !partition.Partition) {
                 emptyCount++;
-                console.log(`🔧 V45: Removing empty/invalid partition object`);
+                console.log(`      ❌ REMOVING: Empty/invalid partition object`);
+                console.log(`         Reason: ${!partition ? 'null/undefined' : typeof partition !== 'object' ? 'not an object' : Object.keys(partition).length === 0 ? 'empty object' : 'missing Partition property'}`);
                 continue;
             }
 
             // Validate and fix enum value
             const partitionType = partition.Partition;
+            console.log(`      Partition value: "${partitionType}"`);
+
             const validEnum = validPartitionEnums.find(valid =>
                 valid.toLowerCase() === partitionType.toLowerCase()
             );
 
             if (validEnum) {
-                partition.Partition = validEnum;  // Fix capitalization
+                if (partition.Partition !== validEnum) {
+                    console.log(`      🔧 Fixing capitalization: "${partitionType}" → "${validEnum}"`);
+                    partition.Partition = validEnum;  // Fix capitalization
+                    fixedCount++;
+                }
                 cleaned.push(partition);
+                console.log(`      ✅ KEEPING: Valid partition`);
             } else {
+                console.log(`      🔧 Invalid enum value "${partitionType}", mapping to "Other"`);
                 partition.Partition = 'Other';  // Map invalid to Other
                 cleaned.push(partition);
-                console.log(`🔧 V45: Mapped invalid partition type "${partitionType}" → "Other"`);
+                fixedCount++;
             }
         }
 
+        console.log(`\n   Cleanup Summary:`);
+        console.log(`      Original: ${original.length} partitions`);
+        console.log(`      Valid/kept: ${cleaned.length} partitions`);
+        console.log(`      Empty/removed: ${emptyCount} partitions`);
+        console.log(`      Fixed: ${fixedCount} partitions`);
+
         if (cleaned.length > 0) {
             data.Partitions = cleaned;
-            console.log(`✅ V45: Partitions preserved (${cleaned.length} valid, ${emptyCount} removed)`);
+            console.log(`   ✅ V45: Partitions preserved (${cleaned.length} valid, ${emptyCount} removed)`);
+            console.log(`   Final partition data: ${JSON.stringify(data.Partitions, null, 2)}`);
         } else {
+            console.log(`   ⚠️ V45: All ${emptyCount} partitions were empty/invalid - DELETING ENTIRE FIELD`);
             delete data.Partitions;
-            console.log(`⚠️ V45: Removed Partitions (all ${emptyCount} objects were empty/invalid)`);
         }
+    } else if (data.Partitions) {
+        console.log(`⚠️ Partitions exists but is not an array (type: ${typeof data.Partitions})`);
     }
 
     console.log('✅ Dataset-specific cleanup complete');
@@ -666,13 +865,21 @@ PARTITION STRUCTURE (MOST COMMON ERROR):
     "Total": {
       "Patient count": 100,
       "Exam count": 150,
-      "Sex distribution": "50 male, 50 female"
+      "Age range": [[18, "years"], [90, "years"]],
+      "Comments": "Mean age 54 years"
     },
     "Subsets": [
       {
+        "Sex": "Male",
         "Patient count": 50,
         "Exam count": 75,
-        "Comments": "Subset description"
+        "Comments": "Male patients"
+      },
+      {
+        "Sex": "Female",
+        "Patient count": 50,
+        "Exam count": 75,
+        "Comments": "Female patients"
       }
     ],
     "Comments": "Optional partition description"
@@ -778,8 +985,12 @@ For dataset partitions (training/validation/test splits), extract:
 • Patient Count: total number of unique patients
 • Exam Count: total number of imaging exams/studies
 • Image Count: total number of images
-• Age Range: min-max age of patients (e.g., "18-85 years")
-• Sex Distribution: breakdown by gender (e.g., "52% female, 48% male")
+• Age Range: min-max age of patients (e.g., [[18, "years"], [85, "years"]])
+• Sex Breakdown: Extract as SEPARATE subset objects in Subsets array:
+  - Parse "50 male, 50 female" → Two objects: {"Sex": "Male", "Patient count": 50}, {"Sex": "Female", "Patient count": 50}
+  - Parse "52% female, 48% male" with 100 patients → {"Sex": "Female", "Patient count": 52}, {"Sex": "Male", "Patient count": 48}
+  - Use ONLY these enum values for Sex field: "Male", "Female", "Unknown", "Not specified"
+  - DO NOT put sex data in Total object - ONLY in Subsets array
 • Demographics: racial/ethnic composition if stated
 • Subset Criterion: how this partition differs (e.g., "Images with confirmed diagnosis")
 Look for this data in tables with headers like "Training Set", "Validation Set", "Test Set", "Dataset Statistics", "Cohort Characteristics"
