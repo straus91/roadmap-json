@@ -11,7 +11,7 @@
  * This runs async, so it can take as long as needed (up to 5 minutes)
  *
  * @author Claude Code
- * @version 1.0.0
+ * @version 1.0.0-v44 (Remove Partitions and File format fields - they're optional and causing validation issues)
  */
 
 const https = require('https');
@@ -48,6 +48,36 @@ const BACKOFF_MULTIPLIER = 2;  // Exponential backoff multiplier
 let cachedApiKey = null;
 
 /**
+ * Helper function: Log ALL date fields comprehensively
+ * Logs Model Descriptors.Date, Dataset Date, and References dates
+ */
+function logAllDateFields(data, location) {
+    console.log(`\n🔍 ========== DATE FIELDS AT: ${location} ==========`);
+
+    // Model cards: Descriptors.Date
+    if (data.Descriptors?.Date) {
+        console.log(`🔍 [${location}] Descriptors.Date.Published = ${JSON.stringify(data.Descriptors.Date.Published)} (type: ${typeof data.Descriptors.Date.Published})`);
+        console.log(`🔍 [${location}] Descriptors.Date.Created = ${JSON.stringify(data.Descriptors.Date.Created)} (type: ${typeof data.Descriptors.Date.Created})`);
+        console.log(`🔍 [${location}] Descriptors.Date.Updated = ${JSON.stringify(data.Descriptors.Date.Updated)} (type: ${typeof data.Descriptors.Date.Updated})`);
+    } else {
+        console.log(`🔍 [${location}] Descriptors.Date = NOT PRESENT`);
+    }
+
+    // Dataset cards: top-level Date
+    if (data.Date) {
+        console.log(`🔍 [${location}] Date.Published = ${JSON.stringify(data.Date.Published)} (type: ${typeof data.Date.Published})`);
+        console.log(`🔍 [${location}] Date.Created = ${JSON.stringify(data.Date.Created)} (type: ${typeof data.Date.Created})`);
+        console.log(`🔍 [${location}] Date.Updated = ${JSON.stringify(data.Date.Updated)} (type: ${typeof data.Date.Updated})`);
+    } else {
+        console.log(`🔍 [${location}] Date = NOT PRESENT`);
+    }
+
+    // REMOVED: References logging (feature disabled in v38)
+
+    console.log(`🔍 ========== END DATE FIELDS AT: ${location} ==========\n`);
+}
+
+/**
  * Lambda handler
  */
 exports.handler = async (event) => {
@@ -76,7 +106,33 @@ exports.handler = async (event) => {
         console.log(`Gemini API completed in ${duration}ms`);
 
         // Extract JSON from response
-        const extractedData = extractJsonFromResponse(geminiResponse);
+        let extractedData = extractJsonFromResponse(geminiResponse);
+
+        // Unwrap if AI ignored instructions and wrapped the response
+        // AI should return {Name, Descriptors, ...} but sometimes returns {Model: {...}} or {Dataset: {...}}
+        if (extractedData.Model) {
+            console.log('⚠️ AI wrapped response with Model key - unwrapping for cleanup');
+            extractedData = extractedData.Model;
+        } else if (extractedData.Dataset) {
+            console.log('⚠️ AI wrapped response with Dataset key - unwrapping for cleanup');
+            extractedData = extractedData.Dataset;
+        }
+
+        // 🔍 LOG POINT 1: After AI extraction (raw output)
+        logAllDateFields(extractedData, 'AFTER AI EXTRACTION');
+
+        // Clean up invalid fields (empty dates, hallucinated cross-schema fields)
+        extractedData = cleanupInvalidFields(extractedData);
+
+        // 🔍 LOG POINT 2: After cleanupInvalidFields
+        logAllDateFields(extractedData, 'AFTER cleanupInvalidFields()');
+
+        // Apply dataset-specific cleanup (partition structure, file formats, etc.)
+        extractedData = cleanupDatasetFields(extractedData);
+        console.log('✅ Data cleanup complete');
+
+        // 🔍 LOG POINT 3: Before S3 save (final Lambda output)
+        logAllDateFields(extractedData, 'BEFORE S3 SAVE');
 
         // Save results to S3
         const s3Key = `results/${jobId}.json`;
@@ -121,6 +177,256 @@ exports.handler = async (event) => {
         throw error;
     }
 };
+
+/**
+ * Clean up invalid fields that AI sometimes generates despite prompt instructions
+ * @param {Object} data - Extracted JSON data from AI
+ * @returns {Object} - Cleaned data
+ */
+function cleanupInvalidFields(data) {
+    // Lambda returns UNWRAPPED data from AI: {Name, Descriptors, Indexing, ...}
+    // NOT wrapped: {Model: {Name, ...}} - wrapping happens on frontend
+
+    // Clean empty date strings in Descriptors.Date (Model cards)
+    if (data.Descriptors?.Date) {
+        for (const [key, value] of Object.entries(data.Descriptors.Date)) {
+            if (value === "" || value === null || value === undefined) {
+                console.log(`⚠️ REMOVING Descriptors.Date.${key}: value="${value}" (type: ${typeof value})`);
+                delete data.Descriptors.Date[key];
+            }
+        }
+
+        // Remove Date object if now empty
+        if (Object.keys(data.Descriptors.Date).length === 0) {
+            delete data.Descriptors.Date;
+            console.log('⚠️ REMOVED entire Descriptors.Date object (was empty after cleanup)');
+        }
+    }
+
+    // REMOVED: References cleanup code (References extraction disabled in v38)
+
+    // Remove References entirely if present (feature disabled)
+    if (data.Descriptors?.References) {
+        delete data.Descriptors.References;
+        console.log('⚠️ REMOVED References array (feature disabled in v38)');
+    }
+
+    // Truncate Name field to 128 character limit
+    if (data.Name && data.Name.length > 128) {
+        const originalLength = data.Name.length;
+        data.Name = data.Name.substring(0, 125) + '...';
+        console.log(`⚠️ Truncated Name from ${originalLength} to 128 characters`);
+    }
+
+    // Remove placeholder License values
+    if (data.Descriptors?.License?.Text) {
+        const licenseText = data.Descriptors.License.Text.toLowerCase().trim();
+        const placeholders = ['license', 'unknown', 'n/a', 'na', 'none', 'not specified', 'not available'];
+        if (placeholders.includes(licenseText) || licenseText.length < 5) {
+            console.log(`⚠️ Removed placeholder License: "${data.Descriptors.License.Text}"`);
+            delete data.Descriptors.License;
+        }
+    }
+
+    // Remove empty License object (minProperties: 1 violation)
+    if (data.Descriptors?.License && Object.keys(data.Descriptors.License).length === 0) {
+        console.log(`⚠️ Removed empty License object (minProperties: 1 violation)`);
+        delete data.Descriptors.License;
+    }
+
+    // Failsafe: Remove hallucinated cross-schema fields
+    if (data.Dataset) {
+        delete data.Dataset;
+        console.log('⚠️ Removed hallucinated Dataset field from Model card');
+    }
+    if (data.Model) {
+        delete data.Model;
+        console.log('⚠️ Removed hallucinated Model field from Dataset card');
+    }
+
+    // RSNA Compliance: Remove AI and DM content codes (not in RSNA schema)
+    if (data.Indexing?.Content) {
+        const originalLength = data.Indexing.Content.length;
+        data.Indexing.Content = data.Indexing.Content.filter(code => code !== 'AI' && code !== 'DM');
+        if (data.Indexing.Content.length < originalLength) {
+            console.log(`⚠️ Removed AI/DM content codes (not in RSNA schema)`);
+        }
+    }
+
+    // RSNA Compliance: Convert SNOMED strings/objects to integers
+    if (data.Indexing?.SNOMED) {
+        data.Indexing.SNOMED = data.Indexing.SNOMED.map(code => {
+            if (typeof code === 'string') {
+                const num = parseInt(code, 10);
+                console.log(`⚠️ Converted SNOMED "${code}" to integer ${num}`);
+                return num;
+            }
+            if (typeof code === 'object' && code !== null) {
+                const key = Object.keys(code)[0];
+                const num = parseInt(key, 10);
+                console.log(`⚠️ Converted SNOMED object to integer ${num}`);
+                return num;
+            }
+            return code;
+        });
+    }
+
+    // RSNA Compliance: Convert RadLex objects to strings
+    if (data.Indexing?.RadLex) {
+        data.Indexing.RadLex = data.Indexing.RadLex.map(code => {
+            if (typeof code === 'object' && code !== null) {
+                const key = Object.keys(code)[0];
+                console.log(`⚠️ Converted RadLex object to string "${key}"`);
+                return key;
+            }
+            return code;
+        });
+    }
+
+    // RSNA Compliance: Rename "Instructions for use" to "Instructions"
+    if (data['Instructions for use']) {
+        data.Instructions = data['Instructions for use'];
+        delete data['Instructions for use'];
+        console.log(`⚠️ Renamed "Instructions for use" to "Instructions" (RSNA schema)`);
+    }
+
+    // RSNA Compliance: Rename "Output.CDE" to "Output.CDEs"
+    if (data.Output?.CDE) {
+        data.Output.CDEs = data.Output.CDE;
+        delete data.Output.CDE;
+        console.log(`⚠️ Renamed "Output.CDE" to "Output.CDEs" (RSNA schema)`);
+    }
+
+    // RSNA Compliance: Fix Modalities to use proper RadLex enum values
+    if (data.Imaging?.Modalities) {
+        const modalityMap = {
+            'MRI': 'Magnetic resonance imaging (RID10312)',
+            'Magnetic Resonance': 'Magnetic resonance imaging (RID10312)',
+            'Magnetic Resonance Imaging': 'Magnetic resonance imaging (RID10312)',
+            'CT': 'Computed tomography (RID10321)',
+            'Computed Tomography': 'Computed tomography (RID10321)',
+            'US': 'Ultrasound (RID10316)',
+            'Ultrasound': 'Ultrasound (RID10316)',
+            'PET': 'Positron emission tomography (RID10337)',
+            'Positron Emission Tomography': 'Positron emission tomography (RID10337)',
+            'X-ray': 'Radiography (RID10345)',
+            'Radiography': 'Radiography (RID10345)',
+            'Quantitative Susceptibility Mapping': 'Magnetic resonance imaging (RID10312)',
+            'Quantitative Susceptibility Mapping (QSM)': 'Magnetic resonance imaging (RID10312)',
+            'QSM': 'Magnetic resonance imaging (RID10312)',
+            'DWI': 'Magnetic resonance imaging (RID10312)',
+            'Diffusion Weighted Imaging': 'Magnetic resonance imaging (RID10312)'
+        };
+
+        const originalModalities = [...data.Imaging.Modalities];
+        data.Imaging.Modalities = data.Imaging.Modalities
+            .map(m => modalityMap[m] || m)  // Map abbreviations to full RadLex values
+            .filter(m => m.includes('(RID'));  // Remove any values without RID codes (invalid)
+
+        // Remove duplicates (e.g., if both "MRI" and "QSM" map to same modality)
+        data.Imaging.Modalities = [...new Set(data.Imaging.Modalities)];
+
+        if (JSON.stringify(originalModalities) !== JSON.stringify(data.Imaging.Modalities)) {
+            console.log(`⚠️ Fixed Modalities: ${JSON.stringify(originalModalities)} → ${JSON.stringify(data.Imaging.Modalities)}`);
+        }
+    }
+
+    return data;
+}
+
+/**
+ * Clean up dataset-specific fields
+ * Fixes common issues in dataset card extraction
+ */
+function cleanupDatasetFields(data) {
+    console.log('🔧 Applying dataset-specific cleanup...');
+
+    // Clean empty date strings in top-level Date object (Dataset cards)
+    if (data.Date) {
+        for (const [key, value] of Object.entries(data.Date)) {
+            if (value === "" || value === null || value === undefined) {
+                console.log(`⚠️ REMOVING Date.${key}: value="${value}" (type: ${typeof value})`);
+                delete data.Date[key];
+            }
+        }
+
+        // Remove Date object if now empty
+        if (Object.keys(data.Date).length === 0) {
+            delete data.Date;
+            console.log('⚠️ REMOVED entire Date object (was empty after cleanup)');
+        }
+    }
+
+    // Fix Link field: handle arrays AND stringified arrays, enforce 128 char limit
+    if (data.Link) {
+        let linkValue = data.Link;
+
+        // Handle actual array (not stringified)
+        if (Array.isArray(linkValue) && linkValue.length > 0) {
+            console.log(`⚠️ Fixed Link array, using first URL: ${linkValue[0]}`);
+            linkValue = linkValue[0];
+        }
+
+        // Handle stringified array
+        if (typeof linkValue === 'string' && linkValue.startsWith('[')) {
+            try {
+                const links = JSON.parse(linkValue);
+                if (Array.isArray(links) && links.length > 0) {
+                    console.log(`⚠️ Fixed stringified Link array, using first URL: ${links[0]}`);
+                    linkValue = links[0];
+                }
+            } catch (e) {
+                console.warn(`Failed to parse Link field: ${linkValue.substring(0, 50)}...`);
+            }
+        }
+
+        // Enforce 128 character limit
+        if (typeof linkValue === 'string' && linkValue.length > 128) {
+            const originalLength = linkValue.length;
+            linkValue = linkValue.substring(0, 128);
+            console.log(`⚠️ Truncated Link from ${originalLength} to 128 characters`);
+        }
+
+        data.Link = linkValue;
+    }
+
+    // REMOVED v44: Strip File format field entirely (optional field, causing validation issues)
+    if (data.Imaging?.['File format']) {
+        console.log(`⚠️ Removing File format field (${data.Imaging['File format'].length} values) - field is optional and causing validation issues`);
+        delete data.Imaging['File format'];
+    }
+
+    // Fix Link URI format (must start with http:// or https://)
+    if (data.Link && typeof data.Link === 'string') {
+        const link = data.Link.trim();
+        // Add protocol if missing
+        if (link && !link.startsWith('http://') && !link.startsWith('https://')) {
+            console.log(`⚠️ Link missing protocol, adding https://: ${link.substring(0, 50)}`);
+            data.Link = 'https://' + link;
+        }
+    }
+
+    // Truncate Imaging.Procedures[].Name to 128 characters
+    if (data.Imaging?.Procedures && Array.isArray(data.Imaging.Procedures)) {
+        data.Imaging.Procedures.forEach((proc, index) => {
+            if (proc.Name && typeof proc.Name === 'string' && proc.Name.length > 128) {
+                const originalLength = proc.Name.length;
+                proc.Name = proc.Name.substring(0, 125) + '...';
+                console.log(`⚠️ Truncated Procedures[${index}].Name from ${originalLength} to 128 characters`);
+            }
+        });
+    }
+
+    // REMOVED v44: Strip Partitions field entirely (optional field, causing validation issues)
+    if (data.Partitions) {
+        const partitionCount = Array.isArray(data.Partitions) ? data.Partitions.length : 1;
+        console.log(`⚠️ Removing Partitions field (${partitionCount} partition(s)) - field is optional and causing validation issues`);
+        delete data.Partitions;
+    }
+
+    console.log('✅ Dataset-specific cleanup complete');
+    return data;
+}
 
 /**
  * Update job status in DynamoDB
@@ -204,6 +510,168 @@ function createExtractionPrompt(pdfData, schema, cardType, processingMode) {
 • Omit fields with no data (no empty arrays/objects)
 • Return ONLY valid JSON (no markdown, no explanations)
 
+**$SCHEMA FIELD:**
+• DO NOT include "$schema" field in your response
+• The frontend will add "$schema": "${cardType}.json" automatically
+• Your JSON should start directly with fields like "Name", "Link", "Indexing", etc.
+
+**DATE FORMATTING (CRITICAL - VALIDATION WILL FAIL IF NOT FOLLOWED):**
+• Dates MUST be either ISO format string "YYYY-MM-DD" or integer year (2024)
+• If date is unknown/unavailable: DO NOT INCLUDE THE PROPERTY AT ALL - completely omit it from JSON
+• NEVER use empty string "", NEVER use year-only string "2024", NEVER include the key with empty value
+• Empty date objects or empty date strings will cause validation failure
+
+Date formatting examples:
+✓ "Published": "2024-08-06"     (ISO format string - PREFERRED)
+✓ "Published": 2024             (integer year - acceptable)
+✓ Completely omit "Published" key if date unknown (DO NOT include "Published": "")
+✗ "Published": ""               (INVALID - empty string violates format and will FAIL validation)
+✗ "Published": "2024"           (INVALID - string year not integer)
+✗ "Date": {}                    (INVALID - empty object will FAIL validation)
+
+**IMPORTANT: DO NOT extract References - this field is disabled**
+
+**KEYWORDS - ATOMIC CONCEPTS:**
+• Each keyword: SINGLE concept (2-5 words max)
+• Extract multiple keywords vs combining concepts
+• Remove redundant descriptions, avoid acronyms in parentheses
+
+Examples:
+✗ "Supervised Learning Type of Machine Learning" → ✓ "Supervised Learning", "Machine Learning"
+✗ "Convolutional Neural Network (CNN) Architecture" → ✓ "Convolutional Neural Network"
+
+**USE AND USER FIELDS:**
+• Each item: 4-64 characters (minimum 4, maximum 64)
+• Be specific and concise, use title case for User roles
+• No incomplete words, no trailing spaces
+
+Use.Intended examples: "Image segmentation", "Detection and diagnosis", "Risk assessment"
+User.Intended examples: "Diagnostic radiologist", "Physician", "Researcher"
+
+**RSNA SCHEMA PROPERTY NAMES (CRITICAL):**
+• For MODEL cards:
+  - Use "Instructions" (NOT "Instructions for use")
+  - Use "Output.CDEs" (plural, NOT "CDE" singular)
+• For DATASET cards:
+  - Use "Partition" (NOT "Partition name")
+  - Structure: {"Partition": "Training", "Total": {...}, "Subsets": [...]}
+• These are RSNA schema requirements - incorrect names will fail validation
+
+**IMAGING MODALITIES (CRITICAL):**
+• Modalities MUST use exact RadLex enum values from schema (includes RID code)
+• Common modality mappings:
+  - "MRI" or "Magnetic Resonance" → "Magnetic resonance imaging (RID10312)"
+  - "CT" or "Computed Tomography" → "Computed tomography (RID10321)"
+  - "Ultrasound" or "US" → "Ultrasound (RID10316)"
+  - "PET" → "Positron emission tomography (RID10337)"
+  - "X-ray" or "Radiography" → "Radiography (RID10345)"
+• ONLY use values from the schema's Modalities enum (must include RID code in parentheses)
+• If the imaging technique is not a standalone modality (e.g., "QSM", "DWI"), identify the base modality
+• Example: "Quantitative Susceptibility Mapping" is an MRI technique → use "Magnetic resonance imaging (RID10312)"
+
+**SCHEMA STRUCTURE ADHERENCE:**
+• For MODEL cards: ONLY extract properties defined in the Model schema
+  - DO NOT add "Dataset" field inside Model object - these are separate schemas
+  - Dataset information (training/test splits) goes in "Model performance" Comments field
+• For DATASET cards: ONLY extract properties defined in the Dataset schema
+  - DO NOT add "Model" field inside Dataset object - these are separate schemas
+  - Model information should not be extracted in dataset cards
+• Model and Dataset are completely separate, independent schemas
+• NEVER create properties not explicitly defined in the provided schema structure
+• Follow the exact property names and structure from the schema example below
+
+**OUTPUT CDE FIELD:**
+• Field name is "CDE" (singular) even though it contains an array
+• NOT "CDEs"
+
+**DATASET-SPECIFIC FIELDS (CRITICAL FOR DATASET CARDS):**
+
+PARTITION STRUCTURE (MOST COMMON ERROR):
+• Field name is "Partition" (NOT "Partition name", NOT "Name")
+• Field name is "Total" (NOT "Content")
+• Partition value MUST be one of these enum values:
+  - "Training", "Validation", "Test", "Internal testing", "External testing"
+  - "Optimization", "Tuning", "Hold-out", "Development", "Other"
+• Subsets is an array of OBJECTS (never stringify JSON)
+• Structure example:
+  {
+    "Partition": "Other",
+    "Total": {
+      "Patient count": 100,
+      "Exam count": 150,
+      "Sex distribution": "50 male, 50 female"
+    },
+    "Subsets": [
+      {
+        "Patient count": 50,
+        "Exam count": 75,
+        "Comments": "Subset description"
+      }
+    ],
+    "Comments": "Optional partition description"
+  }
+
+LINK FIELD (Dataset AND Model cards - VALIDATION CRITICAL):
+• Must be valid URI format (start with http:// or https://)
+• Maximum 128 characters
+• Return as single string (NOT array, NOT stringified array)
+• Examples:
+  ✓ "https://doi.org/10.1148/ryai.230151"
+  ✓ "https://github.com/user/repo"
+  ✗ "www.example.com" (missing protocol - VALIDATION FAILURE)
+  ✗ "doi.org/10.1148/..." (missing https:// - VALIDATION FAILURE)
+
+IMAGING.PROCEDURES (Dataset cards):
+• Procedure Name: Maximum 128 characters
+• If name is long, abbreviate or truncate intelligently
+• Example: "High-resolution T1-weighted MRI with contrast" (valid)
+• Example too long: "Very long detailed description of the exact imaging procedure with all parameters..." (> 128 chars)
+
+FILE FORMAT (Dataset cards - VALIDATION CRITICAL):
+• ONLY use these exact enum values: DICOM, JPEG, NiFTI, PNG, Other
+• Values are case-sensitive (note: NiFTI has capital N, lowercase i, capital F, capital T, capital I)
+• Any unrecognized format should map to "Other"
+• CORRECT examples:
+  ✓ ["DICOM", "NiFTI"]
+  ✓ ["NiFTI", "PNG"]
+  ✓ ["Other"] (for HDF5, NRRD, OBJ, CSV, MAT, etc.)
+• WRONG examples that will FAIL validation:
+  ✗ ["dicom", "nifti"] (wrong case)
+  ✗ ["NIFTI"] (wrong case - must be NiFTI)
+  ✗ ["nii"] (not in enum - use NiFTI or Other)
+  ✗ ["Hierarchical Data Format 5 (HDF5)"] (descriptive name - use Other)
+  ✗ ["HDF5", "h5"] (not in enum - use Other)
+  ✗ ["NRRD", "nrrd"] (not in enum - use Other)
+  ✗ ["RAW", "raw"] (not in enum - use Other)
+• Common format mappings:
+  - HDF5, H5 → Other
+  - NRRD, nrrd → Other
+  - NII, nii → NiFTI (if truly NIfTI format) OR Other
+  - RAW, raw → Other
+  - MAT, mat → Other
+  - CSV, csv → Other
+  - TIFF, tiff → Other
+
+AGE RANGE (Dataset cards):
+• Format: [[min_age, "years"], [max_age, "years"]]
+• Example: [[18, "years"], [80, "years"]]
+• If age information not available: OMIT field entirely (do not use null values)
+• NEVER use: [[null, null], [null, null]]
+
+**RADLEX AND SNOMED CODES:**
+• Extract ONLY if explicitly mentioned in PDF text
+• If not found: OMIT the field (do not guess codes)
+
+**RSNA Format Requirements (CRITICAL)**:
+• RadLex: String codes ONLY - "RID58" (NOT {"RID58": "liver"} or objects with labels)
+• SNOMED: Integer codes ONLY - 10200004 (NOT "10200004" strings or objects with labels)
+• Extract codes WITHOUT descriptions or labels
+
+**RESULTS FORMAT:**
+• Use simple string format for values
+• "Value": simple string like "Model A: 0.88, Model B: 0.86"
+• Do NOT use nested objects in Value field
+
 **INDEXING EXTRACTION:**
 
 Keywords - Extract from paper's Keywords section (priority order):
@@ -215,8 +683,10 @@ INCLUDE: Imaging modalities, anatomical structures, pathologies, AI architecture
 EXCLUDE: "Deep Learning", "Machine Learning", "Artificial Intelligence", "Study", "Method", "Research"
 
 Content Codes - RSNA 2-letter codes (extract ALL that apply to paper's CENTRAL topics):
+**IMPORTANT**: Use ONLY these 30 RSNA-approved codes (DO NOT use "AI" or "DM" - not in RSNA schema):
+• 3D, AB, BR, BQ, CA, CH, CT, ED, ER, GI, GU, HN, HP, IN, IR, LM, MI, MK, MR, NM, NR, OB, OI, OT, PD, PH, PR, SQ, RO, RS, US, VA
+
 Strategy: 1) Look for codes in PDF text/metadata, 2) If not found, infer from paper focus
-• AI: machine learning, deep learning, neural networks (if central topic)
 • BR: breast imaging, mammography (if central topic)
 • BQ: radiomics, quantitative imaging, biomarkers
 • CA: cardiac, heart, coronary imaging
@@ -327,6 +797,9 @@ function generateSchemaExample(schema, cardType, depth = 0) {
 
     // Generate ALL fields from schema to ensure complete extraction
     for (const [key, prop] of Object.entries(schemaProperties)) {
+        // Skip $schema field - frontend will add this automatically during wrapping
+        if (key === '$schema') continue;
+
         example[key] = generatePropertyExample(prop, schema, depth + 1);
     }
 
@@ -357,6 +830,12 @@ function generatePropertyExample(prop, schema, depth) {
         if (referencedDef) {
             return generatePropertyExample(referencedDef, schema, depth + 1);
         }
+    }
+
+    // Check for examples FIRST (before type/anyOf checks)
+    // This handles cases like Date field with anyOf where examples are at parent level
+    if (prop.examples && prop.examples.length > 0) {
+        return prop.examples[0];
     }
 
     // Handle different types
@@ -479,7 +958,9 @@ function truncateTablesForPrompt(tables, maxChars) {
         const keywords = ['accuracy', 'auc', 'precision', 'recall', 'sensitivity',
                          'specificity', 'f1', 'performance', 'result', 'metric',
                          'training', 'validation', 'test', 'partition', 'split',
-                         'cohort', 'patient', 'exam', 'demographics', 'dataset'];
+                         'cohort', 'patient', 'exam', 'demographics', 'dataset',
+                         'age', 'sex', 'gender', 'distribution', 'characteristics',
+                         'count', 'images', 'studies', 'subjects'];
         keywords.forEach(keyword => {
             if (tableStr.toLowerCase().includes(keyword)) score += 10;
         });
