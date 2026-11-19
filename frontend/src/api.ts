@@ -18,6 +18,7 @@ export interface Health {
   max_upload_mb: number
   max_pdf_pages: number
   embed_origins?: string[] // sites that may show this app in a frame and receive a finished card
+  embed_name?: string // what the send button calls such a site, e.g. "ATLAS"
   schemas: Record<CardType, { source: string; url: string; checked_at: string | null }>
   budget: {
     paused: boolean

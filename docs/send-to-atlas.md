@@ -24,7 +24,7 @@ involved, and V2 never talks to the ATLAS back end.
 
 1. Point the frame at V2 (for example `https://card-creator.pedsrad.org/`, or wherever RSNA
    hosts it). Keep `allow-scripts allow-same-origin allow-forms allow-popups allow-downloads` in
-   the frame's `sandbox`.
+   the frame's `sandbox`. V2 opens no pop-up questions, so `allow-modals` is not needed.
 2. Add a listener on the Creator page:
 
 ```js
@@ -52,7 +52,21 @@ window.addEventListener('message', async (event) => {
 
 3. Tell whoever runs V2 the address of the ATLAS site, so it can be listed in V2's
    `EMBED_ORIGINS` setting (default: `https://atlas.rsna.org`). V2 only shows the button, and
-   only hands a card over, when the page around it is on that list.
+   only hands a card over, when the page around it is on that list. V2 also tells browsers,
+   with a `Content-Security-Policy: frame-ancestors` header, to refuse to show it in a frame on
+   any site that is not on the list.
+
+Optional: ATLAS can also ask V2 to open an existing card for editing, for example from an
+"Edit" button on a card's page:
+
+```js
+frame.contentWindow.postMessage(
+  { source: 'atlas', type: 'open-card', version: 1, title: 'MRSegmentator', card },
+  CREATOR,
+)
+```
+
+Send it after V2 has said it is ready (the `ready` message below).
 
 ## The messages
 
@@ -64,12 +78,24 @@ All are plain JSON objects.
 | V2 → ATLAS | `{ source: 'roadmap-card-creator', type: 'card', version: 1, id, cardType, description, fileName, card }` |
 | ATLAS → V2 | `{ source: 'atlas', type: 'card-received', id }` |
 | ATLAS → V2 | `{ source: 'atlas', type: 'card-rejected', id, reason }` |
+| ATLAS → V2 | `{ source: 'atlas', type: 'open-card', version: 1, card, title }` (optional: open this card for editing) |
 
 If ATLAS does not answer within 8 seconds, V2 tells the person the card was not confirmed and
 suggests downloading it and uploading it the usual way.
 
+## Where this lives in V2
+
+Everything about the feature is in one folder, `frontend/src/send/`: `protocol.ts` (the
+messages) and `useSendToHost.tsx` (the button and its description step). The editor only places
+the button. Two settings control it: `EMBED_ORIGINS` (who may frame V2 and receive cards) and
+`EMBED_NAME` (what the button calls that site; default "ATLAS").
+
 ## Trying it without ATLAS
 
-`/atlas-standin.html` on any V2 site is a plain page that plays ATLAS's part: it shows V2 in a
-frame, receives the card and displays what it got. It saves nothing. The script at the bottom of
-that page (`frontend/public/atlas-standin.html`) is a complete working example of the listener.
+- `/atlas-standin.html` on any V2 site is a plain page that plays ATLAS's part: it shows V2 in a
+  frame, receives the card and displays what it got. It saves nothing. The script at the bottom
+  of that page (`frontend/public/atlas-standin.html`) is a complete working example of the
+  listener.
+- [ATLAS V2](https://github.com/straus91/atlas-v2), a separate project, is a fuller example: a
+  site with its own Browse and Overview pages that frames V2 on its Creator page, receives
+  cards from it and sends cards to it for editing (`frontend/src/host.ts` there).

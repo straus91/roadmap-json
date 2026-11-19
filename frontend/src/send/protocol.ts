@@ -1,18 +1,23 @@
-// "Send to ATLAS": handing a finished card to the page this app is shown inside.
+// Talking to the page this app is shown inside (a "host", such as ATLAS).
 //
-// ATLAS shows its card creator inside a frame on its own Creator page. When this app is the
-// one in that frame, it can pass the finished card (and the short description ATLAS asks for)
-// to the ATLAS page around it, where the person is already signed in. No password or key is
-// involved, and the card is only ever handed to a site on the server's EMBED_ORIGINS list.
+// A host shows the card creator in a frame. The two exchange plain JSON messages with
+// window.postMessage, and this app only ever talks to a host on the server's EMBED_ORIGINS list.
+// No password, token or API key is involved: the person is signed in to the host, not here.
 //
-// The messages (window.postMessage), all plain JSON:
 //   this app -> host   { source: 'roadmap-card-creator', type: 'ready', version: 1 }
 //   this app -> host   { source: 'roadmap-card-creator', type: 'card', version: 1, id,
 //                        cardType: 'dataset' | 'model', description, fileName, card }
 //   host -> this app   { source: 'atlas', type: 'card-received', id }          (it has the card)
 //   host -> this app   { source: 'atlas', type: 'card-rejected', id, reason }  (it could not take it)
+//   host -> this app   { source: 'atlas', type: 'open-card', version: 1, card, title? }
+//                                                                    (open this card for editing)
+//
+// Everything about this feature lives in this folder. The rest of the app only calls
+// `useSendToHost` (the button and its step) and `listenForCards` (cards the host asks to open).
 
 export const MAX_DESCRIPTION = 2000 // ATLAS's own limit for a card's description
+const SELF = 'roadmap-card-creator'
+const HOST = 'atlas'
 
 /** The site this app is shown inside, if it is one that may receive cards; otherwise null. */
 export function hostPage(allowed: string[]): string | null {
@@ -27,8 +32,9 @@ export function hostPage(allowed: string[]): string | null {
   return allowed.includes(origin) || origin === window.location.origin ? origin : null
 }
 
+/** Tell the host this app has loaded and can take messages. */
 export function announce(host: string) {
-  window.parent.postMessage({ source: 'roadmap-card-creator', type: 'ready', version: 1 }, host)
+  window.parent.postMessage({ source: SELF, type: 'ready', version: 1 }, host)
 }
 
 export interface Handover {
@@ -39,7 +45,7 @@ export interface Handover {
 }
 
 /** Hand the card over and wait for the host to say it has it. Rejects with a sentence to show. */
-export function sendCard(host: string, handover: Handover, waitMs = 8000): Promise<void> {
+export function sendCard(host: string, hostName: string, handover: Handover, waitMs = 8000): Promise<void> {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
   return new Promise((resolve, reject) => {
     const finish = (error?: Error) => {
@@ -50,20 +56,34 @@ export function sendCard(host: string, handover: Handover, waitMs = 8000): Promi
     }
     const listen = (event: MessageEvent) => {
       const data = event.data as { source?: string; type?: string; id?: string; reason?: string } | null
-      if (event.origin !== host || !data || data.source !== 'atlas' || data.id !== id) return
+      if (event.origin !== host || !data || data.source !== HOST || data.id !== id) return
       if (data.type === 'card-received') finish()
-      if (data.type === 'card-rejected') finish(new Error(data.reason ? `ATLAS did not accept the card: ${data.reason}` : 'ATLAS did not accept the card.'))
+      if (data.type === 'card-rejected')
+        finish(new Error(data.reason ? `${hostName} did not accept the card: ${data.reason}` : `${hostName} did not accept the card.`))
     }
     const timer = setTimeout(
-      () => finish(new Error('ATLAS did not confirm that it received the card. Download the card and upload it there instead.')),
+      () => finish(new Error(`${hostName} did not confirm that it received the card. Download the card and upload it there instead.`)),
       waitMs,
     )
     window.addEventListener('message', listen)
-    window.parent.postMessage({ source: 'roadmap-card-creator', type: 'card', version: 1, id, ...handover }, host)
+    window.parent.postMessage({ source: SELF, type: 'card', version: 1, id, ...handover }, host)
   })
 }
 
-/** A first draft of the description ATLAS shows in its list, taken from the card's own text. */
+/** Cards the host asks this app to open for editing. Returns the function that stops listening. */
+export function listenForCards(host: string, open: (card: Record<string, unknown>, title: string) => void): () => void {
+  const listen = (event: MessageEvent) => {
+    const data = event.data as { source?: string; type?: string; card?: unknown; title?: unknown } | null
+    if (event.origin !== host || event.source !== window.parent || !data || data.source !== HOST || data.type !== 'open-card') return
+    const card = data.card
+    if (card === null || typeof card !== 'object' || Array.isArray(card)) return
+    open(card as Record<string, unknown>, typeof data.title === 'string' ? data.title : 'card')
+  }
+  window.addEventListener('message', listen)
+  return () => window.removeEventListener('message', listen)
+}
+
+/** A first draft of the description the host shows in its list, taken from the card's own text. */
 export function suggestDescription(body: unknown): string {
   const record = (body ?? {}) as Record<string, Record<string, unknown> | undefined>
   const candidates = [

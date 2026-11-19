@@ -48,7 +48,6 @@ body { margin: 0; background: var(--bg); }
 
 .page { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
 .page.wide { max-width: 1500px; }
-.page.mid { max-width: 1280px; }
 
 header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 h1 { font-size: 1.5rem; margin: 0; }
@@ -230,3 +229,9 @@ tr.details-row .table-wrap { background: var(--panel); }
 .saved-as { margin-top: 10px; }
 .saved-as summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
 .saved-as pre { margin: 8px 0 0; padding: 10px; background: var(--sunken); border: 1px solid var(--line); border-radius: 6px; font-size: 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* send to a host site (shown only when the app is inside one) */
+.send-dialog { margin: 8px 0; }
+.send-dialog textarea { min-height: 96px; }
+.send-dialog .row { margin-top: 10px; }
+.count-note { text-align: right; font-size: 0.8rem; color: var(--muted); }

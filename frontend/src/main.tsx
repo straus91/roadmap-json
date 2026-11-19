@@ -2,7 +2,6 @@ import { Component, StrictMode } from 'react'
 import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import './library.css'
 import App from './App.tsx'
 
 /** If something unexpected breaks, say so and keep the work, instead of a blank page. */

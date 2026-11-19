@@ -273,3 +273,10 @@ def test_job_limit_protects_the_server(client, monkeypatch):
     monkeypatch.setattr(main, "_jobs", {str(n): {"status": "running", "created": 9e12} for n in range(main.MAX_JOBS_AT_ONCE)})
     busy = api.post("/api/jobs", data={"card_type": "dataset", "text": "A paper."})
     assert busy.status_code == 429 and "busy" in busy.json()["detail"]
+
+
+def test_only_listed_sites_may_show_the_app_in_a_frame():
+    client = TestClient(main.app)
+    health = client.get("/api/health")
+    assert health.json()["embed_origins"] == ["https://atlas.rsna.org"] and health.json()["embed_name"] == "ATLAS"
+    assert health.headers["content-security-policy"] == "frame-ancestors 'self' https://atlas.rsna.org"

@@ -97,7 +97,9 @@ BEFORE=""; for site in $SITES; do BEFORE="$BEFORE $site=$(probe "$site")"; done
 echo "    sites served now:$BEFORE"
 
 NEW_FRONT="$(sed "s/__CARDS_HOST__/$HOST/" "$APP_DIR/deploy/casedeck/Caddyfile.front")"
-if [ -f "$FRONT" ] && [ -f "$OVERRIDE" ] && [ "$(cat "$FRONT")" = "$NEW_FRONT" ] \
+# "Already there" means the front file has this site's block; other projects (ATLAS V2) may have
+# appended blocks of their own after it, which must be left alone.
+if [ -f "$FRONT" ] && [ -f "$OVERRIDE" ] && grep -q "^$HOST {" "$FRONT" && grep -q 'reverse_proxy card-creator:8000' "$FRONT" \
    && cmp -s "$OVERRIDE" "$APP_DIR/deploy/casedeck/docker-compose.override.yml" \
    && docker inspect "$CADDY" --format '{{json .NetworkSettings.Networks}}' | grep -q "$NETWORK"; then
     say "Caddy already serves $HOST; nothing to change there"

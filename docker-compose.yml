@@ -27,8 +27,8 @@ services:
       PRICE_INPUT_PER_MTOK: ${PRICE_INPUT_PER_MTOK:-}
       PRICE_OUTPUT_PER_MTOK: ${PRICE_OUTPUT_PER_MTOK:-}
       SCHEMA_SYNC_HOURS: ${SCHEMA_SYNC_HOURS:-24}
-      LIBRARY_SYNC_HOURS: ${LIBRARY_SYNC_HOURS:-24}
       EMBED_ORIGINS: ${EMBED_ORIGINS:-https://atlas.rsna.org}
+      EMBED_NAME: ${EMBED_NAME:-ATLAS}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
     volumes:
       - roadmap-data:/data   # spending ledger + latest ATLAS schema; survives restarts

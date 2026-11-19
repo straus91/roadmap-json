@@ -45,8 +45,8 @@ class Settings:
     price_per_mtok: tuple[float, float]
     price_is_known: bool
     schema_sync_hours: float
-    library_sync_hours: float
     embed_origins: tuple[str, ...]
+    embed_name: str
     data_dir: Path
     cors_origins: tuple[str, ...]
     static_dir: Path
@@ -87,9 +87,9 @@ def load_settings() -> Settings:
         price_per_mtok=price,
         price_is_known=known,
         schema_sync_hours=float(_env("SCHEMA_SYNC_HOURS", "24")),
-        library_sync_hours=float(_env("LIBRARY_SYNC_HOURS", "24")),
         embed_origins=tuple(o.strip().rstrip("/") for o in _env("EMBED_ORIGINS", "https://atlas.rsna.org").split(",")
                             if o.strip()),
+        embed_name=_env("EMBED_NAME", "ATLAS"),
         data_dir=Path(_env("DATA_DIR") or Path(tempfile.gettempdir()) / "roadmap-cards"),
         cors_origins=tuple(o.strip() for o in _env("CORS_ORIGINS").split(",") if o.strip()),
         static_dir=Path(_env("STATIC_DIR", "/app/static")),
