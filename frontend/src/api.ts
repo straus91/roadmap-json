@@ -61,27 +61,77 @@ async function readJson<T>(response: Response): Promise<T> {
   throw new Error(detail)
 }
 
+const UNREACHABLE = 'Could not reach the server. Check your internet connection and try again.'
+
+/** fetch, but a dropped connection becomes a sentence a person can act on ("Failed to fetch" is not one). */
+async function request(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init)
+  } catch (error) {
+    if (init?.signal?.aborted) throw error
+    throw new Error(UNREACHABLE)
+  }
+}
+
 export async function getHealth(): Promise<Health> {
-  return readJson<Health>(await fetch('/api/health'))
+  return readJson<Health>(await request('/api/health'))
 }
 
 export async function getSchema(cardType: CardType): Promise<object> {
-  return readJson<object>(await fetch(`/api/schemas/${cardType}`))
+  return readJson<object>(await request(`/api/schemas/${cardType}`))
 }
 
-export async function extractCard(
-  cardType: CardType,
-  file: File,
-  signal: AbortSignal,
-): Promise<Extraction> {
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms)
+    signal.addEventListener('abort', () => {
+      clearTimeout(timer)
+      reject(new DOMException('Cancelled', 'AbortError'))
+    }, { once: true })
+  })
+}
+
+interface Job {
+  status: 'running' | 'done' | 'failed'
+  result?: Extraction
+  detail?: string
+}
+
+/**
+ * Hand a paper to the server. It answers at once with a ticket; the reading itself happens
+ * there and is collected with `waitForCard`. Holding one request open for a minute does not
+ * survive a phone locking its screen or changing network, and this does.
+ */
+export async function sendPaper(cardType: CardType, file: File, signal: AbortSignal): Promise<string> {
   const form = new FormData()
   form.append('card_type', cardType)
   form.append('file', file)
-  return readJson<Extraction>(await fetch('/api/extract', { method: 'POST', body: form, signal }))
+  const started = await readJson<{ job_id: string }>(await request('/api/jobs', { method: 'POST', body: form, signal }))
+  return started.job_id
+}
+
+/** Ask for the card every two seconds until it is ready. Short losses of connection are ridden out. */
+export async function waitForCard(jobId: string, signal: AbortSignal): Promise<Extraction> {
+  let missed = 0
+  for (;;) {
+    await pause(2000, signal)
+    let response: Response
+    try {
+      response = await fetch(`/api/jobs/${jobId}`, { signal })
+    } catch (error) {
+      if (signal.aborted) throw error
+      if (++missed > 60) throw new Error('The connection to the server was lost for too long. Check your internet connection and try again.')
+      continue // offline for a moment: the paper is still being read, keep asking
+    }
+    missed = 0
+    const job = await readJson<Job>(response)
+    if (job.status === 'done' && job.result) return job.result
+    if (job.status === 'failed') throw new Error(job.detail ?? 'The paper could not be read. Please try again.')
+  }
 }
 
 function postJson(path: string, body: unknown): Promise<Response> {
-  return fetch(path, {
+  return request(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

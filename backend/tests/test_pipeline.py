@@ -228,3 +228,48 @@ def test_line_breaks_inside_text_survive_normalisation():
     card, warnings = normalize(raw, "model")
     assert card["Model"]["Model performance"]["Comments"] == text and warnings == []
     assert validate(card, "model") == []
+
+
+# ------------------------------------------------------------------ reading as a job
+def _wait(api, job_id, tries=200):
+    import time
+    for _ in range(tries):
+        job = api.get(f"/api/jobs/{job_id}").json()
+        if job["status"] != "running":
+            return job
+        time.sleep(0.01)
+    raise AssertionError("job never finished")
+
+
+def test_job_answers_at_once_and_the_card_is_collected_later(client):
+    api = client(json.dumps(GOOD))
+    started = api.post("/api/jobs", data={"card_type": "dataset"},
+                       files={"file": ("paper.pdf", make_pdf(), "application/pdf")})
+    assert started.status_code == 202 and started.json()["status"] == "running"
+    job = _wait(api, started.json()["job_id"])
+    assert job["status"] == "done" and job["result"]["card"] == GOOD and job["result"]["valid"]
+    assert api.get(f"/api/jobs/{started.json()['job_id']}").json()["status"] == "done"   # still there after a reload
+
+
+def test_job_refuses_bad_input_before_starting_and_reports_failures(client, monkeypatch):
+    api = client()
+    not_pdf = api.post("/api/jobs", data={"card_type": "dataset"},
+                       files={"file": ("notes.txt", b"plain text", "text/plain")})
+    assert not_pdf.status_code == 415 and "not a PDF" in not_pdf.json()["detail"]
+    assert api.post("/api/jobs", data={"card_type": "dataset"}).status_code == 400
+    assert api.get("/api/jobs/doesnotexist").status_code == 404
+
+    class Broken(FakeProvider):
+        def complete(self, system, user, pdf=None):
+            raise ProviderError("Gemini is rate-limiting this key. Wait a minute and try again.", status=429)
+    monkeypatch.setattr(main, "_provider", Broken())
+    started = api.post("/api/jobs", data={"card_type": "dataset", "text": "A paper."})
+    job = _wait(api, started.json()["job_id"])
+    assert job == {"status": "failed", "detail": "Gemini is rate-limiting this key. Wait a minute and try again."}
+
+
+def test_job_limit_protects_the_server(client, monkeypatch):
+    api = client()
+    monkeypatch.setattr(main, "_jobs", {str(n): {"status": "running", "created": 9e12} for n in range(main.MAX_JOBS_AT_ONCE)})
+    busy = api.post("/api/jobs", data={"card_type": "dataset", "text": "A paper."})
+    assert busy.status_code == 429 and "busy" in busy.json()["detail"]

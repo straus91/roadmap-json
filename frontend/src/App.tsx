@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
-import { extractCard, getHealth } from './api.ts'
+import { getHealth, sendPaper, waitForCard } from './api.ts'
 import type { CardType, Extraction, Health } from './api.ts'
 import Editor from './Editor.tsx'
 import { rootKey } from './schema.ts'
@@ -26,6 +26,35 @@ interface Draft {
   savedAt: string
 }
 
+// A paper that is being read on the server. Remembered in the browser so that a reloaded page,
+// or a phone that put the page to sleep, picks the card up instead of losing it.
+const JOB_KEY = 'roadmap-card-job'
+
+interface Pending {
+  jobId: string
+  cardType: CardType
+  name: string
+  startedAt: number
+}
+
+function readPending(): Pending | null {
+  try {
+    const pending = JSON.parse(localStorage.getItem(JOB_KEY) ?? 'null') as Pending | null
+    return pending && pending.jobId && Date.now() - pending.startedAt < 25 * 60 * 1000 ? pending : null
+  } catch {
+    return null
+  }
+}
+
+function storePending(pending: Pending | null) {
+  try {
+    if (pending) localStorage.setItem(JOB_KEY, JSON.stringify(pending))
+    else localStorage.removeItem(JOB_KEY)
+  } catch {
+    // private window: the paper is still read, it just cannot be picked up after a reload
+  }
+}
+
 function readDraft(): Draft | null {
   try {
     const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as Draft | null
@@ -44,7 +73,8 @@ export default function App() {
   const [loaded, setLoaded] = useState<{ cardType: CardType; schema: Schema } | null>(null)
   const [file, setFile] = useState<File | null>(null) // the PDF, once chosen
   const [dragging, setDragging] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [reading, setReading] = useState<{ name: string; startedAt: number } | null>(null) // a paper being read
+  const busy = reading !== null
   const [seconds, setSeconds] = useState(0)
   const [failure, setFailure] = useState<string | null>(null)
   const [askBlank, setAskBlank] = useState(false)
@@ -74,11 +104,12 @@ export default function App() {
   }, [cardType])
 
   useEffect(() => {
-    if (!busy) return
-    const started = Date.now()
-    const timer = setInterval(() => setSeconds(Math.round((Date.now() - started) / 1000)), 1000)
+    if (!reading) return
+    const tick = () => setSeconds(Math.round((Date.now() - reading.startedAt) / 1000))
+    tick()
+    const timer = setInterval(tick, 1000)
     return () => clearInterval(timer)
-  }, [busy])
+  }, [reading])
 
   // Keep the card in this browser so a refresh or a closed tab does not lose the work.
   useEffect(() => {
@@ -146,24 +177,59 @@ export default function App() {
     if (!busy) choose(event.dataTransfer.files[0])
   }
 
+  /** Wait for a paper the server is reading, then open its card. */
+  async function follow(pending: Pending, controller: AbortController) {
+    setReading({ name: pending.name, startedAt: pending.startedAt })
+    setFailure(null)
+    try {
+      const result = await waitForCard(pending.jobId, controller.signal)
+      storePending(null)
+      open(pending.cardType, (result.card[rootKey(pending.cardType)] as Json) ?? {}, pending.name, result)
+      refreshHealth()
+    } catch (error) {
+      if (controller.signal.aborted) return // cancelled by the person, or the page is going away
+      storePending(null)
+      setFailure((error as Error).message)
+    } finally {
+      if (request.current === controller) setReading(null)
+    }
+  }
+
   async function create(kind: CardType) {
     if (!file) return
     const controller = new AbortController()
     request.current = controller
+    const pending = { jobId: '', cardType: kind, name: file.name.replace(/\.pdf$/i, ''), startedAt: Date.now() }
     setCardType(kind)
-    setBusy(true)
-    setSeconds(0)
+    setReading({ name: pending.name, startedAt: pending.startedAt })
     setFailure(null)
     try {
-      const result = await extractCard(kind, file, controller.signal)
-      open(kind, (result.card[rootKey(kind)] as Json) ?? {}, file.name.replace(/\.pdf$/i, ''), result)
-      refreshHealth()
+      pending.jobId = await sendPaper(kind, file, controller.signal)
     } catch (error) {
       if (!controller.signal.aborted) setFailure((error as Error).message)
-    } finally {
-      setBusy(false)
+      setReading(null)
+      return
     }
+    storePending(pending)
+    await follow(pending, controller)
   }
+
+  const cancel = () => {
+    storePending(null)
+    request.current?.abort()
+    setReading(null)
+  }
+
+  // A paper was still being read when this page was last open (reload, or a phone that put
+  // the page to sleep): pick it up again.
+  useEffect(() => {
+    const pending = readPending()
+    if (!pending) return
+    const controller = new AbortController()
+    request.current = controller
+    void follow(pending, controller)
+    return () => controller.abort()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const startOver = () => {
     if (!window.confirm('Leave this card? It stays saved in this browser until you start another one.')) return
@@ -226,17 +292,20 @@ export default function App() {
             }}
             onDragLeave={() => setDragging(false)} onDrop={onDrop}>
             <h2>Create a card from a paper</h2>
-            {!file ? (
+            {reading ? (
+              <div className="step">
+                <p><strong>Reading {reading.name}…</strong></p>
+                <p className="muted" aria-live="polite">{seconds}s · usually takes less than 2 minutes</p>
+                <p className="muted">
+                  You can switch to another app or lock your screen in the meantime. The card will be here when you come back.
+                </p>
+                <button type="button" onClick={cancel}>Cancel</button>
+              </div>
+            ) : !file ? (
               <button type="button" className="drop" onClick={() => pdfInput.current?.click()}>
                 <strong>Drop the paper's PDF here</strong> or click to choose it
                 <span className="muted block">The paper is read for you and the card is filled in. You review and edit it afterwards.</span>
               </button>
-            ) : busy ? (
-              <div className="step">
-                <p><strong>Reading {file.name}…</strong></p>
-                <p className="muted" aria-live="polite">{seconds}s · usually takes less than 2 minutes</p>
-                <button type="button" onClick={() => request.current?.abort()}>Cancel</button>
-              </div>
             ) : (
               <div className="step">
                 <p>
