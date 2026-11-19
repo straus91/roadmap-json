@@ -205,7 +205,7 @@ export default function App() {
           {busy && (
             <>
               <span className="muted" aria-live="polite">
-                {seconds}s · usually takes one to three minutes
+                {seconds}s · usually takes less than a minute
               </span>
               <button onClick={() => request.current?.abort()}>Cancel</button>
             </>
