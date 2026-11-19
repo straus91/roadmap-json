@@ -320,15 +320,20 @@ def find_body(raw: Any, card_type: str) -> dict[str, Any]:
     return {k: v for k, v in raw.items() if k != "$schema"}
 
 
-def normalize(raw: Any, card_type: str) -> tuple[dict[str, Any], list[str]]:
-    """Return (card, warnings). The card's root is always exactly {"$schema", <Root>}."""
+def normalize(raw: Any, card_type: str, *, from_model: bool = False) -> tuple[dict[str, Any], list[str]]:
+    """Return (card, warnings). The card's root is always exactly {"$schema", <Root>}.
+
+    `from_model` is for a card a language model has just written: only then are index codes
+    that merely repeat the schema's examples removed. A card a person wrote or edited keeps
+    its codes (RID58 is a schema example and also the right code for a liver dataset)."""
     schema = load_schema(card_type)
     root = root_key(card_type)
     walker = _Normalizer(schema)
     body = walker.fit(find_body(raw, card_type), schema["properties"][root], [root])
     if body is _DROP:
         body = {}
-    _drop_example_codes(body, schema, walker)
+    if from_model:
+        _drop_example_codes(body, schema, walker)
     return {"$schema": schema_url(card_type), root: body}, walker.warnings
 
 

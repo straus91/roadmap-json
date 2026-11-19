@@ -111,7 +111,7 @@ def extract_card(provider: LLMProvider, card_type: str, *, pdf: bytes | None = N
         for key, amount in completion.usage.items():
             usage[key] = usage.get(key, 0) + amount
         raw = parse_json(completion.text)
-        card, warnings = normalize(raw if raw is not None else {}, card_type)
+        card, warnings = normalize(raw if raw is not None else {}, card_type, from_model=True)
         errors = validate(card, card_type)
         return completion, raw, card, warnings, errors
 

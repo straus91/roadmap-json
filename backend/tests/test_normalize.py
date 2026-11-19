@@ -78,7 +78,7 @@ def test_values_are_coerced_to_schema_types():
             {"Partition": "something else"},
         ],
     }}
-    card, warnings = normalize(raw, "dataset")
+    card, warnings = normalize(raw, "dataset", from_model=True)
     body = card["Dataset"]
     assert body["Descriptors"]["Authors"] == [{"Name": "Jane Doe"}, {"Name": "John Roe"}]
     assert body["Descriptors"]["Date"] == {"Published": 2024, "Created": "2023-05-01"}
@@ -136,3 +136,15 @@ def test_duplicate_spellings_of_a_field_are_reported_not_silently_dropped():
     card, warnings = normalize(raw, "dataset")
     assert card["Dataset"]["Imaging"] == {"Burned-in PHI": "No"}
     assert any('"burned_in_phi"' in w and "already has" in w for w in warnings)
+
+
+def test_a_persons_card_keeps_codes_that_happen_to_be_schema_examples():
+    # Found on a published ATLAS card: a liver dataset indexed with RID58 (liver), which is
+    # also one of the schema's example codes. Tidying an existing card must not remove it.
+    raw = {"Dataset": {"Name": "Liver MRI", "Link": "https://example.org/d",
+                       "Indexing": {"RadLex": ["RID58"]}}}
+    card, warnings = normalize(raw, "dataset")
+    assert card["Dataset"]["Indexing"]["RadLex"] == ["RID58"]
+    assert warnings == []
+    read_by_model, notes = normalize(raw, "dataset", from_model=True)
+    assert "Indexing" not in read_by_model["Dataset"] and notes
