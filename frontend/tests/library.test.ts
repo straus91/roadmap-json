@@ -8,7 +8,7 @@ import { parseRoute } from '../src/route.ts'
 const card = (over: Partial<LibraryCard>): LibraryCard => ({
   id: over.title ?? 'x', type: 'dataset', title: 'Untitled', name: '', summary: '', has_atlas_description: false, atlas_url: '', link: '',
   modalities: [], subspecialties: [], content_codes: [], tasks: [], metrics: [], population: NOT_STATED, ages: null, year: null,
-  license: '', organizations: [], sizes: {}, formats: [], architecture: '', has_performance: false, search: (over.title ?? '').toLowerCase(),
+  license: '', organizations: [], sizes: {}, formats: [], architecture: '', has_performance: false, results: [], results_read: false, search: (over.title ?? '').toLowerCase(),
   ...over,
 })
 

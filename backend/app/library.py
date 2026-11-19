@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from . import results as readings
+
 log = logging.getLogger("roadmap.library")
 
 ATLAS = "https://atlas.rsna.org"
@@ -237,6 +239,9 @@ def summarize(card_id: str, record: dict[str, Any]) -> dict[str, Any]:
         tasks = [task for task in _list(_dict(properties.get("Use")).get("Intended")) if isinstance(task, str)]
     tasks = list(dict.fromkeys(_sentence_case(task) for task in tasks if len(task) <= 48))
     metrics = [metric for metric in _list(performance.get("Metrics")) if isinstance(metric, str)]
+    # Result values, read once from the performance text by a language model and checked against
+    # it (see results.py). None = this text has not been read.
+    read = readings.results_for(_text(performance.get("Comments"))) if _text(performance.get("Comments")) else None
 
     haystack = " ".join([title, name, summary, *keywords, *authors, *organizations, *procedures,
                          *modalities, *subspecialties, *tasks, *content,
@@ -252,6 +257,7 @@ def summarize(card_id: str, record: dict[str, Any]) -> dict[str, Any]:
         "sizes": _sizes(partitions), "formats": [f for f in _list(imaging.get("File format")) if isinstance(f, str)],
         "architecture": _first_sentences(_text(properties.get("Architecture")), 90),
         "has_performance": bool(_text(performance.get("Comments"))),
+        "results": read or [], "results_read": read is not None,
         "search": re.sub(r"\s+", " ", haystack),
     }
 
@@ -268,6 +274,7 @@ def configure(data_dir: Path) -> None:
     """Where the copy lives. Loads the last saved copy, if there is one."""
     global _store
     _store = data_dir / "atlas-library" / "cards.json"
+    readings.configure(data_dir)
     try:
         saved = json.loads(_store.read_text(encoding="utf-8"))
         _adopt(saved["records"], saved.get("synced_at"))

@@ -14,13 +14,16 @@ label.inline select { width: auto; }
 
 /* Datasets are always blue and models always orange, on badges and in charts alike. */
 :root {
+  color-scheme: light dark; /* scroll bars and tick boxes follow the light or dark theme */
   --dataset: #2a78d6; --model: #eb6834; --dataset-soft: #e3eefb; --model-soft: #fdebe2; --dataset-ink: #0d366b; --model-ink: #6e2a0c;
   --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5; --seq-5: #1c5cab; --seq-6: #0d366b;
   --seq-ink-light: #0b1a2e; --seq-ink-dark: #ffffff;
   --neutral-mark: #898781;
+  --stripe: #eef1f6; --row-line: #c9d1dc;
 }
 @media (prefers-color-scheme: dark) {
   :root {
+    --stripe: #252e3b; --row-line: #3d4858;
     --dataset: #3987e5; --model: #d95926; --dataset-soft: #16304f; --model-soft: #47230f; --dataset-ink: #cde2fb; --model-ink: #fbd3c0;
     --seq-1: #0d366b; --seq-2: #184f95; --seq-3: #256abf; --seq-4: #3987e5; --seq-5: #86b6ef; --seq-6: #cde2fb;
   }
@@ -61,28 +64,42 @@ label.inline select { width: auto; }
 
 /* On a phone the filters stay on one line that scrolls sideways, and a filter opens as a sheet
    from the bottom of the screen, so the bar that stays on top remains small. */
-@media (max-width: 700px) {
-  .filters, .active-filters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+@media (max-width: 560px) {
+  .filters, .active-filters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .filters::-webkit-scrollbar, .active-filters::-webkit-scrollbar { display: none; }
   .filter, .active-chip { position: static; flex: none; }
   .filter-panel { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; max-width: none; max-height: 65vh; border-radius: 14px 14px 0 0; padding: 14px; }
   .filter-options label { padding: 9px 6px; }
 }
 
-.lib-table-wrap { background: var(--panel); border-radius: 12px; }
+.lib-table-wrap { background: var(--panel); border-radius: 12px; position: relative; }
 table.lib-table td { padding: 9px 10px; min-width: 0; vertical-align: top; }
 table.lib-table th { padding: 8px 10px; }
 table.lib-table th.num, table.lib-table td.num, table.read-table .num { text-align: right; white-space: nowrap; }
 table.lib-table td:last-child { width: auto; }
-table.lib-table tbody tr:hover { background: var(--sunken); }
+table.lib-table tbody tr:nth-child(even) { background: var(--stripe); }
+table.lib-table tbody tr:hover { background: var(--accent-soft); }
+table.lib-table td { border-top-color: var(--row-line); }
+table.lib-table td.quick-cell { white-space: nowrap; vertical-align: middle; padding-left: 4px; padding-right: 8px; }
+/* The quick buttons stay in view at the right edge when a narrow window makes the table scroll sideways. */
+table.lib-table td.quick-cell, table.lib-table th:last-child { position: sticky; right: 0; }
+table.lib-table th:last-child { background: var(--sunken); }
+table.lib-table tbody tr td.quick-cell { background: var(--panel); }
+table.lib-table tbody tr:nth-child(even) td.quick-cell { background: var(--stripe); }
+table.lib-table tbody tr:hover td.quick-cell { background: var(--accent-soft); }
+.quick { display: inline-flex; gap: 2px; align-items: center; flex: none; }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.icon-button:hover:not(:disabled) { color: var(--accent); border-color: var(--line); background: var(--panel); }
 table.lib-table td.name-cell { min-width: 260px; max-width: 460px; }
 .name-cell a { font-weight: 600; text-decoration: none; }
 .name-cell a:hover { text-decoration: underline; }
-.name-cell .line { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 0.85rem; margin-top: 2px; }
+table.lib-table .line { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 0.85rem; margin-top: 2px; }
 .license-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 .tile { display: flex; flex-direction: column; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; color: var(--text); text-decoration: none; }
 .tile:hover { border-color: var(--accent); }
+.tile-main { display: flex; flex-direction: column; gap: 8px; flex: 1; color: var(--text); text-decoration: none; }
 .tile-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .tile-head strong { font-size: 1.02rem; line-height: 1.3; overflow-wrap: anywhere; }
 .tile-summary { color: var(--muted); font-size: 0.9rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -90,7 +107,7 @@ table.lib-table td.name-cell { min-width: 260px; max-width: 460px; }
 .fact-chip { font-size: 0.8rem; padding: 2px 9px; border-radius: 999px; background: var(--sunken); border: 1px solid var(--line); }
 .tile-facts { font-size: 0.92rem; font-weight: 600; }
 .tile-facts .muted { font-weight: 400; }
-.tile-foot { margin-top: auto; font-size: 0.82rem; overflow-wrap: anywhere; }
+.tile-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.82rem; overflow-wrap: anywhere; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
 
 /* ------------------------------------------------------------------ one card, for reading */
 .back { display: inline-block; margin-bottom: 4px; text-decoration: none; font-weight: 600; }
@@ -114,8 +131,8 @@ ul.plain { margin: 0; padding-left: 18px; }
 ul.plain.columns { columns: 3 220px; list-style: none; padding: 0; }
 ul.plain li { margin: 2px 0; break-inside: avoid; }
 .blocks { display: flex; flex-direction: column; gap: 10px; }
-.block { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--sunken); }
-.block .fields-read.nested { padding-left: 0; border-left: 0; }
+.record-block { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--sunken); }
+.record-block .fields-read.nested { padding-left: 0; border-left: 0; }
 table.read-table td { padding: 7px 10px; min-width: 0; }
 table.read-table td:last-child { width: auto; }
 table.read-table td.note { min-width: 220px; color: var(--muted); font-size: 0.88rem; }

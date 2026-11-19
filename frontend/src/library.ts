@@ -24,7 +24,17 @@ export interface LibraryCard {
   formats: string[]
   architecture: string
   has_performance: boolean
+  /** Result values read from the card's performance text by AI, each checked to appear in it. */
+  results: ReadResult[]
+  results_read: boolean
   search: string
+}
+
+export interface ReadResult {
+  set: string // what it was measured on
+  metric: string
+  value: string // exactly as printed in the card's text
+  detail: string // confidence interval, range, or a short note
 }
 
 export interface LibraryIndex {
@@ -63,6 +73,22 @@ export async function getLibraryCard(id: string): Promise<LibraryRecord> {
   if (response.status === 404) throw new Error('That card is not in the library.')
   if (!response.ok) throw new Error(`The card could not be loaded (${response.status}).`)
   return (await response.json()) as LibraryRecord
+}
+
+/** Save a card to the visitor's computer as a JSON file. */
+export function saveCard(card: unknown, title: string, type: 'dataset' | 'model') {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(card, null, 2) + '\n'], { type: 'application/json' }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `${title.replace(/[^\w.-]+/g, '_').slice(0, 80)}.${type}.json`
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+/** Fetch a card from the library and save it, without opening its page. */
+export async function downloadCard(card: LibraryCard): Promise<void> {
+  const record = await getLibraryCard(card.id)
+  saveCard(record.card, card.title || 'card', card.type)
 }
 
 // ------------------------------------------------------------------ filters
@@ -187,6 +213,19 @@ const SHORT_METRIC: Record<string, string> = {
 
 export function shortMetric(metric: string): string {
   return SHORT_METRIC[metric] ?? metric
+}
+
+/** The metrics that have result values among these cards, most frequent first: [metric, cards]. */
+export function metricsWithValues(cards: LibraryCard[]): [string, number][] {
+  const counts = new Map<string, number>()
+  for (const card of cards) for (const metric of new Set(card.results.map((result) => result.metric))) counts.set(metric, (counts.get(metric) ?? 0) + 1)
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+}
+
+/** A card's results for one metric, in the order its text gives them (the headline comes first). */
+export function resultsFor(card: LibraryCard, metric: string): ReadResult[] {
+  const wanted = metric.toLowerCase()
+  return card.results.filter((result) => result.metric.toLowerCase() === wanted)
 }
 
 // ------------------------------------------------------------------ the address bar

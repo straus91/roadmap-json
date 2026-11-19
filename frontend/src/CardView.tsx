@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CardType } from './api.ts'
 import { TypeBadge } from './Library.tsx'
-import { NOT_STATED, getLibraryCard, libraryLink, sizeParts } from './library.ts'
-import type { LibraryCard, LibraryRecord } from './library.ts'
+import { NOT_STATED, getLibraryCard, libraryLink, saveCard, sizeParts } from './library.ts'
+import type { LibraryCard, LibraryRecord, ReadResult } from './library.ts'
 import { parseResults } from './results.ts'
 import type { Json } from './schema.ts'
 
@@ -72,14 +72,7 @@ export default function CardView({ id, onEdit }: CardViewProps) {
     .sort(([a], [b]) => rank(a) - rank(b))
   const link = typeof body.Link === 'string' ? body.Link : ''
 
-  const download = () => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(record.card, null, 2) + '\n'], { type: 'application/json' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${title.replace(/[^\w.-]+/g, '_').slice(0, 80)}.${cardType}.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
+  const download = () => saveCard(record.card, title, cardType)
 
   return (
     <article className="card-view">
@@ -104,7 +97,7 @@ export default function CardView({ id, onEdit }: CardViewProps) {
         <section className="panel card-section" key={key}>
           <h3>{key}</h3>
           {key === 'Partitions' && Array.isArray(value) ? <Partitions rows={value} />
-            : key === 'Model performance' && isDict(value) ? <Performance value={value} />
+            : key === 'Model performance' && isDict(value) ? <Performance value={value} read={facts?.results ?? []} />
               : <Value value={value} top />}
         </section>
       ))}
@@ -210,7 +203,7 @@ function Rows({ rows }: { rows: Dict[] }) {
         </table>
       </div>
     )
-  return <div className="blocks">{rows.map((row, index) => <div className="block" key={index}><Value value={row} /></div>)}</div>
+  return <div className="blocks">{rows.map((row, index) => <div className="record-block" key={index}><Value value={row} /></div>)}</div>
 }
 
 function Cell({ value }: { value: unknown }) {
@@ -263,9 +256,10 @@ function Partitions({ rows }: { rows: unknown[] }) {
 }
 
 /** Model performance: the metrics reported, results as a table when the text is laid out as one. */
-function Performance({ value }: { value: Dict }) {
+function Performance({ value, read }: { value: Dict; read: ReadResult[] }) {
   const { Metrics: metrics, Comments: comments, ...rest } = value
   const results = typeof comments === 'string' ? parseResults(comments) : null
+  const fromAi = results !== null && results.rows.length === 0 && read.length > 0 // the text is prose: show the reading of it
   return (
     <>
       {Array.isArray(metrics) && metrics.length > 0 && (
@@ -291,9 +285,30 @@ function Performance({ value }: { value: Dict }) {
           </table>
         </div>
       )}
+      {fromAi && (
+        <div className="read-field">
+          <p className="read-label">Results</p>
+          <div className="table-wrap">
+            <table className="read-table">
+              <thead><tr><th>Measured on</th><th>Metric</th><th>Result</th><th>Interval or note</th></tr></thead>
+              <tbody>
+                {read.map((row, index) => (
+                  <tr key={index}>
+                    <td>{index > 0 && read[index - 1].set === row.set ? '' : row.set}</td>
+                    <td>{row.metric}</td>
+                    <td><strong>{row.value}</strong></td>
+                    <td>{row.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="help">This table was read from the text below by AI. Each number was checked to appear in that text, but the text is the source.</p>
+        </div>
+      )}
       {results && results.remarks.trim() && (
         <div className="read-field">
-          <p className="read-label">{results.rows.length ? 'Remarks' : 'Results'}</p>
+          <p className="read-label">{results.rows.length ? 'Remarks' : fromAi ? 'As written on the card' : 'Results'}</p>
           <Text text={results.remarks.trim()} />
         </div>
       )}

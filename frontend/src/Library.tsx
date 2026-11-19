@@ -5,13 +5,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  FILTERS, NOT_STATED, SORTS, filterCards, optionsFor, paramsToQuery, queryToParams, shortMetric, sizeParts, sortCards,
+  FILTERS, NOT_STATED, SORTS, downloadCard, filterCards, metricsWithValues, optionsFor, paramsToQuery, queryToParams, resultsFor, shortMetric, sizeParts, sortCards,
 } from './library.ts'
 import type { Chosen, FilterKey, FilterSpec, LibraryCard, LibraryIndex, Option, Query, SortKey } from './library.ts'
 import { go } from './route.ts'
 
 const NO_CARDS: LibraryCard[] = []
 const VIEW_KEY = 'roadmap-library-view'
+const RESULTS_NOTE =
+  ' Result values were read from the performance text of each card by AI and checked to appear in that text; the text itself is on the page of the card.' +
+  ' Different models are measured on different data, so the values are not a ranking.'
 type View = 'list' | 'grid'
 
 function readView(): View {
@@ -40,6 +43,7 @@ export default function Library({ index, failure, params }: LibraryProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [view, setView] = useState<View>(readView)
   const [sort, setSort] = useState<SortKey>('title')
+  const [metric, setMetric] = useState<string | null>(null) // null = the most reported one; '' = list the metrics instead
   const bar = useRef<HTMLDivElement>(null)
 
   useEffect(() => setText(query.text), [query.text])
@@ -96,6 +100,12 @@ export default function Library({ index, failure, params }: LibraryProps) {
   const active = FILTERS.flatMap((spec) => (query.chosen[spec.key] ?? []).map((value) => ({ spec, value })))
   const types = query.chosen.type ?? []
   const mode = types.length === 1 ? (types[0] === 'Dataset' ? 'dataset' : 'model') : 'mixed'
+  const valued = useMemo(() => {
+    const every = metricsWithValues(shown)
+    const shared = every.filter(([, cardsWith]) => cardsWith >= 2) // one-off metric names would bury the list
+    return shared.length ? shared : every
+  }, [shown])
+  const shownMetric = metric === null || (metric !== '' && !valued.some(([name]) => name === metric)) ? (valued[0]?.[0] ?? '') : metric
   const more = FILTERS.filter((spec) => !spec.main)
   const moreCount = more.reduce((sum, spec) => sum + (query.chosen[spec.key]?.length ?? 0), 0)
 
@@ -149,6 +159,15 @@ export default function Library({ index, failure, params }: LibraryProps) {
           {shown.length === cards.length ? `${cards.length} published cards` : `${shown.length} of ${cards.length} published cards`}
         </p>
         <div className="row">
+          {mode === 'model' && view === 'list' && valued.length > 0 && (
+            <label className="muted inline">
+              Show result for{' '}
+              <select value={shownMetric} onChange={(event) => setMetric(event.target.value)}>
+                {valued.map(([name, cardsWith]) => <option key={name} value={name}>{shortMetric(name)} ({cardsWith})</option>)}
+                <option value="">Names of the metrics only</option>
+              </select>
+            </label>
+          )}
           <label className="muted inline">
             Sort by{' '}
             <select value={sort} onChange={(event) => setSort(event.target.value as SortKey)}>
@@ -167,13 +186,14 @@ export default function Library({ index, failure, params }: LibraryProps) {
       ) : view === 'grid' ? (
         <div className="tiles">{shown.map((card) => <Tile key={card.id} card={card} />)}</div>
       ) : (
-        <ListTable cards={shown} mode={mode} />
+        <ListTable cards={shown} mode={mode} metric={shownMetric} />
       )}
 
       <p className="muted fine">
         Read from {index.source.replace('https://', '')}
         {index.synced_at ? ` on ${new Date(index.synced_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}` : ''}. Everything shown
         comes from the cards themselves; “{NOT_STATED.toLowerCase()}” means the card does not say.
+        {mode === 'model' && RESULTS_NOTE}
       </p>
     </div>
   )
@@ -237,7 +257,7 @@ const few = (items: string[], limit: number) => (items.length > limit ? `${items
 const dash = <span className="muted">–</span>
 const number = (value: number | undefined) => (value ? value.toLocaleString('en-US') : dash)
 
-function ListTable({ cards, mode }: { cards: LibraryCard[]; mode: 'mixed' | 'dataset' | 'model' }) {
+function ListTable({ cards, mode, metric }: { cards: LibraryCard[]; mode: 'mixed' | 'dataset' | 'model'; metric: string }) {
   return (
     <div className="table-wrap lib-table-wrap">
       <table className="lib-table">
@@ -260,11 +280,12 @@ function ListTable({ cards, mode }: { cards: LibraryCard[]; mode: 'mixed' | 'dat
             {mode === 'model' && (
               <>
                 <th>Task</th>
-                <th>Metrics reported</th>
+                <th>{metric ? `${shortMetric(metric)} (read by AI)` : 'Metrics reported'}</th>
               </>
             )}
             <th className="num">Year</th>
             {mode !== 'mixed' && <th>License</th>}
+            <th aria-label="Download and open" />
           </tr>
         </thead>
         <tbody>
@@ -292,11 +313,12 @@ function ListTable({ cards, mode }: { cards: LibraryCard[]; mode: 'mixed' | 'dat
               {mode === 'model' && (
                 <>
                   <td>{few(card.tasks, 2) || dash}</td>
-                  <td>{card.metrics.length ? few(card.metrics.map(shortMetric), 4) : dash}</td>
+                  <td>{metric ? <Result card={card} metric={metric} /> : card.metrics.length ? few(card.metrics.map(shortMetric), 4) : dash}</td>
                 </>
               )}
               <td className="num">{card.year ?? dash}</td>
               {mode !== 'mixed' && <td className="license-cell">{card.license || dash}</td>}
+              <td className="quick-cell"><QuickActions card={card} /></td>
             </tr>
           ))}
         </tbody>
@@ -305,11 +327,68 @@ function ListTable({ cards, mode }: { cards: LibraryCard[]; mode: 'mixed' | 'dat
   )
 }
 
+/** Download the card, or go straight to the dataset or publication, without opening the card's page. */
+function QuickActions({ card }: { card: LibraryCard }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
+  const download = () => {
+    setState('busy')
+    downloadCard(card).then(() => setState('idle'), () => setState('failed'))
+  }
+  const target = card.type === 'dataset' ? 'dataset' : 'publication'
+  return (
+    <span className="quick">
+      <button type="button" className="icon-button" disabled={state === 'busy'} onClick={download}
+        title={state === 'failed' ? 'The card could not be downloaded. Try again.' : 'Download this card (JSON)'}
+        aria-label={`Download the card for ${card.title}`}>
+        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+          <path d="M10 3v9m0 0-3.5-3.5M10 12l3.5-3.5M4 15.5h12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {card.link && (
+        <a className="icon-button" href={card.link} target="_blank" rel="noreferrer" title={`Open the ${target} in a new tab`}
+          aria-label={`Open the ${target} for ${card.title} in a new tab`}>
+          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+            <path d="M8 5H5v10h10v-3M11 4h5v5M16 4l-7 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </a>
+      )}
+    </span>
+  )
+}
+
+/** The headline result of a card for a metric: the first one its text gives, with what it was measured on. */
+function Result({ card, metric }: { card: LibraryCard; metric: string }) {
+  const found = resultsFor(card, metric)
+  if (!found.length) return dash
+  const [first] = found
+  return (
+    <span title={[first.set, first.detail].filter(Boolean).join(' · ')}>
+      <strong>{first.value}</strong>
+      {found.length > 1 && <span className="muted"> +{found.length - 1} more</span>}
+      <span className="muted line">{first.set}</span>
+    </span>
+  )
+}
+
+/** Up to two headline results of different metrics, e.g. "Dice 0.943 · NSD 0.966". */
+function headline(card: LibraryCard): string[] {
+  const seen = new Set<string>()
+  const parts: string[] = []
+  for (const result of card.results) {
+    if (seen.has(result.metric) || parts.length === 2) continue
+    seen.add(result.metric)
+    parts.push(`${shortMetric(result.metric)} ${result.value}`)
+  }
+  return parts
+}
+
 function Tile({ card }: { card: LibraryCard }) {
-  const facts = card.type === 'dataset' ? sizeParts(card).slice(0, 3) : card.metrics.slice(0, 4).map(shortMetric)
+  const results = card.type === 'model' ? headline(card) : []
+  const facts = card.type === 'dataset' ? sizeParts(card).slice(0, 3) : results.length ? results : card.metrics.slice(0, 4).map(shortMetric)
   const chips = [...card.modalities.slice(0, 3), ...card.subspecialties.slice(0, 2), ...card.tasks.slice(0, 1)]
   return (
-    <a className="tile" href={`#/library/${card.id}`}>
+    <div className="tile">
+      <a className="tile-main" href={`#/library/${card.id}`}>
       <span className="tile-head">
         <TypeBadge type={card.type} />
         <strong>{card.title}</strong>
@@ -318,13 +397,17 @@ function Tile({ card }: { card: LibraryCard }) {
       {chips.length > 0 && <span className="tile-chips">{chips.map((chip) => <span className="fact-chip" key={chip}>{chip}</span>)}</span>}
       {facts.length > 0 && (
         <span className="tile-facts">
-          {card.type === 'model' && <span className="muted">Reports </span>}
-          {facts.join(card.type === 'dataset' ? ' · ' : ', ')}
+          {card.type === 'model' && !results.length && <span className="muted">Reports </span>}
+          {facts.join(card.type === 'model' && !results.length ? ', ' : ' · ')}
         </span>
       )}
-      <span className="muted tile-foot">
-        {[card.organizations[0], card.year, card.license ? card.license.slice(0, 40) : 'License not stated'].filter(Boolean).join(' · ')}
+      </a>
+      <span className="tile-foot">
+        <span className="muted">
+          {[card.organizations[0], card.year, card.license ? card.license.slice(0, 40) : 'License not stated'].filter(Boolean).join(' · ')}
+        </span>
+        <QuickActions card={card} />
       </span>
-    </a>
+    </div>
   )
 }
