@@ -264,8 +264,10 @@ class _Normalizer:
                 else:
                     out[key] = item
                 continue
-            if name in out:
-                continue                                           # exact-name key already kept
+            if name in out:                                        # e.g. "File format" and "file_format"
+                if not _is_empty(item):
+                    self.warn(path, f'removed field "{key}" (the card already has "{name}")')
+                continue
             fitted = self.fit(item, props[name], path + [name])
             if fitted is not _DROP:
                 out[name] = fitted

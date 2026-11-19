@@ -17,7 +17,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    STATIC_DIR=/app/static \n    DATA_DIR=/data
+    STATIC_DIR=/app/static \
+    DATA_DIR=/data
 
 WORKDIR /app
 

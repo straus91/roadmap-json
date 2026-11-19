@@ -128,3 +128,11 @@ def test_valid_card_passes_through_unchanged():
             "Patient count": 10, "Age range": [[1, "months"], [240, "months"]]}}]}}
     again, warnings = normalize(card, "dataset")
     assert again == card and warnings == []
+
+
+def test_duplicate_spellings_of_a_field_are_reported_not_silently_dropped():
+    raw = {"Dataset": {"Name": "My dataset", "Link": "https://example.org/d",
+                       "Imaging": {"Burned-in PHI": "No", "burned_in_phi": "yes"}}}
+    card, warnings = normalize(raw, "dataset")
+    assert card["Dataset"]["Imaging"] == {"Burned-in PHI": "No"}
+    assert any('"burned_in_phi"' in w and "already has" in w for w in warnings)

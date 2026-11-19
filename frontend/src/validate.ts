@@ -7,13 +7,26 @@ import Ajv2020 from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import { getSchema } from './api.ts'
 import type { CardType, Problem } from './api.ts'
+import type { Schema } from './schema.ts'
 
+const schemas = new Map<CardType, Promise<Schema>>()
 const validators = new Map<CardType, Promise<ValidateFunction>>()
+
+/** The ATLAS schema in force on the server, fetched once per visit. */
+export function loadSchema(cardType: CardType): Promise<Schema> {
+  let pending = schemas.get(cardType)
+  if (!pending) {
+    pending = getSchema(cardType) as Promise<Schema>
+    pending.catch(() => schemas.delete(cardType))
+    schemas.set(cardType, pending)
+  }
+  return pending
+}
 
 function loadValidator(cardType: CardType): Promise<ValidateFunction> {
   let pending = validators.get(cardType)
   if (!pending) {
-    pending = getSchema(cardType).then((schema) => {
+    pending = loadSchema(cardType).then((schema) => {
       const ajv = new Ajv2020({ allErrors: true, verbose: true, strict: false })
       addFormats(ajv)
       return ajv.compile(schema)
@@ -63,7 +76,7 @@ function show(value: unknown): string {
   return text.length <= 50 ? text : `${text.slice(0, 47)}...`
 }
 
-function locate(pointer: string): string {
+export function locate(pointer: string): string {
   const parts = pointer
     .split('/')
     .slice(1)
@@ -152,5 +165,5 @@ function describe(error: ErrorObject): Problem {
     default:
       message = error.message ?? 'is not valid'
   }
-  return { pointer, location: locate(pointer), message }
+  return { pointer, location: locate(pointer), message, keyword: error.keyword }
 }

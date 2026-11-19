@@ -18,8 +18,9 @@ The app is then at <http://localhost:8000> (the same container serves the web ap
 | Endpoint | What it does |
 |---|---|
 | `GET /api/health` | Status, active provider/model, whether a key is configured |
-| `GET /api/schemas/{dataset\|model}` | The ATLAS 2025-11 JSON Schema (same file the server validates with) |
+| `GET /api/schemas/{dataset\|model}` | The ATLAS 2025-11 JSON Schema in force: the one ATLAS publishes, re-read daily, with the bundled copy as fallback |
 | `POST /api/validate` | Body = a card. Returns `{valid, errors[]}`; every error names its field |
+| `POST /api/normalize` | Body = a card. Returns it tidied to the schema (names, formats, nothing extra) with every change listed; uses no model |
 | `POST /api/extract` | Multipart form: `card_type` + `file` (PDF) or `text`. Returns `{card, valid, errors, warnings, meta}` |
 
 Try it:
@@ -55,8 +56,8 @@ Choose with `LLM_PROVIDER`:
 
 | `LLM_PROVIDER` | Default model | Key | File |
 |---|---|---|---|
-| `anthropic` (default) | `claude-fable-5-2` | `ANTHROPIC_API_KEY` | `app/providers/anthropic.py` |
-| `gemini` | `gemini-2.5-pro` | `GEMINI_API_KEY` | `app/providers/gemini.py` |
+| `anthropic` (default) | `claude-sonnet-5-5` | `ANTHROPIC_API_KEY` | `app/providers/anthropic.py` |
+| `gemini` | `gemini-4-hydrogen` | `GEMINI_API_KEY` | `app/providers/gemini.py` |
 
 To add a provider: one new file with one class, registered in `app/providers/__init__.py`.
 All settings are environment variables — see `.env.example`.
