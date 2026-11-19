@@ -3,6 +3,8 @@
 
 import { createContext, useContext, useEffect, useId, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { formatResults, parseResults, tidyCell } from './results.ts'
+import type { ResultRow, Results } from './results.ts'
 import { isEmpty, kindOf, pointerOf, resolve, summarize } from './schema.ts'
 import type { Json, Path, Schema } from './schema.ts'
 
@@ -399,7 +401,9 @@ function AgeRange({ node, path, value, id }: { node: Schema; path: Path; value: 
 
 /** The fields of one object: every field the schema defines, empty when there is nothing yet. */
 export function ObjectFields({ node, path, value }: { node: Schema; path: Path; value: Json | undefined }) {
+  const { root } = useForm()
   const properties: Record<string, Schema> = node.properties ?? {}
+  if (isPerformance(node, root)) return <PerformanceEditor node={node} path={path} value={value} />
   const required: string[] = node.required ?? []
   const record = value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {}
   return (
@@ -445,6 +449,8 @@ function ObjectList({ name, node, path, value }: { name: string; node: Schema; p
     setOpen(null)
   }
 
+  if (item.properties?.Total && item.properties?.Subsets)
+    return <PartitionsEditor item={item} path={path} rows={rows} onAdd={add} onRemove={(index) => change([...path, index], undefined)} />
   const flatKeys = Object.keys(item.properties ?? {})
   if (isFlat(item, root) && (nested || flatKeys.length <= 4))
     return <ObjectTable item={item} path={path} rows={rows} singular={singular} onAdd={add} />
@@ -576,6 +582,327 @@ function ObjectTable({ item, path, rows, singular, onAdd }: { item: Schema; path
             <option value="">+ Add a column…</option>
             {spare.map((key) => (
               <option key={key}>{key}</option>
+            ))}
+          </select>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function asRecord(value: Json | undefined): Record<string, Json> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {}
+}
+
+// ------------------------------------------------------------------ model performance
+/** "Model performance" in the ATLAS schema: a list of metric names plus one Comments text. */
+function isPerformance(node: Schema, root: Schema): boolean {
+  const properties: Record<string, Schema> = node.properties ?? {}
+  const keys = Object.keys(properties)
+  return (
+    keys.length === 2 &&
+    'Metrics' in properties &&
+    'Comments' in properties &&
+    kindOf(resolve(properties.Metrics, root), root) === 'choiceList' &&
+    resolve(properties.Comments, root).type === 'string'
+  )
+}
+
+/**
+ * A results table (evaluated on / metric / value / range) kept inside the Comments text, one
+ * sentence per evaluation set. See results.ts for the layout and why it is done this way.
+ */
+function PerformanceEditor({ node, path, value }: { node: Schema; path: Path; value: Json | undefined }) {
+  const { change, root } = useForm()
+  const record = asRecord(value)
+  const text = typeof record.Comments === 'string' ? record.Comments : ''
+  const allowed: string[] = resolve(resolve(node.properties.Metrics, root).items, root).enum.map(String)
+  const [local, setLocal] = useState<Results>(() => parseResults(text))
+  const listId = useId()
+  const commentsPath = [...path, 'Comments']
+  const problems = useProblems(commentsPath, false)
+
+  // The card changed from outside this table (JSON view, tidy, a new card): read it again.
+  useEffect(() => {
+    if (formatResults(local) !== text.trim()) setLocal(parseResults(text))
+  }, [text]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const write = (next: Results) => {
+    setLocal(next)
+    const comments = formatResults(next)
+    // every metric that has a result is also listed under Metrics ("other" when it has no ATLAS name)
+    const listed = asList(record.Metrics).map(String)
+    const lower = new Map(allowed.map((name) => [name.toLowerCase(), name]))
+    for (const row of next.rows) {
+      if (!row.metric.trim() || !row.value.trim()) continue
+      const name = lower.get(row.metric.trim().toLowerCase()) ?? lower.get('other') ?? null
+      if (name && !listed.includes(name)) listed.push(name)
+    }
+    const group: Record<string, Json> = {}
+    if (listed.length) group.Metrics = listed
+    if (comments) group.Comments = comments
+    change(path, Object.keys(group).length ? group : undefined)
+  }
+  const setCell = (index: number, part: keyof ResultRow, raw: string) =>
+    write({ ...local, rows: local.rows.map((row, at) => (at === index ? { ...row, [part]: tidyCell(raw, part) } : row)) })
+  const addRow = () =>
+    write({ ...local, rows: [...local.rows, { set: local.rows.at(-1)?.set ?? '', metric: '', value: '', detail: '' }] })
+  const saved = formatResults(local)
+
+  return (
+    <div className="fields">
+      <Field name="Metrics" node={node.properties.Metrics} path={[...path, 'Metrics']} value={record.Metrics} />
+      <div className="field wide" data-pointer={pointerOf(commentsPath)}>
+        <span className="label">Results</span>
+        <p className="help">One row per reported number. A metric used here is added to the list above automatically.</p>
+        {local.rows.length > 0 && (
+          <div className="table-wrap">
+            <table className="results">
+              <thead>
+                <tr>
+                  <th title="The data the number was measured on, for example: Internal test set (n = 485)">Evaluated on</th>
+                  <th>Metric</th>
+                  <th>Value</th>
+                  <th title="Confidence interval, range, or a short note">Range or note</th>
+                  <th aria-label="Remove"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {local.rows.map((row, index) => (
+                  <tr key={index}>
+                    <td>
+                      <input aria-label={`Result ${index + 1}: evaluated on`} value={row.set} placeholder="Internal test set (n = 485)"
+                        onChange={(event) => setCell(index, 'set', event.target.value)} />
+                    </td>
+                    <td>
+                      <input aria-label={`Result ${index + 1}: metric`} value={row.metric} list={listId} placeholder="sensitivity"
+                        onChange={(event) => setCell(index, 'metric', event.target.value)} />
+                    </td>
+                    <td className="narrow">
+                      <input aria-label={`Result ${index + 1}: value`} value={row.value} placeholder="0.91"
+                        onChange={(event) => setCell(index, 'value', event.target.value)} />
+                    </td>
+                    <td>
+                      <input aria-label={`Result ${index + 1}: range or note`} value={row.detail} placeholder="95% CI: 0.86, 0.94"
+                        onChange={(event) => setCell(index, 'detail', event.target.value)} />
+                    </td>
+                    <td>
+                      <button type="button" className="remove" aria-label={`Remove result ${index + 1}`}
+                        onClick={() => write({ ...local, rows: local.rows.filter((_, at) => at !== index) })}>
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <datalist id={listId}>
+          {allowed.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+        <div className="table-actions">
+          <button type="button" className="add" onClick={addRow}>
+            + Add result
+          </button>
+        </div>
+        <label className="label sub" htmlFor={`${listId}remarks`}>
+          Other remarks
+        </label>
+        <textarea id={`${listId}remarks`} value={local.remarks} rows={Math.min(12, Math.max(2, Math.ceil(local.remarks.length / 80)))}
+          placeholder="Anything else about performance: comparisons with other models, reader studies, subgroups…"
+          onChange={(event) => write({ ...local, remarks: event.target.value })} />
+        <Problems messages={problems} />
+        <details className="saved-as">
+          <summary>How this is saved in the card</summary>
+          <p className="help">
+            The ATLAS schema has no separate place for a value per metric, so the table and remarks are stored together as the card's
+            “Comments” text for model performance, one sentence per evaluation set:
+          </p>
+          <pre>{saved || '(nothing yet)'}</pre>
+        </details>
+      </div>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ dataset partitions
+const plural = (key: string) => key.replace(/ count$/i, 's')
+
+/** Subsets that split a partition by one thing only (sex, race/ethnicity) should add up to its total. */
+function sumChecks(row: Record<string, Json>, counts: string[]): string[] {
+  const total = asRecord(row.Total)
+  const subsets = asList(row.Subsets).map(asRecord)
+  const notes: string[] = []
+  for (const by of ['Sex', 'Demographic']) {
+    const others = ['Sex', 'Demographic', 'Criterion', 'Age range'].filter((key) => key !== by)
+    const group = subsets.filter((subset) => subset[by] !== undefined && others.every((key) => subset[key] === undefined))
+    if (group.length < 2) continue
+    for (const key of counts) {
+      if (typeof total[key] !== 'number' || !group.every((subset) => typeof subset[key] === 'number')) continue
+      const sum = group.reduce((acc, subset) => acc + (subset[key] as number), 0)
+      const what = plural(key).toLowerCase()
+      notes.push(
+        sum === total[key]
+          ? `By ${by.toLowerCase()}: the ${group.length} groups add up to the total of ${sum.toLocaleString('en-US')} ${what}.`
+          : `By ${by.toLowerCase()}: the ${group.length} groups add up to ${sum.toLocaleString('en-US')} ${what}, but the total is ${(total[key] as number).toLocaleString('en-US')}. Check the numbers, unless some ${what} are in no group.`,
+      )
+    }
+  }
+  return notes
+}
+
+interface PartitionsProps {
+  item: Schema
+  path: Path
+  rows: Json[]
+  onAdd: () => void
+  onRemove: (index: number) => void
+}
+
+/** Partitions as the table a paper would print: one row each, counts side by side, details below. */
+function PartitionsEditor({ item, path, rows, onAdd, onRemove }: PartitionsProps) {
+  const { root, focus, problems } = useForm()
+  const total = resolve(item.properties.Total, root)
+  const totalFields: Record<string, Schema> = total.properties ?? {}
+  const counts = Object.keys(totalFields).filter((key) => resolve(totalFields[key], root).type === 'integer')
+  const used = counts.filter((key) => rows.some((row) => asRecord(asRecord(row).Total)[key] !== undefined))
+  const [extra, setExtra] = useState<string[]>(() => (used.length ? [] : counts.filter((key) => /patient|exam|image/i.test(key))))
+  const columns = counts.filter((key) => used.includes(key) || extra.includes(key))
+  const spare = counts.filter((key) => !columns.includes(key))
+  const [open, setOpen] = useState<number | null>(null)
+  const pointer = pointerOf(path)
+  /** Is this problem/field shown in the overview table itself (as opposed to under "Details")? */
+  const inTable = (rest: string) => {
+    const [, first, second] = rest.split('/')
+    return first === 'Partition' || (first === 'Total' && second !== undefined && columns.includes(second))
+  }
+
+  useEffect(() => {
+    if (!focus || !focus.pointer.startsWith(pointer + '/')) return
+    const rest = focus.pointer.slice(pointer.length + 1)
+    const row = Number(rest.split('/')[0])
+    if (Number.isInteger(row) && !inTable(rest)) setOpen(row)
+  }, [focus, pointer]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const under = [...problems].filter(([key]) => key.startsWith(pointer + '/')).map(([key, list]) => [key.slice(pointer.length + 1), list] as const)
+  const cellMessages = under
+    .filter(([rest]) => inTable(rest))
+    .flatMap(([rest, list]) => {
+      const [row, first, second] = rest.split('/')
+      return list.map((message) => `Row ${Number(row) + 1}, ${second ?? first}: ${message}`)
+    })
+  const hidden = (index: number) => under.filter(([rest]) => rest.split('/')[0] === String(index) && !inTable(rest)).length
+  const sums = columns.map((key) =>
+    rows.reduce<number | null>((acc, row) => {
+      const value = asRecord(asRecord(row).Total)[key]
+      return typeof value === 'number' ? (acc ?? 0) + value : acc
+    }, null),
+  )
+  const detailKeys = Object.keys(totalFields).filter((key) => !counts.includes(key))
+  const otherKeys = Object.keys(item.properties).filter((key) => !['Partition', 'Total', 'Subsets'].includes(key))
+
+  return (
+    <div className="rows">
+      {rows.length > 0 && (
+        <div className="table-wrap">
+          <table className="partitions">
+            <thead>
+              <tr>
+                <th>Partition</th>
+                {columns.map((key) => (
+                  <th key={key} title={resolve(totalFields[key], root).description}>
+                    {plural(key)}
+                  </th>
+                ))}
+                <th aria-label="Actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((raw, index) => {
+                const row = asRecord(raw)
+                const rowPath = [...path, index]
+                const more = hidden(index)
+                const subsets = asList(row.Subsets).length
+                return [
+                  <tr key={index} data-pointer={pointerOf(rowPath)}>
+                    <td>
+                      <Field bare name="Partition" node={item.properties.Partition} path={[...rowPath, 'Partition']} value={row.Partition} />
+                    </td>
+                    {columns.map((key) => (
+                      <td key={key} className="narrow">
+                        <Field bare name={key} node={totalFields[key]} path={[...rowPath, 'Total', key]} value={asRecord(row.Total)[key]} />
+                      </td>
+                    ))}
+                    <td className="actions">
+                      <button type="button" aria-expanded={open === index} onClick={() => setOpen(open === index ? null : index)}>
+                        {open === index ? 'Hide details' : subsets ? `Details · ${subsets} breakdown${subsets === 1 ? '' : 's'}` : 'Details'}
+                        {more > 0 && <span className="badge bad"> {more} to fix</span>}
+                      </button>
+                      <button type="button" className="remove" aria-label={`Remove partition ${index + 1}`}
+                        onClick={() => {
+                          onRemove(index)
+                          setOpen(null)
+                        }}>
+                        Remove
+                      </button>
+                    </td>
+                  </tr>,
+                  open === index && (
+                    <tr key={`${index}-details`} className="details-row">
+                      <td colSpan={columns.length + 2}>
+                        <div className="fields">
+                          {detailKeys.map((key) => (
+                            <Field key={key} name={key === 'Comments' ? 'Comments on the totals' : key} node={totalFields[key]}
+                              path={[...rowPath, 'Total', key]} value={asRecord(row.Total)[key]} />
+                          ))}
+                          {otherKeys.map((key) => (
+                            <Field key={key} name={key === 'Comments' ? 'Comments on this partition' : key} node={item.properties[key]}
+                              path={[...rowPath, key]} value={row[key]} />
+                          ))}
+                          <Field name="Breakdowns (subsets)" node={item.properties.Subsets} path={[...rowPath, 'Subsets']} value={row.Subsets} />
+                          {sumChecks(row, counts).map((note) => (
+                            <p key={note} className={`help wide-note ${note.includes('but the total') ? 'attention' : ''}`}>
+                              {note}
+                            </p>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ),
+                ]
+              })}
+            </tbody>
+            {rows.length > 1 && (
+              <tfoot>
+                <tr>
+                  <td>All partitions</td>
+                  {sums.map((sum, at) => (
+                    <td key={columns[at]} className="narrow">
+                      {sum === null ? '' : sum.toLocaleString('en-US')}
+                    </td>
+                  ))}
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+      <Problems messages={cellMessages} />
+      <div className="table-actions">
+        <button type="button" className="add" onClick={onAdd}>
+          + Add partition
+        </button>
+        {spare.length > 0 && (
+          <select aria-label="Add a column" value="" onChange={(event) => event.target.value && setExtra([...extra, event.target.value])}>
+            <option value="">+ Add a column…</option>
+            {spare.map((key) => (
+              <option key={key} value={key}>
+                {plural(key)}
+              </option>
             ))}
           </select>
         )}

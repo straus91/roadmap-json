@@ -72,8 +72,19 @@ and leave "Age range" out.""",
     "model": """\
 - "Model performance" → "Metrics": the metrics the document reports, using the schema's \
 names (AUC is "area under the receiver operating characteristic curve"; use "other" for a \
-metric that has no listed equivalent). Put the actual values, confidence intervals and the \
-data they were measured on in "Model performance" → "Comments".
+metric that has no listed equivalent).
+- "Model performance" → "Comments" holds the values. The schema has no separate place for a \
+value per metric, so the editor turns this text into a results table for the reviewer; that \
+works only if the results come first, one line per evaluation set, in exactly this layout:
+  Internal test set (n = 485), benign vs malignant: accuracy = 91.1% (95% CI: 87.5, 94.4); \
+sensitivity = 92.9% (95% CI: 88.2, 96.8).
+  That is: what the numbers were measured on, a colon, then "metric = value (interval)" items \
+separated by semicolons, and a period at the end. Leave the parentheses out when no interval \
+or range is reported. Use the schema's metric names in these lines where one exists, and give \
+only the presented model's own results here. Do not use a semicolon, a colon followed by a \
+space, or " = " inside a name. After the result lines, leave one blank line and write \
+everything else as ordinary sentences: comparisons with other models, reader studies, \
+subgroup findings.
 - "Model properties" → "Use" and "User": short phrases of 4 to 64 characters each, such as \
 "Image segmentation" or "Diagnostic radiologist".""",
 }

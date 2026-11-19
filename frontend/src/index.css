@@ -213,3 +213,18 @@ td input.short { max-width: none; }
   .fields { grid-template-columns: minmax(0, 1fr); }
   .editor-bar { position: static; }
 }
+
+/* results table (model performance) and partitions overview */
+.label.sub { margin-top: 14px; }
+td.narrow { min-width: 90px; width: 14%; }
+table.results td:first-child { min-width: 200px; }
+table.partitions td.actions { white-space: nowrap; width: 1%; }
+table.partitions td.actions button:not(.remove) { padding: 4px 10px; font-size: 0.85rem; margin-right: 4px; }
+table.partitions tfoot td { padding: 7px 10px; font-weight: 600; color: var(--muted); background: var(--sunken); border-top: 2px solid var(--line); }
+tr.details-row > td { padding: 14px 14px 18px; background: var(--sunken); }
+tr.details-row .table-wrap { background: var(--panel); }
+.wide-note { grid-column: 1 / -1; margin-top: -8px; }
+.wide-note.attention { color: var(--warn-text); }
+.saved-as { margin-top: 10px; }
+.saved-as summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+.saved-as pre { margin: 8px 0 0; padding: 10px; background: var(--sunken); border: 1px solid var(--line); border-radius: 6px; font-size: 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }

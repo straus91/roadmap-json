@@ -207,3 +207,19 @@ def test_prompt_carries_the_review_rules():
     for rule in ("without degrees or titles", "do not work out an article number",
                  "too small to read with certainty", "do not add a general term"):
         assert rule in prompt
+
+
+def test_model_prompt_asks_for_results_the_editor_can_tabulate():
+    prompt = build_system_prompt("model")
+    assert "one line per evaluation set" in prompt and "accuracy = 91.1% (95% CI: 87.5, 94.4)" in prompt
+    assert "one line per evaluation set" not in build_system_prompt("dataset")
+
+
+def test_line_breaks_inside_text_survive_normalisation():
+    text = "Test set (n = 10): accuracy = 0.9.\n\nRemarks follow."
+    raw = {"Model": {"Name": "A model", "Link": "https://example.org/m",
+                     "Model performance": {"Metrics": ["accuracy"], "Comments": "  " + text + " \n"}}}
+    from app.normalize import normalize
+    card, warnings = normalize(raw, "model")
+    assert card["Model"]["Model performance"]["Comments"] == text and warnings == []
+    assert validate(card, "model") == []
