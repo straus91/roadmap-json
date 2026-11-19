@@ -8,6 +8,10 @@ import type { Json, Schema } from './schema.ts'
 import { detectCardType, loadSchema } from './validate.ts'
 
 const DRAFT_KEY = 'roadmap-card-draft'
+const KINDS: { kind: CardType; label: string }[] = [
+  { kind: 'dataset', label: 'Dataset card' },
+  { kind: 'model', label: 'Model card' },
+]
 
 interface Draft {
   cardType: CardType
@@ -32,17 +36,20 @@ export default function App() {
   // The schema is kept together with the card type it belongs to, so the editor can never be
   // shown a model card with the dataset schema (or the reverse) while the other one loads.
   const [loaded, setLoaded] = useState<{ cardType: CardType; schema: Schema } | null>(null)
-  const [file, setFile] = useState<File | null>(null)
+  const [file, setFile] = useState<File | null>(null) // the PDF, once chosen
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState(false)
   const [seconds, setSeconds] = useState(0)
   const [failure, setFailure] = useState<string | null>(null)
+  const [askBlank, setAskBlank] = useState(false)
   const [body, setBody] = useState<Json | null>(null) // null = start screen
   const [extraction, setExtraction] = useState<Extraction | null>(null)
   const [adjustments, setAdjustments] = useState<string[]>([])
   const [fileName, setFileName] = useState('card')
   const [draft, setDraft] = useState<Draft | null>(readDraft)
   const request = useRef<AbortController | null>(null)
+  const pdfInput = useRef<HTMLInputElement>(null)
+  const cardInput = useRef<HTMLInputElement>(null)
 
   const refreshHealth = () => getHealth().then(setHealth, () => setOffline(true))
   useEffect(() => {
@@ -87,30 +94,34 @@ export default function App() {
     setExtraction(result)
     setAdjustments(result?.warnings ?? [])
     setFailure(null)
+    setAskBlank(false)
+  }
+
+  /** Open an existing card file. Its own content says whether it is a dataset or a model card. */
+  function openCard(candidate: File) {
+    const name = candidate.name.replace(/\.json$/i, '').replace(/\.(dataset|model)(\.draft)?$/i, '')
+    candidate.text().then((content) => {
+      try {
+        const parsed = JSON.parse(content) as Json
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not a card')
+        const record = parsed as Record<string, Json>
+        const kind = detectCardType(parsed) ?? ('Model properties' in record || 'Model performance' in record ? 'model' : 'dataset')
+        // A file without the "Dataset"/"Model" wrapper is opened as the body itself, so its
+        // fields show up in "What to fix" instead of being dropped silently.
+        const { $schema: _ignored, ...rest } = record
+        setFile(null)
+        open(kind, record[rootKey(kind)] ?? rest, name)
+      } catch {
+        setFailure('That file is not a card: it does not contain valid JSON.')
+      }
+    })
   }
 
   function choose(candidate: File | undefined) {
     if (!candidate) return
     setFailure(null)
-    const name = candidate.name.replace(/\.(pdf|json)$/i, '').replace(/\.(dataset|model)(\.draft)?$/i, '')
-    if (candidate.name.toLowerCase().endsWith('.json')) {
-      candidate.text().then((content) => {
-        try {
-          const parsed = JSON.parse(content) as Json
-          if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not a card')
-          const kind = detectCardType(parsed) ?? cardType
-          const record = parsed as Record<string, Json>
-          // A file without the "Dataset"/"Model" wrapper is opened as the body itself, so its
-          // fields show up in "What to fix" instead of being dropped silently.
-          const { $schema: _ignored, ...rest } = record
-          setFile(null)
-          open(kind, record[rootKey(kind)] ?? rest, name)
-        } catch {
-          setFailure('That file is not a card: it does not contain valid JSON.')
-        }
-      })
-      return
-    }
+    setAskBlank(false)
+    if (candidate.name.toLowerCase().endsWith('.json')) return openCard(candidate)
     if (candidate.type !== 'application/pdf' && !candidate.name.toLowerCase().endsWith('.pdf')) {
       setFailure('Choose the PDF of the paper, or a card (.json) file to open.')
       return
@@ -126,19 +137,20 @@ export default function App() {
   function onDrop(event: DragEvent) {
     event.preventDefault()
     setDragging(false)
-    choose(event.dataTransfer.files[0])
+    if (!busy) choose(event.dataTransfer.files[0])
   }
 
-  async function create() {
+  async function create(kind: CardType) {
     if (!file) return
     const controller = new AbortController()
     request.current = controller
+    setCardType(kind)
     setBusy(true)
     setSeconds(0)
     setFailure(null)
     try {
-      const result = await extractCard(cardType, file, controller.signal)
-      open(cardType, (result.card[rootKey(cardType)] as Json) ?? {}, file.name.replace(/\.pdf$/i, ''), result)
+      const result = await extractCard(kind, file, controller.signal)
+      open(kind, (result.card[rootKey(kind)] as Json) ?? {}, file.name.replace(/\.pdf$/i, ''), result)
       refreshHealth()
     } catch (error) {
       if (!controller.signal.aborted) setFailure((error as Error).message)
@@ -155,7 +167,12 @@ export default function App() {
     setExtraction(null)
   }
 
-  const ready = health?.configured === true && !health.budget.paused
+  const picked = (event: ChangeEvent<HTMLInputElement>) => {
+    choose(event.target.files?.[0])
+    event.target.value = ''
+  }
+
+  const canRead = health?.configured === true && !health.budget.paused
   const schema = loaded?.cardType === cardType ? loaded.schema : null
   const editing = body !== null && schema !== null
 
@@ -164,14 +181,14 @@ export default function App() {
       <header>
         <div>
           <h1>ROADMAP Card Creator</h1>
-          <p className="muted">Turn a paper into an RSNA ATLAS dataset or model card, then review and edit it.</p>
+          <p className="muted">Create, check and edit RSNA ATLAS dataset and model cards.</p>
         </div>
         {health && <span className={`pill ${health.configured ? 'ok' : 'warn'}`}>{health.configured ? health.model : 'No API key configured'}</span>}
       </header>
 
       {offline && <p className="banner bad">Cannot reach the server. Check that it is running (<code>docker compose up</code>).</p>}
-
       {body !== null && !schema && !offline && <p className="muted">Loading the ATLAS schema…</p>}
+
       {editing ? (
         <Editor schema={schema} cardType={cardType} body={body} onBody={setBody} onCardType={setCardType} extraction={extraction}
           adjustments={adjustments} onAdjustments={setAdjustments} paper={file} fileName={fileName} onStartOver={startOver} />
@@ -179,81 +196,88 @@ export default function App() {
         <>
           {health && !health.configured && (
             <p className="banner warn">
-              Creating cards from a PDF is switched off until an API key is added to the <code>.env</code> file. You can still open a
-              card or start a blank one.
+              Creating a card from a PDF is switched off until an API key is added to the <code>.env</code> file. Opening a card and
+              starting a blank one still work.
             </p>
           )}
           {health?.configured && health.budget.paused && (
             <p className="banner warn">
-              This month's budget for reading papers has been used up, so creating cards from a PDF is paused until the 1st. You can
-              still open a card or start a blank one.
+              This month's budget for reading papers has been used up, so creating a card from a PDF is paused until the 1st. Opening
+              a card and starting a blank one still work.
             </p>
           )}
+          {failure && <p className="banner bad">{failure}</p>}
 
-          <section className="panel">
-            <h2>What kind of card?</h2>
-            <div className="segmented" role="radiogroup" aria-label="Card type">
-              {(['dataset', 'model'] as const).map((kind) => (
-                <button type="button" key={kind} role="radio" aria-checked={cardType === kind} className={cardType === kind ? 'selected' : ''}
-                  onClick={() => setCardType(kind)} disabled={busy}>
-                  {kind === 'dataset' ? 'Dataset card' : 'Model card'}
-                </button>
-              ))}
-            </div>
+          <input ref={pdfInput} className="hidden-input" type="file" accept="application/pdf,.pdf" onChange={picked} tabIndex={-1} aria-hidden="true" />
+          <input ref={cardInput} className="hidden-input" type="file" accept="application/json,.json" onChange={picked} tabIndex={-1} aria-hidden="true" />
 
-            <h2 className="spaced">Start from a paper</h2>
-            <label className={`drop ${dragging ? 'over' : ''}`}
-              onDragOver={(event) => {
-                event.preventDefault()
-                setDragging(true)
-              }}
-              onDragLeave={() => setDragging(false)} onDrop={onDrop}>
-              <input type="file" accept="application/pdf,.pdf,application/json,.json" disabled={busy}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                  choose(event.target.files?.[0])
-                  event.target.value = ''
-                }} />
-              {file ? (
-                <span>
+          <section className={`panel start-main ${dragging ? 'over' : ''}`}
+            onDragOver={(event) => {
+              event.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+            <h2>Create a card from a paper</h2>
+            {!file ? (
+              <button type="button" className="drop" onClick={() => pdfInput.current?.click()}>
+                <strong>Drop the paper's PDF here</strong> or click to choose it
+                <span className="muted block">The paper is read for you and the card is filled in. You review and edit it afterwards.</span>
+              </button>
+            ) : busy ? (
+              <div className="step">
+                <p><strong>Reading {file.name}…</strong></p>
+                <p className="muted" aria-live="polite">{seconds}s · usually takes less than a minute</p>
+                <button type="button" onClick={() => request.current?.abort()}>Cancel</button>
+              </div>
+            ) : (
+              <div className="step">
+                <p>
                   <strong>{file.name}</strong>
-                  <span className="muted"> · {(file.size / 1024 / 1024).toFixed(1)} MB · click to change</span>
-                </span>
-              ) : (
-                <span>
-                  <strong>Drop the paper's PDF here</strong> or click to choose it
-                  <span className="muted block">Dropping an existing card (.json) opens it for editing</span>
-                </span>
-              )}
-            </label>
-            <div className="row">
-              <button type="button" className="primary" onClick={create} disabled={!file || busy || !ready}>
-                {busy ? 'Reading the paper…' : `Create ${cardType} card`}
-              </button>
-              {busy && (
-                <>
-                  <span className="muted" aria-live="polite">{seconds}s · usually takes less than a minute</span>
-                  <button type="button" onClick={() => request.current?.abort()}>Cancel</button>
-                </>
-              )}
-            </div>
-            {failure && <p className="banner bad">{failure}</p>}
+                  <span className="muted"> · {(file.size / 1024 / 1024).toFixed(1)} MB · </span>
+                  <button type="button" className="link" onClick={() => setFile(null)}>choose another</button>
+                </p>
+                <p className="question">What does this paper describe?</p>
+                <div className="row">
+                  {KINDS.map(({ kind, label }) => (
+                    <button type="button" key={kind} className="primary" disabled={!canRead} onClick={() => create(kind)}>
+                      {kind === 'dataset' ? 'A dataset' : 'A model'}
+                      <span className="sub"> → {label.toLowerCase()}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
 
-            <h2 className="spaced">Or start without a paper</h2>
-            <div className="row">
-              <button type="button" disabled={busy || !schema} onClick={() => open(cardType, {}, 'card')}>
-                Blank {cardType} card
-              </button>
+          <div className="start-others">
+            <section className="panel">
+              <h2>Open an existing card</h2>
+              <p className="muted">Check and edit a card file (.json) you already have.</p>
+              <button type="button" disabled={busy} onClick={() => cardInput.current?.click()}>Choose a card file…</button>
               {draft && (
                 <button type="button" disabled={busy} onClick={() => open(draft.cardType, draft.body, draft.fileName)}>
-                  Continue “{draft.fileName}” ({draft.cardType}, {new Date(draft.savedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })})
+                  Continue “{draft.fileName}” <span className="muted">({draft.cardType}, {new Date(draft.savedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })})</span>
                 </button>
               )}
-            </div>
-          </section>
+            </section>
+            <section className="panel">
+              <h2>Start a blank card</h2>
+              <p className="muted">Fill in a card by hand, with the same checks.</p>
+              {askBlank ? (
+                <div className="row">
+                  {KINDS.map(({ kind, label }) => (
+                    <button type="button" key={kind} disabled={busy} onClick={() => open(kind, {}, 'card')}>{label}</button>
+                  ))}
+                </div>
+              ) : (
+                <button type="button" disabled={busy} onClick={() => setAskBlank(true)}>Blank card…</button>
+              )}
+            </section>
+          </div>
 
           {health && (
             <p className="muted fine">
-              Cards are checked against the schema ATLAS publishes ({health.schemas[cardType].source === 'bundled' ? 'built-in copy' : 'read from atlas.rsna.org'}
+              Cards are checked against the schema ATLAS publishes ({health.schemas.dataset.source === 'bundled' ? 'built-in copy' : 'read from atlas.rsna.org'}
               ). Papers read this month: {health.budget.papers_this_month} (${health.budget.spent_usd.toFixed(2)} of $
               {health.budget.monthly_budget_usd.toFixed(0)}). PDFs up to {health.max_pdf_pages} pages.
             </p>

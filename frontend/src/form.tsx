@@ -74,7 +74,7 @@ export function Field({ name, node: raw, path, value, required, bare }: FieldPro
         <legend>{name}</legend>
         {node.description && <p className="help">{node.description}</p>}
         <Problems messages={problems} />
-        <ObjectFields node={node} path={path} value={value} sparse={path.some((part) => typeof part === 'number')} />
+        <ObjectFields node={node} path={path} value={value} />
       </fieldset>
     )
 
@@ -264,17 +264,17 @@ function ChoiceList({ options, path, value, id, label }: ListWidgetProps & { opt
     <div className="picker">
       <div className="chips">
         {chosen.map((item) => (
-          <button type="button" key={item} className={`chip ${options.includes(item) ? '' : 'bad'}`} onClick={() => toggle(item)}
-            title="Click to remove">
-            {item} ×
-          </button>
+          <span key={item} className={`chip ${options.includes(item) ? '' : 'bad'}`}>
+            {item}
+            <button type="button" className="chip-x" aria-label={`Remove ${item}`} title="Remove" onClick={() => toggle(item)}>×</button>
+          </span>
         ))}
       </div>
       <input
         id={id}
         aria-label={`Add to ${label}`}
         value={query}
-        placeholder={`Search ${options.length} options…`}
+        placeholder={`Type to search the ${options.length} allowed values, then pick one to add it`}
         onChange={(event) => {
           setQuery(event.target.value)
           setOpen(true)
@@ -328,10 +328,11 @@ function TagList({ numeric, suggestions, path, value, id, label }: ListWidgetPro
     <div className="picker">
       <div className="chips">
         {entries.map((entry, index) => (
-          <button type="button" key={`${index}-${String(entry)}`} className="chip" title="Click to remove"
-            onClick={() => update(entries.filter((_, at) => at !== index))}>
-            {String(entry)} ×
-          </button>
+          <span key={`${index}-${String(entry)}`} className="chip">
+            {String(entry)}
+            <button type="button" className="chip-x" aria-label={`Remove ${String(entry)}`} title="Remove"
+              onClick={() => update(entries.filter((_, at) => at !== index))}>×</button>
+          </span>
         ))}
       </div>
       <input
@@ -340,7 +341,7 @@ function TagList({ numeric, suggestions, path, value, id, label }: ListWidgetPro
         value={draft}
         list={suggestions?.length ? listId : undefined}
         inputMode={numeric ? 'numeric' : undefined}
-        placeholder="Type one and press Enter"
+        placeholder="Type an entry and press Enter to add it"
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => draft.trim() && add(draft)}
         onKeyDown={(event) => {
@@ -396,36 +397,16 @@ function AgeRange({ node, path, value, id }: { node: Schema; path: Path; value: 
   )
 }
 
-/** The fields of one object. `sparse` shows only what is filled or required, plus an "add" menu. */
-export function ObjectFields({ node, path, value, sparse }: { node: Schema; path: Path; value: Json | undefined; sparse?: boolean }) {
+/** The fields of one object: every field the schema defines, empty when there is nothing yet. */
+export function ObjectFields({ node, path, value }: { node: Schema; path: Path; value: Json | undefined }) {
   const properties: Record<string, Schema> = node.properties ?? {}
   const required: string[] = node.required ?? []
   const record = value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {}
-  const filled = Object.keys(properties).filter((key) => record[key] !== undefined)
-  const [shown, setShown] = useState<string[]>(() => [...new Set([...required, ...filled])])
-  const visible = sparse ? Object.keys(properties).filter((key) => shown.includes(key) || filled.includes(key)) : Object.keys(properties)
-  const hidden = Object.keys(properties).filter((key) => !visible.includes(key))
-
-  useEffect(() => {
-    // keep a field on screen after its content is deleted, so it does not vanish while editing
-    setShown((before) => (filled.every((key) => before.includes(key)) ? before : [...new Set([...before, ...filled])]))
-  }, [filled.join('|')]) // eslint-disable-line react-hooks/exhaustive-deps
-
   return (
     <div className="fields">
-      {visible.map((key) => (
+      {Object.keys(properties).map((key) => (
         <Field key={key} name={key} node={properties[key]} path={[...path, key]} value={record[key]} required={required.includes(key)} />
       ))}
-      {sparse && hidden.length > 0 && (
-        <div className="field add-field">
-          <select aria-label="Add a field" value="" onChange={(event) => event.target.value && setShown([...shown, event.target.value])}>
-            <option value="">+ Add a field…</option>
-            {hidden.map((key) => (
-              <option key={key}>{key}</option>
-            ))}
-          </select>
-        </div>
-      )}
     </div>
   )
 }
@@ -516,10 +497,10 @@ function Row({ index, count, item, path, value, singular, open, onToggle, onRemo
         <span className="row-actions">
           <button type="button" title="Move up" aria-label={`Move ${singular} ${index + 1} up`} disabled={index === 0} onClick={() => onMove(index - 1)}>↑</button>
           <button type="button" title="Move down" aria-label={`Move ${singular} ${index + 1} down`} disabled={index === count - 1} onClick={() => onMove(index + 1)}>↓</button>
-          <button type="button" title="Remove" aria-label={`Remove ${singular} ${index + 1}`} onClick={onRemove}>✕</button>
+          <button type="button" className="remove" aria-label={`Remove ${singular} ${index + 1}`} onClick={onRemove}>Remove</button>
         </span>
       </div>
-      {open && <ObjectFields node={item} path={path} value={value} sparse />}
+      {open && <ObjectFields node={item} path={path} value={value} />}
     </div>
   )
 }
@@ -572,8 +553,8 @@ function ObjectTable({ item, path, rows, singular, onAdd }: { item: Schema; path
                   </td>
                 ))}
                 <td>
-                  <button type="button" className="icon" title="Remove row" aria-label={`Remove ${singular} ${index + 1}`}
-                    onClick={() => change([...path, index], undefined)}>✕</button>
+                  <button type="button" className="remove" aria-label={`Remove ${singular} ${index + 1}`}
+                    onClick={() => change([...path, index], undefined)}>Remove</button>
                 </td>
               </tr>
             ))}

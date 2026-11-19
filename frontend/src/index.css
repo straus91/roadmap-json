@@ -82,9 +82,16 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .segmented button.selected { background: var(--accent); color: var(--accent-text); }
 .segmented.small button { padding: 5px 12px; }
 
-.drop { display: block; margin: 0 0 14px; padding: 28px 16px; text-align: center; border: 2px dashed var(--line); border-radius: 10px; cursor: pointer; overflow-wrap: anywhere; }
-.drop.over { border-color: var(--accent); background: var(--accent-soft); }
-.drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.drop { display: block; width: 100%; padding: 36px 16px; text-align: center; border: 2px dashed var(--line); border-radius: 10px; background: none; overflow-wrap: anywhere; }
+.start-main.over, .start-main.over .drop { border-color: var(--accent); background: var(--accent-soft); }
+.hidden-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.step { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.step .question { font-weight: 600; margin-top: 6px; }
+button.primary .sub { font-weight: 400; opacity: 0.85; }
+.start-others { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.start-others .panel { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.start-others h2 { margin: 0; }
+@media (max-width: 640px) { .start-others { grid-template-columns: minmax(0, 1fr); } }
 
 .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
@@ -145,7 +152,10 @@ input.tiny { width: 64px; }
 .group > .help { margin: 0 0 10px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { font-size: 0.85rem; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); border-color: transparent; text-align: left; overflow-wrap: anywhere; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--accent-soft); border: 1px solid transparent; text-align: left; overflow-wrap: anywhere; }
+button.chip { padding-right: 10px; }
+.chip-x { border: 0; background: none; padding: 0 6px; border-radius: 999px; font-size: 1rem; line-height: 1.2; color: var(--muted); }
+.chip-x:hover { background: var(--line); color: var(--text); }
 .chip.toggle { background: var(--panel); border-color: var(--line); color: var(--muted); }
 .chip.toggle strong { color: var(--text); }
 .chip.toggle.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
@@ -173,10 +183,11 @@ input.tiny { width: 64px; }
 .row-title .summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-card.open .row-title .summary { font-weight: 600; }
 .row-actions { display: flex; gap: 2px; padding-right: 6px; }
-.row-actions button, button.icon { border: 0; background: none; padding: 4px 8px; color: var(--muted); }
-.row-actions button:hover:not(:disabled), button.icon:hover { color: var(--text); background: var(--line); }
-button.add { align-self: flex-start; border-style: dashed; color: var(--accent); }
-.add-field select, .table-actions select { width: auto; color: var(--accent); border-style: dashed; }
+.row-actions button, button.remove { border: 0; background: none; padding: 4px 8px; color: var(--muted); font-size: 0.85rem; }
+.row-actions button:hover:not(:disabled), button.remove:hover { color: var(--text); background: var(--line); }
+button.remove:hover { color: var(--bad-text); background: var(--bad-bg); }
+button.add { align-self: flex-start; color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.table-actions select { width: auto; color: var(--accent); }
 .table-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
