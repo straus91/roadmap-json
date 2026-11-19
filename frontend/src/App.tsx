@@ -234,7 +234,7 @@ export default function App() {
             ) : busy ? (
               <div className="step">
                 <p><strong>Reading {file.name}…</strong></p>
-                <p className="muted" aria-live="polite">{seconds}s · usually takes less than a minute</p>
+                <p className="muted" aria-live="polite">{seconds}s · usually takes less than 2 minutes</p>
                 <button type="button" onClick={() => request.current?.abort()}>Cancel</button>
               </div>
             ) : (
