@@ -1,8 +1,8 @@
 """Spending guard for a public site that pays for every paper it reads.
 
-Two limits, both checked before a paper is sent to the model:
+Checked before a paper is sent to the model:
 * a monthly budget in dollars (the sum of what each extraction actually cost), and
-* a number of papers per visitor per day, so one visitor cannot use the whole month.
+* optionally, a number of papers per visitor per day (off by default).
 
 The ledger is one small JSON file in DATA_DIR. Visitors are stored as a salted hash, never as
 an address. This is the friendly limit; the hard backstop is a spend limit on the API key

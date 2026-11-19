@@ -79,7 +79,7 @@ def load_settings() -> Settings:
         max_upload_mb=int(_env("MAX_UPLOAD_MB", "20")),
         max_pdf_pages=int(_env("MAX_PDF_PAGES", "50")),
         monthly_budget_usd=float(_env("MONTHLY_BUDGET_USD", "50")),
-        daily_limit_per_visitor=int(_env("DAILY_LIMIT_PER_VISITOR", "5")),
+        daily_limit_per_visitor=int(_env("DAILY_LIMIT_PER_VISITOR", "0")),
         price_per_mtok=price,
         price_is_known=known,
         schema_sync_hours=float(_env("SCHEMA_SYNC_HOURS", "24")),
