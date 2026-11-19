@@ -1,5 +1,16 @@
 # 🏥 ROADMAP Model Card Editor
 
+> **v2 rebuild in progress** (branch `v2-rebuild`). The new app lives in `backend/` (FastAPI)
+> and `frontend/` (React + Vite) and runs as one Docker container:
+>
+> ```bash
+> cp .env.example .env      # add your ANTHROPIC_API_KEY
+> docker compose up --build # then open http://localhost:8000
+> ```
+>
+> See [backend/README.md](backend/README.md) and [REBUILD_BRIEF.md](REBUILD_BRIEF.md).
+> Everything below describes the legacy v1 app (`index.html`, `js/`, `aws-infrastructure/`).
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Static Site](https://img.shields.io/badge/100%25-static-brightgreen.svg)]()
 

@@ -12,7 +12,8 @@ cp .env.example .env      # then put your ANTHROPIC_API_KEY in .env
 docker compose up --build
 ```
 
-The API is then at <http://localhost:8000>; interactive docs at <http://localhost:8000/api/docs>.
+The app is then at <http://localhost:8000> (the same container serves the web app from
+`frontend/` and this API); interactive API docs are at <http://localhost:8000/api/docs>.
 
 | Endpoint | What it does |
 |---|---|
@@ -71,7 +72,11 @@ python -m venv .venv && .venv/Scripts/pip install -r requirements.txt pytest htt
 
 The tests use a fake provider, so they need no API key and cost nothing.
 
+For frontend work, run `npm install && npm run dev` in `frontend/` (http://localhost:5173);
+it proxies `/api` to the backend on port 8000.
+
 ## Running on AWS
 
-The image is plain Docker + HTTP on port 8000: push it to ECR and run it on App Runner or
-ECS Fargate with the same environment variables. Nothing in the code is AWS- or droplet-specific.
+The image (root `Dockerfile`) is plain Docker + HTTP on port 8000: push it to ECR and run it on
+App Runner or ECS Fargate with the same environment variables. Nothing in the code is AWS- or
+droplet-specific.

@@ -1,0 +1,10 @@
+# Only the v2 app goes into the image; the legacy v1 files at the repo root stay out.
+*
+!backend
+!frontend
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+backend/tests
