@@ -1,0 +1,22 @@
+# ROADMAP card creator v2 — run the whole stack with:   docker compose up
+#
+# Settings come from a `.env` file next to this file (copy .env.example to .env and add
+# your API key). Compose reads `.env` automatically; nothing else needs to be configured.
+
+services:
+  api:
+    build: ./backend
+    image: roadmap-cards-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_EFFORT: ${LLM_EFFORT:-medium}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_FALLBACKS: ${ANTHROPIC_FALLBACKS:-default}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      PDF_MODE: ${PDF_MODE:-native}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-20}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}

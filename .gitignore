@@ -75,3 +75,9 @@ aws-infrastructure/lambda/package-lock.json
 
 # Claude Code settings
 .claude/
+
+# v2 backend (Python)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

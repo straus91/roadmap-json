@@ -1,0 +1,6 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.32,<1
+python-multipart>=0.0.12
+anthropic>=2.10,<3
+jsonschema[format-nongpl]>=4.23,<5
+pypdf>=5,<7
