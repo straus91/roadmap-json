@@ -17,7 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    STATIC_DIR=/app/static
+    STATIC_DIR=/app/static \n    DATA_DIR=/data
 
 WORKDIR /app
 
@@ -28,7 +28,9 @@ COPY backend/app ./app
 COPY backend/schemas ./schemas
 COPY --from=frontend /src/dist ./static
 
-RUN useradd --create-home --uid 10001 appuser
+# /data holds the monthly spending ledger and the latest schema copy fetched from ATLAS.
+RUN useradd --create-home --uid 10001 appuser && mkdir -p /data && chown appuser /data
+VOLUME /data
 USER appuser
 
 EXPOSE 8000

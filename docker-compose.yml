@@ -20,4 +20,15 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       PDF_MODE: ${PDF_MODE:-native}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-20}
+      MAX_PDF_PAGES: ${MAX_PDF_PAGES:-50}
+      MONTHLY_BUDGET_USD: ${MONTHLY_BUDGET_USD:-50}
+      DAILY_LIMIT_PER_VISITOR: ${DAILY_LIMIT_PER_VISITOR:-5}
+      PRICE_INPUT_PER_MTOK: ${PRICE_INPUT_PER_MTOK:-}
+      PRICE_OUTPUT_PER_MTOK: ${PRICE_OUTPUT_PER_MTOK:-}
+      SCHEMA_SYNC_HOURS: ${SCHEMA_SYNC_HOURS:-24}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+    volumes:
+      - roadmap-data:/data   # spending ledger + latest ATLAS schema; survives restarts
+
+volumes:
+  roadmap-data:

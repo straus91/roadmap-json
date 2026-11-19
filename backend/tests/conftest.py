@@ -5,7 +5,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app import schemas  # noqa: E402
 from app.providers.base import Completion  # noqa: E402
+
+# Tests run against the bundled schemas only: no network, no copy saved by an earlier run.
+schemas.CACHE_DIR = Path(__file__).resolve().parent / "_no_such_cache_"
+schemas.reset_for_tests()
 
 
 class FakeProvider:

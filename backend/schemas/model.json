@@ -1,6 +1,6 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
-	"$id": "2025-11/model.json",
+	"$id": "https://atlas.rsna.org/schemas/2025-11/model.json",
 	"title": "ATLAS model schema",
 	"description": "RSNA ATLAS schema, 2025-11 version",
 	"$comment": "Copyright (c) 2025, Radiological Society of North America",
@@ -217,7 +217,7 @@
 								"description": "Procedure name",
 								"type": "string",
 								"minLength": 2,
-								"maxLength": 128,
+								"maxLength": 256,
 								"examples": [
 									"CT Abdomen and Pelvis W contrast IV"
 								]
@@ -619,7 +619,7 @@
 					"$comment": "ROADMAP:03597",
 					"type": "string",
 					"minLength": 4,
-					"maxLength": 128,
+					"maxLength": 256,
 					"examples": [
 						"My AI model"
 					]
@@ -628,7 +628,7 @@
 					"description": "URL pointer to source (required)",
 					"type": "string",
 					"minLength": 4,
-					"maxLength": 128,
+					"maxLength": 256,
 					"format": "uri",
 					"examples": [
 						"https://rsna.org"
@@ -749,7 +749,7 @@
 					"type": "object",
 					"properties": {
 						"FDA cleared": {
-							"description": "Indicates that the model has received FDA 510(K) pre-market approval.",
+							"description": "Indicates that the model has received FDA 510(K) pre-market approval. ",
 							"type": "boolean"
 						},
 						"CE marked": {
@@ -762,7 +762,7 @@
 							"type": "string"
 						},
 						"Authorization status": {
-							"description": "Describes the regulatory status of the AI model, such as Cleared, Application submitted, etc.",
+							"description": "Free-text description of the regulatory status of the AI model, such as Cleared, Application submitted, etc. Use the 'FDA cleared' and/or 'CE marked' tags, if appropriate.",
 							"$comment": "ROADMAP:03603",
 							"type": "string"
 						},

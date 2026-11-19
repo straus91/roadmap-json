@@ -22,7 +22,6 @@ from .providers import LLMProvider, ProviderError
 from .schemas import check_card_type
 from .validation import as_sentences, validate
 
-MAX_PDF_PAGES = 600          # Anthropic's native-PDF limit
 MAX_TEXT_CHARS = 1_500_000   # ~375k tokens: far beyond any paper; refuse rather than truncate
 
 
@@ -63,7 +62,7 @@ def parse_json(text: str) -> Any | None:
         return None
 
 
-def read_pdf(pdf: bytes) -> PdfReader:
+def read_pdf(pdf: bytes, max_pages: int = 50) -> PdfReader:
     if not pdf.lstrip()[:5].startswith(b"%PDF-"):
         raise ProviderError("That file is not a PDF.", status=415)
     try:
@@ -76,8 +75,8 @@ def read_pdf(pdf: bytes) -> PdfReader:
         raise ProviderError("That PDF could not be read; it may be damaged.", status=422)
     if pages == 0:
         raise ProviderError("That PDF has no pages.", status=422)
-    if pages > MAX_PDF_PAGES:
-        raise ProviderError(f"That PDF has {pages} pages; the limit is {MAX_PDF_PAGES}.", status=413)
+    if pages > max_pages:
+        raise ProviderError(f"That PDF has {pages} pages; the limit is {max_pages}.", status=413)
     return reader
 
 
@@ -90,14 +89,15 @@ def pdf_to_text(reader: PdfReader) -> str:
 
 
 def extract_card(provider: LLMProvider, card_type: str, *, pdf: bytes | None = None,
-                 text: str | None = None, pdf_mode: str = "native") -> ExtractionResult:
+                 text: str | None = None, pdf_mode: str = "native",
+                 max_pages: int = 50) -> ExtractionResult:
     """The one entry point: a PDF (bytes) or plain text in, a normalised + validated card out."""
     card_type = check_card_type(card_type)
     if pdf is None and not (text or "").strip():
         raise ProviderError("Upload a PDF or paste the document text.", status=400)
 
     if pdf is not None:
-        reader = read_pdf(pdf)
+        reader = read_pdf(pdf, max_pages)
         if pdf_mode == "text" or not provider.reads_pdf:
             text, pdf = remove_references(pdf_to_text(reader)), None
     if pdf is None and len(text or "") > MAX_TEXT_CHARS:

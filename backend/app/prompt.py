@@ -49,10 +49,17 @@ listed fits, leave it out.
 single short concept ("Supervised learning", "Machine learning" rather than "Supervised \
 learning type of machine learning").
 - "Descriptors" → "Authors": every author, in order, with affiliation in "Address" and email / \
-ORCID when given.
+ORCID when given. "Name" holds the person's name only, without degrees or titles \
+("Adam E. Flanders", not "Adam E. Flanders, MD").
 - "Descriptors" → "References": the publication(s) that describe this {noun} itself, which is \
-normally the document you are reading. Do not copy the document's bibliography.
-- Keep numbers exactly as reported; do not round or summarise them."""
+normally the document you are reading. Do not copy the document's bibliography. Give only the \
+citation details that are printed; do not work out an article number, page range or URL from \
+a DOI or from the pattern of another citation.
+- Keep numbers exactly as reported; do not round or summarise them. When a number appears only \
+in a figure and its print is too small to read with certainty, leave that number out rather \
+than risk a misreading.
+- In a list, do not add a general term next to the specific ones it covers ("Ultrasound" next \
+to "B-mode ultrasound"), and do not list the same thing twice in different words."""
 
 _TYPE_GUIDANCE = {
     "dataset": """\
