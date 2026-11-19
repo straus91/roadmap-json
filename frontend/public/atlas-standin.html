@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Stand-in host page (demonstration)</title>
+  <style>
+    :root { --bg: #f5f6f8; --panel: #fff; --text: #1c2430; --muted: #5b6776; --line: #d5dbe3; --accent: #0b5cad; --ok-bg: #e6f4ea; --ok-text: #17603a; --warn-bg: #fff4d6; --warn-text: #6f4b00; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #12161c; --panel: #1b212a; --text: #e6eaf0; --muted: #9aa6b5; --line: #333d4b; --accent: #5aa7f0; --ok-bg: #153524; --ok-text: #8fdcae; --warn-bg: #3b2f0d; --warn-text: #f2cf73; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--text); background: var(--bg); line-height: 1.5; }
+    header { padding: 12px 16px; background: var(--warn-bg); color: var(--warn-text); border-bottom: 1px solid var(--line); }
+    header strong { display: block; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 12px; padding: 12px 16px; height: calc(100vh - 78px); min-height: 520px; }
+    iframe { width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+    aside { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow: auto; }
+    h1 { font-size: 1.1rem; margin: 0 0 4px; }
+    label { display: block; font-weight: 600; font-size: 0.9rem; margin: 14px 0 4px; }
+    textarea, .file { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+    textarea { min-height: 120px; resize: vertical; }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    .status { margin-top: 12px; padding: 8px 10px; border-radius: 6px; background: var(--bg); font-size: 0.9rem; }
+    .status.ok { background: var(--ok-bg); color: var(--ok-text); }
+    pre { margin: 8px 0 0; padding: 8px; max-height: 260px; overflow: auto; font-size: 0.75rem; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); height: auto; } iframe { height: 75vh; } }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Demonstration only. This page is not ATLAS.</strong>
+    It stands in for the ATLAS Creator page to show how a finished card would be handed over. Nothing here is saved or sent anywhere.
+  </header>
+  <main>
+    <iframe src="/" title="ROADMAP Card Creator V2"></iframe>
+    <aside>
+      <h1>Create Index Card</h1>
+      <p class="muted">What the host page would fill in when the card creator sends a card.</p>
+      <label for="description">Description</label>
+      <textarea id="description" readonly placeholder="Arrives with the card"></textarea>
+      <label>JSON file</label>
+      <div class="file" id="file"><span class="muted">No card received yet</span></div>
+      <div class="status" id="status">Waiting for the card creator…</div>
+      <details>
+        <summary class="muted">The card as received</summary>
+        <pre id="card"></pre>
+      </details>
+    </aside>
+  </main>
+  <script>
+    // What ATLAS would add to its Creator page: listen for the card, use it, and answer.
+    const frame = document.querySelector('iframe')
+    const status = document.getElementById('status')
+    window.addEventListener('message', (event) => {
+      const data = event.data
+      if (event.origin !== window.location.origin || event.source !== frame.contentWindow) return
+      if (!data || data.source !== 'roadmap-card-creator') return
+      if (data.type === 'ready') status.textContent = 'Card creator connected. Open or create a card in it, then choose “Send to ATLAS”.'
+      if (data.type === 'card') {
+        const root = data.cardType === 'dataset' ? 'Dataset' : 'Model'
+        document.getElementById('description').value = data.description
+        document.getElementById('file').textContent = data.fileName
+        document.getElementById('card').textContent = JSON.stringify(data.card, null, 2)
+        status.className = 'status ok'
+        status.textContent = `Received a ${data.cardType} card: ${(data.card[root] || {}).Name || 'unnamed'}. ATLAS would now save it as a draft.`
+        event.source.postMessage({ source: 'atlas', type: 'card-received', id: data.id }, event.origin)
+      }
+    })
+  </script>
+</body>
+</html>

@@ -8,6 +8,11 @@
 > docker compose up --build # then open http://localhost:8000
 > ```
 >
+> Besides creating and editing cards, v2 has a **Library** (every card ATLAS publishes, with
+> search and filters), an **Overview** (what the library covers and where it is thin) and a
+> **Send to ATLAS** button for when the app is shown inside ATLAS
+> ([docs/send-to-atlas.md](docs/send-to-atlas.md)).
+>
 > See [backend/README.md](backend/README.md) and [REBUILD_BRIEF.md](REBUILD_BRIEF.md).
 > Everything below describes the legacy v1 app (`index.html`, `js/`, `aws-infrastructure/`).
 

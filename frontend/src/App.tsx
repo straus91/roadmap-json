@@ -1,8 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { getHealth, sendPaper, waitForCard } from './api.ts'
 import type { CardType, Extraction, Health } from './api.ts'
+import CardView from './CardView.tsx'
 import Editor from './Editor.tsx'
+import { announce, hostPage } from './embed.ts'
+import Library from './Library.tsx'
+import { getLibrary } from './library.ts'
+import type { LibraryIndex } from './library.ts'
+import Overview from './Overview.tsx'
+import { go, useRoute } from './route.ts'
 import { rootKey } from './schema.ts'
 import type { Json, Schema } from './schema.ts'
 import { detectCardType, loadSchema } from './validate.ts'
@@ -84,6 +91,27 @@ export default function App() {
   const [fileName, setFileName] = useState('card')
   const [draft, setDraft] = useState<Draft | null>(readDraft)
   const request = useRef<AbortController | null>(null)
+  const route = useRoute()
+  const [library, setLibrary] = useState<LibraryIndex | null>(null)
+  const [libraryFailure, setLibraryFailure] = useState<string | null>(null)
+  const browsing = route.page !== 'create'
+
+  // The library is loaded the first time one of its pages is opened. While the server is
+  // still reading the cards from ATLAS for the first time, ask again every few seconds.
+  useEffect(() => {
+    if (!browsing || (library && (library.count > 0 || !library.syncing))) return
+    let current = true
+    const load = () =>
+      getLibrary().then(
+        (index) => current && (setLibrary(index), setLibraryFailure(null)),
+        (error: Error) => current && setLibraryFailure(error.message),
+      )
+    const timer = setTimeout(load, library ? 5000 : 0)
+    return () => {
+      current = false
+      clearTimeout(timer)
+    }
+  }, [browsing, library])
   const pdfInput = useRef<HTMLInputElement>(null)
   const cardInput = useRef<HTMLInputElement>(null)
 
@@ -231,6 +259,14 @@ export default function App() {
     return () => controller.abort()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Open a card from the library in the editor, to correct it or to start a new one from it. */
+  const editFromLibrary = (kind: CardType, cardBody: Json, name: string) => {
+    if (body !== null && !window.confirm('Replace the card that is open in the editor with this one? The open card stays saved in this browser only until then.')) return
+    setFile(null)
+    open(kind, cardBody, name)
+    go('#/')
+  }
+
   const startOver = () => {
     if (!window.confirm('Leave this card? It stays saved in this browser until you start another one.')) return
     setDraft(readDraft())
@@ -245,27 +281,46 @@ export default function App() {
   }
 
   const canRead = health?.configured === true && !health.budget.paused
+  const host = useMemo(() => (health ? hostPage(health.embed_origins ?? []) : null), [health])
+  useEffect(() => {
+    if (host) announce(host) // tell the ATLAS page around this app that it is ready
+  }, [host])
   const schema = loaded?.cardType === cardType ? loaded.schema : null
   const editing = body !== null && schema !== null
 
   return (
-    <div className={`page ${editing ? 'wide' : ''}`}>
+    <div className={`page ${browsing ? 'mid' : editing ? 'wide' : ''}`}>
       <header>
         <div>
           <h1>
             ROADMAP Card Creator <span className="version">V2</span>
           </h1>
-          <p className="muted">Create, check and edit RSNA ATLAS dataset and model cards.</p>
+          <p className="muted">Create, check and edit RSNA ATLAS dataset and model cards, and browse the ones already published.</p>
         </div>
-        {health && <span className={`pill ${health.configured ? 'ok' : 'warn'}`}>{health.configured ? health.model : 'No API key configured'}</span>}
+        {health && !browsing && <span className={`pill ${health.configured ? 'ok' : 'warn'}`}>{health.configured ? health.model : 'No API key configured'}</span>}
       </header>
 
-      {offline && <p className="banner bad">Cannot reach the server. Check that it is running (<code>docker compose up</code>).</p>}
-      {body !== null && !schema && !offline && <p className="muted">Loading the ATLAS schema…</p>}
+      <nav className="site-nav" aria-label="Pages">
+        <a href="#/" className={route.page === 'create' ? 'current' : ''} aria-current={route.page === 'create' ? 'page' : undefined}>
+          {body !== null ? 'Editor' : 'Create a card'}
+        </a>
+        <a href="#/library" className={route.page === 'library' || route.page === 'card' ? 'current' : ''}
+          aria-current={route.page === 'library' ? 'page' : undefined}>Library</a>
+        <a href="#/overview" className={route.page === 'overview' ? 'current' : ''} aria-current={route.page === 'overview' ? 'page' : undefined}>Overview</a>
+      </nav>
 
-      {editing ? (
+      {offline && <p className="banner bad">Cannot reach the server. Check that it is running (<code>docker compose up</code>).</p>}
+      {!browsing && body !== null && !schema && !offline && <p className="muted">Loading the ATLAS schema…</p>}
+
+      {route.page === 'library' ? (
+        <Library index={library} failure={libraryFailure} params={route.params} />
+      ) : route.page === 'card' ? (
+        <CardView id={route.id} onEdit={editFromLibrary} />
+      ) : route.page === 'overview' ? (
+        <Overview index={library} failure={libraryFailure} />
+      ) : editing ? (
         <Editor schema={schema} cardType={cardType} body={body} onBody={setBody} onCardType={setCardType} extraction={extraction}
-          adjustments={adjustments} onAdjustments={setAdjustments} paper={file} fileName={fileName} onStartOver={startOver} />
+          adjustments={adjustments} onAdjustments={setAdjustments} paper={file} fileName={fileName} onStartOver={startOver} host={host} />
       ) : body !== null ? null : (
         <>
           {health && !health.configured && (

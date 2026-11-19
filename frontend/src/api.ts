@@ -17,6 +17,7 @@ export interface Health {
   configured: boolean
   max_upload_mb: number
   max_pdf_pages: number
+  embed_origins?: string[] // sites that may show this app in a frame and receive a finished card
   schemas: Record<CardType, { source: string; url: string; checked_at: string | null }>
   budget: {
     paused: boolean

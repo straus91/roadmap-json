@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { serverValidate, tidyCard } from './api.ts'
 import type { CardType, Extraction, Problem } from './api.ts'
+import { MAX_DESCRIPTION, sendCard, suggestDescription } from './embed.ts'
 import { Field, FormProvider, ObjectFields } from './form.tsx'
 import { exportCard, getAt, isEmpty, kindOf, pathOf, resolve, rootKey, sectionsOf, setAt, toEditorPointer } from './schema.ts'
 import type { Json, Path, Schema } from './schema.ts'
@@ -21,10 +22,14 @@ interface EditorProps {
   paper: File | null
   fileName: string
   onStartOver: () => void
+  /** The ATLAS page this app is shown inside, when there is one: enables "Send to ATLAS". */
+  host: string | null
 }
 
 export default function Editor(props: EditorProps) {
-  const { schema, cardType, body, onBody, extraction, adjustments, paper, fileName } = props
+  const { schema, cardType, body, onBody, extraction, adjustments, paper, fileName, host } = props
+  const [sending, setSending] = useState(false) // the "Send to ATLAS" step is open
+  const [description, setDescription] = useState('')
   const root = rootKey(cardType)
   const sections = useMemo(() => sectionsOf(schema, cardType), [schema, cardType])
   const bodyNode = useMemo(() => resolve(schema.properties[root], schema), [schema, root])
@@ -142,6 +147,34 @@ export default function Editor(props: EditorProps) {
     }
   }
 
+  const openSend = () => {
+    if (!description.trim()) setDescription(suggestDescription(body).slice(0, MAX_DESCRIPTION))
+    setSending(true)
+    setNotice(null)
+  }
+
+  /** Check the card with the server, then hand it and its description to the ATLAS page. */
+  const send = async () => {
+    if (!host) return
+    setWorking(true)
+    try {
+      const verdict = await serverValidate(card, cardType)
+      if (!verdict.valid) {
+        setProblems(verdict.errors)
+        setSending(false)
+        setNotice({ tone: 'bad', text: 'The server found problems, so the card was not sent. Fix the items listed.' })
+        return
+      }
+      await sendCard(host, { cardType, description: description.trim(), fileName: `${fileName}.${cardType}.json`, card })
+      setSending(false)
+      setNotice({ tone: 'ok', text: 'Sent to ATLAS. Finish creating the card there.' })
+    } catch (error) {
+      setNotice({ tone: 'bad', text: (error as Error).message })
+    } finally {
+      setWorking(false)
+    }
+  }
+
   const tidy = async () => {
     setWorking(true)
     try {
@@ -184,14 +217,38 @@ export default function Editor(props: EditorProps) {
             <button type="button" role="tab" aria-selected={view === 'json'} className={view === 'json' ? 'selected' : ''} onClick={() => setView('json')}>JSON</button>
           </div>
           <button type="button" onClick={() => save(true)} title="Save what you have so far, even if it is not valid yet">Save draft</button>
-          <button type="button" className="primary" disabled={working || problems === null || total > 0} onClick={download}
+          <button type="button" className={host ? '' : 'primary'} disabled={working || problems === null || total > 0} onClick={download}
             title={total ? 'Fix the listed items first' : 'Check with the server and download'}>
             Download card
           </button>
+          {host && (
+            <button type="button" className="primary" disabled={working || problems === null || total > 0} onClick={openSend}
+              title={total ? 'Fix the listed items first' : 'Hand this card to ATLAS'}>
+              Send to ATLAS
+            </button>
+          )}
         </div>
       </div>
 
       {notice && <p className={`banner ${notice.tone}`}>{notice.text}</p>}
+
+      {sending && host && (
+        <section className="panel send-dialog" aria-label="Send to ATLAS">
+          <h2>Send to ATLAS</h2>
+          <label className="label" htmlFor="atlas-description">Description</label>
+          <textarea id="atlas-description" value={description} maxLength={MAX_DESCRIPTION} onChange={(event) => setDescription(event.target.value)}
+            placeholder="One or two sentences on what this is" />
+          <p className="count-note">{description.length}/{MAX_DESCRIPTION}</p>
+          <p className="help">
+            ATLAS shows this in its list of cards. A first draft is taken from the card; edit it freely. The card itself goes along
+            unchanged.
+          </p>
+          <div className="row">
+            <button type="button" className="primary" disabled={working || !description.trim()} onClick={send}>Send</button>
+            <button type="button" disabled={working} onClick={() => setSending(false)}>Cancel</button>
+          </div>
+        </section>
+      )}
 
       {total > 0 && (
         <details className="todo" open>

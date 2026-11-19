@@ -8,6 +8,8 @@ it runs under `docker compose up`, on ECS/App Runner, or behind Mangum on Lambda
     POST /api/extract                PDF or text -> normalised, validated card (waits for it)
     POST /api/jobs                   the same, as a job: answers at once with a ticket
     GET  /api/jobs/{id}              running | done (with the card) | failed (with the reason)
+    GET  /api/library                every card ATLAS publishes, with the facts to filter by
+    GET  /api/library/{id}           one of those cards in full
 """
 from __future__ import annotations
 
@@ -20,10 +22,11 @@ from typing import Any
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__
+from . import __version__, library
 from .budget import Ledger
 from .config import load_settings
 from .extraction import extract_card, read_pdf
@@ -44,11 +47,16 @@ ledger = Ledger(settings.data_dir / "usage.json", settings.monthly_budget_usd,
 async def lifespan(_: FastAPI):
     if settings.schema_sync_hours > 0:
         start_background_sync(settings.schema_sync_hours)  # ATLAS's published schema is the authority
+    library.configure(settings.data_dir)
+    if settings.library_sync_hours > 0:
+        library.start_background_sync(settings.library_sync_hours)  # the cards ATLAS publishes
     yield
 
 
 app = FastAPI(title="ROADMAP Card Creator API", version=__version__, lifespan=lifespan,
               docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+
+app.add_middleware(GZipMiddleware, minimum_size=2000)   # the library listing is large as plain text
 
 if settings.cors_origins:  # only needed when the frontend dev server runs on another port
     app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins),
@@ -100,7 +108,8 @@ def health() -> dict[str, Any]:
             "model": settings.llm_model, "configured": configured,
             "pdf_mode": settings.pdf_mode, "max_upload_mb": settings.max_upload_mb,
             "max_pdf_pages": settings.max_pdf_pages, "card_types": list(CARD_TYPES),
-            "schemas": schema_status(), "budget": usage_for_visitors()}
+            "schemas": schema_status(), "budget": usage_for_visitors(),
+            "embed_origins": list(settings.embed_origins)}
 
 
 @app.get("/api/schemas/{card_type}")
@@ -224,6 +233,23 @@ def job_status(job_id: str) -> dict[str, Any]:
             raise HTTPException(404, "That paper is no longer on the server (it may have "
                                      "restarted, or too much time has passed). Please send it again.")
         return {key: job[key] for key in ("status", "result", "detail") if key in job}
+
+
+# ------------------------------------------------------------------ the library
+@app.get("/api/library")
+def get_library() -> dict[str, Any]:
+    """Every card ATLAS publishes, as small records to search, filter and count.
+    `syncing` is true while the cards are being read from ATLAS (a minute or two the first time)."""
+    return library.library_index()
+
+
+@app.get("/api/library/{card_id}")
+def get_library_card(card_id: str) -> dict[str, Any]:
+    """{"card": the card as published, "title", "description": ATLAS's own, "facts": its record}"""
+    found = library.library_card(card_id)
+    if found is None:
+        raise HTTPException(404, "That card is not in the library.")
+    return found
 
 
 # Serve the built frontend from the same container when it is present (single-image deploys).

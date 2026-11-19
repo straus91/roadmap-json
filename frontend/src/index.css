@@ -48,6 +48,7 @@ body { margin: 0; background: var(--bg); }
 
 .page { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
 .page.wide { max-width: 1500px; }
+.page.mid { max-width: 1280px; }
 
 header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 h1 { font-size: 1.5rem; margin: 0; }
