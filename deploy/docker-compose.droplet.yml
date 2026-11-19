@@ -1,0 +1,20 @@
+# Extra settings for running behind an existing front-door web server (the droplet's Caddy).
+# Used together with docker-compose.yml; on the droplet the .env file names both, so the
+# plain commands (`docker compose up -d --build`) do the right thing there.
+#
+# - No port is opened on the server itself: the app is reachable only through the front door.
+# - The app sits on a small private network of its own ("card-creator-front") that only it and
+#   the front-door Caddy join, so it cannot reach the other projects' internal services.
+
+services:
+  app:
+    ports: !reset []
+    networks:
+      front:
+        aliases:
+          - card-creator
+
+networks:
+  front:
+    name: card-creator-front
+    external: true

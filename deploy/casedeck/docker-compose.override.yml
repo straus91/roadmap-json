@@ -1,0 +1,21 @@
+# Added for the ROADMAP card creator (https://github.com/straus91/roadmap-json, deploy/README.md).
+# Not part of casedeck's repository; Docker Compose reads this file automatically next to
+# docker-compose.yml. It changes only how the caddy service starts:
+#   - Caddy loads caddy/Caddyfile.front, which imports casedeck's own Caddyfile untouched and
+#     adds the card creator's site;
+#   - Caddy also joins the card creator's small private network so it can reach that app.
+# To undo: delete this file and caddy/Caddyfile.front, then `docker compose up -d --no-deps caddy`.
+
+services:
+  caddy:
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile.casedeck:ro
+      - ./caddy/Caddyfile.front:/etc/caddy/Caddyfile:ro
+    networks:
+      - default
+      - card-creator-front
+
+networks:
+  card-creator-front:
+    name: card-creator-front
+    external: true

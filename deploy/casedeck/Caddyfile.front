@@ -1,0 +1,14 @@
+# Front file for this server's Caddy: everything casedeck's own Caddyfile serves, unchanged,
+# plus the ROADMAP card creator as one more site.
+#
+# This file and docker-compose.override.yml were added for the card creator
+# (https://github.com/straus91/roadmap-json, see deploy/README.md). They are not part of
+# casedeck's repository. To remove the card creator from this server: delete both files and
+# run `docker compose up -d --no-deps caddy` in this project's folder.
+
+import /etc/caddy/Caddyfile.casedeck
+
+__CARDS_HOST__ {
+	encode zstd gzip
+	reverse_proxy card-creator:8000
+}
