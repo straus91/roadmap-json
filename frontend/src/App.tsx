@@ -186,7 +186,9 @@ export default function App() {
     <div className={`page ${editing ? 'wide' : ''}`}>
       <header>
         <div>
-          <h1>ROADMAP Card Creator</h1>
+          <h1>
+            ROADMAP Card Creator <span className="version">V2</span>
+          </h1>
           <p className="muted">Create, check and edit RSNA ATLAS dataset and model cards.</p>
         </div>
         {health && <span className={`pill ${health.configured ? 'ok' : 'warn'}`}>{health.configured ? health.model : 'No API key configured'}</span>}
@@ -290,12 +292,24 @@ export default function App() {
           {health && (
             <p className="muted fine">
               Cards are checked against the schema ATLAS publishes ({health.schemas.dataset.source === 'bundled' ? 'built-in copy' : 'read from atlas.rsna.org'}
-              ). Papers read this month: {health.budget.papers_this_month} (${health.budget.spent_usd.toFixed(2)} of $
-              {health.budget.monthly_budget_usd.toFixed(0)}). PDFs up to {health.max_pdf_pages} pages.
+              ). <Usage budget={health.budget} />
+              PDFs up to {health.max_pdf_pages} pages.
             </p>
           )}
         </>
       )}
     </div>
+  )
+}
+
+/** The month's paper count and spending; shown only when the server chooses to share it. */
+function Usage({ budget }: { budget: Health['budget'] }) {
+  if (budget.spent_usd === undefined) return null
+  const spent = budget.spent_usd.toFixed(2)
+  const limit = (budget.monthly_budget_usd ?? 0).toFixed(0)
+  return (
+    <>
+      Papers read this month: {budget.papers_this_month} (US$ {spent} of {limit}).{' '}
+    </>
   )
 }

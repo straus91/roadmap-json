@@ -14,7 +14,7 @@ class Safety extends Component<{ children: ReactNode }, { failed: boolean }> {
     if (!this.state.failed) return this.props.children
     return (
       <div className="page">
-        <h1>ROADMAP Card Creator</h1>
+        <h1>ROADMAP Card Creator V2</h1>
         <p className="banner bad">
           Something went wrong on this page. Your card is still saved in this browser: reload, then choose “Continue”.
         </p>

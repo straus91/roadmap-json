@@ -41,6 +41,7 @@ class Settings:
     max_pdf_pages: int
     monthly_budget_usd: float
     daily_limit_per_visitor: int
+    show_usage: bool
     price_per_mtok: tuple[float, float]
     price_is_known: bool
     schema_sync_hours: float
@@ -80,6 +81,7 @@ def load_settings() -> Settings:
         max_pdf_pages=int(_env("MAX_PDF_PAGES", "50")),
         monthly_budget_usd=float(_env("MONTHLY_BUDGET_USD", "50")),
         daily_limit_per_visitor=int(_env("DAILY_LIMIT_PER_VISITOR", "0")),
+        show_usage=_env("SHOW_USAGE", "false").lower() in ("1", "true", "yes", "on"),
         price_per_mtok=price,
         price_is_known=known,
         schema_sync_hours=float(_env("SCHEMA_SYNC_HOURS", "24")),

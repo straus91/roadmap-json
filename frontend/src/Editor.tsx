@@ -258,8 +258,10 @@ export default function Editor(props: EditorProps) {
         {extraction && (
           <span>
             Read by {extraction.meta.model}
-            {extraction.meta.repaired ? ', corrected once automatically' : ''} · cost {extraction.meta.cost_is_estimate ? 'about ' : ''}$
-            {extraction.meta.cost_usd.toFixed(2)} ·{' '}
+            {extraction.meta.repaired ? ', corrected once automatically' : ''}
+            {extraction.meta.cost_usd !== undefined &&
+              ` · cost ${extraction.meta.cost_is_estimate ? 'about ' : ''}US$ ${extraction.meta.cost_usd.toFixed(2)}`}{' '}
+            ·{' '}
           </span>
         )}
         <button type="button" className="link" onClick={props.onStartOver}>Start another card</button>

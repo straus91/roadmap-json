@@ -19,11 +19,11 @@ export interface Health {
   max_pdf_pages: number
   schemas: Record<CardType, { source: string; url: string; checked_at: string | null }>
   budget: {
-    monthly_budget_usd: number
-    spent_usd: number
-    papers_this_month: number
     paused: boolean
-    daily_limit_per_visitor: number
+    // present only when the server is set to show usage to visitors
+    monthly_budget_usd?: number
+    spent_usd?: number
+    papers_this_month?: number
   }
 }
 
@@ -37,8 +37,8 @@ export interface Extraction {
     model: string
     repaired: boolean
     usage: Record<string, number>
-    cost_usd: number
-    cost_is_estimate: boolean
+    cost_usd?: number // present only when the server is set to show usage to visitors
+    cost_is_estimate?: boolean
   }
 }
 

@@ -93,7 +93,7 @@ def test_api_health_and_schema(client):
     assert health["status"] == "ok" and health["card_types"] == ["dataset", "model"]
     assert api.get("/api/schemas/model").json()["$id"] == schema_url("model")
     assert health["schemas"]["dataset"]["url"] == schema_url("dataset")
-    assert health["budget"]["monthly_budget_usd"] == 50
+    assert health["budget"] == {"paused": False}      # spending figures are not public by default
     assert api.get("/api/schemas/nope").status_code == 400
 
 
@@ -182,8 +182,13 @@ def test_budget_pauses_extraction_and_limits_each_visitor(tmp_path):
 
 def test_api_reports_cost_and_enforces_the_budget(client, monkeypatch, tmp_path):
     from app.budget import Ledger
+    import dataclasses
+    api = client(json.dumps(GOOD), json.dumps(GOOD), json.dumps(GOOD))
+    hidden = api.post("/api/extract", data={"card_type": "dataset", "text": "A paper."})
+    assert hidden.status_code == 200 and "cost_usd" not in hidden.json()["meta"]
+    monkeypatch.setattr(main, "settings", dataclasses.replace(main.settings, show_usage=True))
     monkeypatch.setattr(main, "ledger", Ledger(tmp_path / "usage.json", 0.0001, 5))
-    api = client(json.dumps(GOOD), json.dumps(GOOD))
+    assert api.get("/api/health").json()["budget"]["monthly_budget_usd"] == 0.0001
     first = api.post("/api/extract", data={"card_type": "dataset", "text": "A paper."})
     assert first.status_code == 200 and first.json()["meta"]["cost_usd"] > 0
     second = api.post("/api/extract", data={"card_type": "dataset", "text": "A paper."})

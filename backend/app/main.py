@@ -78,6 +78,13 @@ def card_type_of(card: Any, card_type: str | None) -> str:
     return kind
 
 
+def usage_for_visitors() -> dict[str, Any]:
+    """What the public page may know about spending: by default only whether reading papers is
+    paused. The paper count and dollar figures are the owner's business (SHOW_USAGE=true shows them)."""
+    summary = ledger.summary()
+    return summary if settings.show_usage else {"paused": summary["paused"]}
+
+
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     try:
@@ -88,7 +95,7 @@ def health() -> dict[str, Any]:
             "model": settings.llm_model, "configured": configured,
             "pdf_mode": settings.pdf_mode, "max_upload_mb": settings.max_upload_mb,
             "max_pdf_pages": settings.max_pdf_pages, "card_types": list(CARD_TYPES),
-            "schemas": schema_status(), "budget": ledger.summary()}
+            "schemas": schema_status(), "budget": usage_for_visitors()}
 
 
 @app.get("/api/schemas/{card_type}")
@@ -138,8 +145,9 @@ def extract(request: Request,
     log.info("extract %s: valid=%s errors=%d repaired=%s cost=$%.4f usage=%s", kind, result.valid,
              len(result.errors), result.repaired, cost, result.usage)
     body = result.to_dict()
-    body["meta"]["cost_usd"] = cost
-    body["meta"]["cost_is_estimate"] = not settings.price_is_known
+    if settings.show_usage:
+        body["meta"]["cost_usd"] = cost
+        body["meta"]["cost_is_estimate"] = not settings.price_is_known
     return body
 
 
