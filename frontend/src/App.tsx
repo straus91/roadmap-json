@@ -257,8 +257,8 @@ export default function App() {
             )}
             {health?.configured && (
               <p className="muted notice">
-                To read a paper, its PDF is sent to {READERS[health.provider] ?? 'an outside AI service'}. Only upload papers you are
-                free to share, such as published articles. Opening or editing a card sends nothing outside this site.
+                To read a paper, its PDF is sent to {READERS[health.provider] ?? 'an outside AI service'}. Opening or editing a card
+                sends nothing outside this site.
               </p>
             )}
           </section>
