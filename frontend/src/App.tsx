@@ -13,6 +13,12 @@ const KINDS: { kind: CardType; label: string }[] = [
   { kind: 'model', label: 'Model card' },
 ]
 
+// Who receives an uploaded paper, by provider setting on the server.
+const READERS: Record<string, string> = {
+  gemini: "Google's Gemini service",
+  anthropic: "Anthropic's Claude service",
+}
+
 interface Draft {
   cardType: CardType
   body: Json
@@ -246,6 +252,12 @@ export default function App() {
                   ))}
                 </div>
               </div>
+            )}
+            {health?.configured && (
+              <p className="muted notice">
+                To read a paper, its PDF is sent to {READERS[health.provider] ?? 'an outside AI service'}. Only upload papers you are
+                free to share, such as published articles. Opening or editing a card sends nothing outside this site.
+              </p>
             )}
           </section>
 
