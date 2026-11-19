@@ -66,9 +66,13 @@ if ! grep -qE '^GEMINI_API_KEY=.+' .env && ! grep -qE '^ANTHROPIC_API_KEY=.+' .e
 fi
 
 # ---------------------------------------------------------------- 3. the app
-say "Building and starting the app (the first time takes a few minutes)"
+say "Building and starting the app. The first time takes 3 to 8 minutes; nothing is printed until it finishes."
 docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK" >/dev/null
-docker compose up -d --build --quiet-pull 2>&1 | tail -n 5
+LOG=/tmp/card-creator-build.log
+if ! docker compose up -d --build >"$LOG" 2>&1; then
+    tail -n 30 "$LOG"
+    fail "the app could not be built or started (see the lines above; full log in $LOG). Nothing was changed in casedeck."
+fi
 APP="$(docker compose ps -q app)"
 for _ in $(seq 1 40); do
     STATE="$(docker inspect --format '{{.State.Health.Status}}' "$APP" 2>/dev/null || echo none)"
@@ -121,8 +125,12 @@ else
     CADDY="$(docker compose ps -q caddy)"
     [ "$(docker inspect --format '{{.State.Running}} {{.State.Restarting}}' "$CADDY" 2>/dev/null)" = "true false" ] \
         || { docker compose logs --tail 15 caddy; undo "Caddy did not stay up"; }
-    AFTER=""; for site in $SITES; do AFTER="$AFTER $site=$(probe "$site")"; done
-    [ "$AFTER" = "$BEFORE" ] || { sleep 10; AFTER=""; for site in $SITES; do AFTER="$AFTER $site=$(probe "$site")"; done; }
+    AFTER=""
+    for _ in 1 2 3 4 5 6; do            # give Caddy up to half a minute to answer as before
+        AFTER=""; for site in $SITES; do AFTER="$AFTER $site=$(probe "$site")"; done
+        [ "$AFTER" = "$BEFORE" ] && break
+        sleep 5
+    done
     echo "    sites served after:$AFTER"
     [ "$AFTER" = "$BEFORE" ] || undo "the existing sites answer differently than before"
 fi
