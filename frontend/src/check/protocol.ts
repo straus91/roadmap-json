@@ -1,22 +1,24 @@
 // Author check: the messages.
 //
 // A host (such as ATLAS) can ask the author of a published card to go through it here, section
-// by section. The host opens the card with a `check` part; this app then shows a tick on every
-// section instead of the download and send buttons, and tells the host how far the author is.
-// The host keeps the work (so the author can come back to it) and owns the final button.
+// by section. The host opens the card with a `check` part; this app then shows, in place of the
+// download and send buttons, whether each section is still as published ("Right") or was
+// "Edited by you", and tells the host how far the author is. A section is one or the other:
+// an author who finds something wrong corrects it. The host keeps the work (so the author can
+// come back to it) and owns the final button.
 //
 //   host -> this app   { source: 'atlas', type: 'open-card', version: 1, card, title,
-//                        check: { original, flagged } }
+//                        check: { original } }
 //                        card      the author's version so far (the published card at first)
-//                        original  the published card, to tell which sections were changed
-//                        flagged   sections the author marked as not right earlier
+//                        original  the published card, to tell which sections were edited
 //   this app -> host   { source: 'roadmap-card-creator', type: 'check-progress', version: 1,
-//                        cardType, card, changed, flagged, problems }
-//                        sent a moment after every change; `problems` counts what does not fit the schema
+//                        cardType, card, changed, problems }
+//                        sent a moment after every change; `changed` names the edited sections,
+//                        `problems` counts what does not fit the schema
 //   host -> this app   { source: 'atlas', type: 'check-finish', id }
 //                        the author pressed the host's final button
 //   this app -> host   { source: 'roadmap-card-creator', type: 'check-result', version: 1, id,
-//                        ok, reason?, cardType, card, changed, flagged }
+//                        ok, reason?, cardType, card, changed }
 //                        ok only after this app's server confirmed the card fits the schema
 //
 // Sections are named as the editor shows them ("Basics", "Descriptors", ...).
@@ -28,25 +30,20 @@ const HOST = 'atlas'
 
 export interface CheckRequest {
   original: Record<string, Json>
-  flagged: string[]
 }
 
 /** The `check` part of an open-card message, if it is one. */
 export function readCheck(value: unknown): CheckRequest | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
-  const { original, flagged } = value as { original?: unknown; flagged?: unknown }
+  const { original } = value as { original?: unknown }
   if (original === null || typeof original !== 'object' || Array.isArray(original)) return null
-  return {
-    original: original as Record<string, Json>,
-    flagged: Array.isArray(flagged) ? flagged.filter((name): name is string => typeof name === 'string') : [],
-  }
+  return { original: original as Record<string, Json> }
 }
 
 export interface Progress {
   cardType: 'dataset' | 'model'
   card: unknown
   changed: string[]
-  flagged: string[]
   problems: number
 }
 
@@ -60,7 +57,6 @@ export interface Result {
   cardType: 'dataset' | 'model'
   card: unknown
   changed: string[]
-  flagged: string[]
 }
 
 /** Answer the host's final button. `finish` does the last check and says how it went. Returns the function that stops listening. */

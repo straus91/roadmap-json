@@ -25,8 +25,7 @@ describe('author check', () => {
   })
 
   it('only takes a check request that carries the published card', () => {
-    expect(readCheck({ original: { Dataset: {} }, flagged: ['Indexing', 7] })).toEqual({ original: { Dataset: {} }, flagged: ['Indexing'] })
-    expect(readCheck({ original: { Dataset: {} } })?.flagged).toEqual([])
-    expect(readCheck(undefined) ?? readCheck({ flagged: [] }) ?? readCheck({ original: [] }) ?? readCheck('yes')).toBeNull()
+    expect(readCheck({ original: { Dataset: {} }, anything: 'else' })).toEqual({ original: { Dataset: {} } })
+    expect(readCheck(undefined) ?? readCheck({}) ?? readCheck({ original: [] }) ?? readCheck('yes')).toBeNull()
   })
 })
