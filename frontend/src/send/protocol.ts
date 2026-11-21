@@ -9,8 +9,9 @@
 //                        cardType: 'dataset' | 'model', description, fileName, card }
 //   host -> this app   { source: 'atlas', type: 'card-received', id }          (it has the card)
 //   host -> this app   { source: 'atlas', type: 'card-rejected', id, reason }  (it could not take it)
-//   host -> this app   { source: 'atlas', type: 'open-card', version: 1, card, title? }
-//                                                                    (open this card for editing)
+//   host -> this app   { source: 'atlas', type: 'open-card', version: 1, card, title?, check? }
+//                                                                    (open this card for editing;
+//                                                                     `check`: see ../check/protocol.ts)
 //
 // Everything about this feature lives in this folder. The rest of the app only calls
 // `useSendToHost` (the button and its step) and `listenForCards` (cards the host asks to open).
@@ -71,13 +72,13 @@ export function sendCard(host: string, hostName: string, handover: Handover, wai
 }
 
 /** Cards the host asks this app to open for editing. Returns the function that stops listening. */
-export function listenForCards(host: string, open: (card: Record<string, unknown>, title: string) => void): () => void {
+export function listenForCards(host: string, open: (card: Record<string, unknown>, title: string, check: unknown) => void): () => void {
   const listen = (event: MessageEvent) => {
-    const data = event.data as { source?: string; type?: string; card?: unknown; title?: unknown } | null
+    const data = event.data as { source?: string; type?: string; card?: unknown; title?: unknown; check?: unknown } | null
     if (event.origin !== host || event.source !== window.parent || !data || data.source !== HOST || data.type !== 'open-card') return
     const card = data.card
     if (card === null || typeof card !== 'object' || Array.isArray(card)) return
-    open(card as Record<string, unknown>, typeof data.title === 'string' ? data.title : 'card')
+    open(card as Record<string, unknown>, typeof data.title === 'string' ? data.title : 'card', data.check)
   }
   window.addEventListener('message', listen)
   return () => window.removeEventListener('message', listen)

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { getHealth, sendPaper, waitForCard } from './api.ts'
 import type { CardType, Extraction, Health } from './api.ts'
+import { readCheck } from './check/protocol.ts'
+import type { CheckRequest } from './check/protocol.ts'
 import Editor from './Editor.tsx'
 import { announce, hostPage, listenForCards } from './send/protocol.ts'
 import { rootKey } from './schema.ts'
@@ -84,6 +86,9 @@ export default function App() {
   const [adjustments, setAdjustments] = useState<string[]>([])
   const [fileName, setFileName] = useState('card')
   const [draft, setDraft] = useState<Draft | null>(readDraft)
+  // An author check (see check/): the host keeps the author's work, so nothing is written to this browser's own draft.
+  const [check, setCheck] = useState<CheckRequest | null>(null)
+  const [awaitingCheck] = useState(() => new URLSearchParams(window.location.search).has('check'))
   const request = useRef<AbortController | null>(null)
   const pdfInput = useRef<HTMLInputElement>(null)
   const cardInput = useRef<HTMLInputElement>(null)
@@ -114,7 +119,7 @@ export default function App() {
 
   // Keep the card in this browser so a refresh or a closed tab does not lose the work.
   useEffect(() => {
-    if (body === null) return
+    if (body === null || check) return
     const timer = setTimeout(() => {
       try {
         localStorage.setItem(DRAFT_KEY, JSON.stringify({ cardType, body, fileName, savedAt: new Date().toISOString() }))
@@ -123,7 +128,7 @@ export default function App() {
       }
     }, 400)
     return () => clearTimeout(timer)
-  }, [body, cardType, fileName])
+  }, [body, cardType, fileName, check])
 
   const open = (kind: CardType, nextBody: Json, name: string, result: Extraction | null = null) => {
     setCardType(kind)
@@ -259,21 +264,29 @@ export default function App() {
   // A card the host asks to open never silently replaces one that is being edited: it waits
   // for an answer, asked in the page (a frame may not be allowed to open pop-up questions).
   const [incoming, setIncoming] = useState<{ card: Record<string, Json>; title: string } | null>(null)
-  const arrived = (card: Record<string, Json>, title: string) => (body === null ? openParsed(card, title) : setIncoming({ card, title }))
+  const arrived = (card: Record<string, Json>, title: string, asked: unknown) => {
+    const request = readCheck(asked)
+    if (request) {
+      setCheck(request) // the author's own card, opened by the page they came to: nothing to ask
+      openParsed(card, title)
+    } else if (body === null) openParsed(card, title)
+    else setIncoming({ card, title })
+  }
   const arrivedRef = useRef(arrived)
   arrivedRef.current = arrived
   useEffect(() => {
     if (!host) return
-    const stop = listenForCards(host.origin, (card, title) => arrivedRef.current(card as Record<string, Json>, title))
+    const stop = listenForCards(host.origin, (card, title, asked) => arrivedRef.current(card as Record<string, Json>, title, asked))
     announce(host.origin) // tell the site around this app that it is ready
     return stop
   }, [host])
   const schema = loaded?.cardType === cardType ? loaded.schema : null
   const editing = body !== null && schema !== null
+  const checking = host !== null && (check !== null || awaitingCheck)
 
   return (
     <div className={`page ${editing ? 'wide' : ''}`}>
-      <header>
+      <header hidden={checking}>
         <div>
           <h1>
             ROADMAP Card Creator <span className="version">V2</span>
@@ -298,8 +311,10 @@ export default function App() {
 
       {editing ? (
         <Editor schema={schema} cardType={cardType} body={body} onBody={setBody} onCardType={setCardType} extraction={extraction}
-          adjustments={adjustments} onAdjustments={setAdjustments} paper={file} fileName={fileName} onStartOver={startOver} host={host} />
-      ) : body !== null ? null : (
+          adjustments={adjustments} onAdjustments={setAdjustments} paper={file} fileName={fileName} onStartOver={startOver} host={host} check={check} />
+      ) : body !== null ? null : checking ? (
+        <p className="muted">Loading your card…</p>
+      ) : (
         <>
           {health && !health.configured && (
             <p className="banner warn">

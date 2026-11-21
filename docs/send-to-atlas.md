@@ -83,6 +83,26 @@ All are plain JSON objects.
 If ATLAS does not answer within 8 seconds, V2 tells the person the card was not confirmed and
 suggests downloading it and uploading it the usual way.
 
+## Author check (optional)
+
+ATLAS can also ask the author of a published card to go through it in V2, section by section.
+ATLAS opens the card with a `check` part. V2 then shows the card's sections with a tick on
+each ("This section is right", ticked to begin with) in place of its own download and send
+buttons. Correcting a field marks its section "Changed by you"; a section can also be unticked.
+V2 writes nothing to its own saved draft during a check: ATLAS keeps the author's work and
+owns the final button.
+
+| Direction | Message |
+|---|---|
+| ATLAS → V2 | `{ source: 'atlas', type: 'open-card', version: 1, card, title, check: { original, flagged } }` — `card`: the author's version so far (the published card at first); `original`: the published card; `flagged`: sections unticked earlier |
+| V2 → ATLAS | `{ source: 'roadmap-card-creator', type: 'check-progress', version: 1, cardType, card, changed, flagged, problems }` a moment after every change, so ATLAS can keep the work. `changed` and `flagged` name sections as V2 shows them; `problems` counts what does not fit the schema |
+| ATLAS → V2 | `{ source: 'atlas', type: 'check-finish', id }` when the author presses ATLAS's final button |
+| V2 → ATLAS | `{ source: 'roadmap-card-creator', type: 'check-result', version: 1, id, ok, reason, cardType, card, changed, flagged }` — `ok` only after V2's server confirmed the card fits the ATLAS schema; otherwise `reason` says what stands in the way |
+
+Loading the frame as `…/?check=1` shows "Loading your card…" instead of V2's start page until
+the card arrives. This lives in `frontend/src/check/` (`protocol.ts`, `useAuthorCheck.tsx`).
+ATLAS V2's `frontend/src/Validate.tsx` is a working example of the ATLAS side.
+
 ## Where this lives in V2
 
 Everything about the feature is in one folder, `frontend/src/send/`: `protocol.ts` (the

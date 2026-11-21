@@ -4,6 +4,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { serverValidate, tidyCard } from './api.ts'
 import type { CardType, Extraction, Problem } from './api.ts'
+import type { CheckRequest } from './check/protocol.ts'
+import { useAuthorCheck } from './check/useAuthorCheck.tsx'
 import { Field, FormProvider, ObjectFields } from './form.tsx'
 import { exportCard, getAt, isEmpty, kindOf, pathOf, resolve, rootKey, sectionsOf, setAt, toEditorPointer } from './schema.ts'
 import type { Json, Path, Schema } from './schema.ts'
@@ -25,6 +27,8 @@ interface EditorProps {
   onStartOver: () => void
   /** The site this app is shown inside, when there is one that may receive cards. */
   host: Host | null
+  /** An author check asked for by that site: ticks on the sections instead of download and send. */
+  check: CheckRequest | null
 }
 
 export default function Editor(props: EditorProps) {
@@ -177,6 +181,10 @@ export default function Editor(props: EditorProps) {
     host, cardType, fileName, card, body, blocked: notReady, blockedReason: total ? 'Fix the listed items first' : 'Checking the card…',
     confirmValid: () => confirmValid('sent'), report: (tone, text) => setNotice({ tone, text }),
   })
+  const check = useAuthorCheck({
+    host, check: props.check, schema, cardType, sections, body, card, problems: problems === null ? null : total, onBody,
+    confirmValid: () => confirmValid('marked as reviewed'),
+  })
 
   return (
     <div className={`editor ${showPaper && paperUrl ? 'with-paper' : ''}`}>
@@ -186,8 +194,11 @@ export default function Editor(props: EditorProps) {
             ? 'Checking…'
             : total
               ? `${total} thing${total === 1 ? '' : 's'} to fix before this is a valid ATLAS ${cardType} card`
-              : `Valid ATLAS ${cardType} card`}
+              : check ? check.summary : `Valid ATLAS ${cardType} card`}
         </div>
+        {check ? (
+          <p className="muted check-note">Your work is saved as you go. When you are done, finish below the card.</p>
+        ) : (
         <div className="bar-actions">
           {paperUrl && (
             <button type="button" onClick={() => setShowPaper(!showPaper)}>
@@ -205,6 +216,7 @@ export default function Editor(props: EditorProps) {
           </button>
           {send.button}
         </div>
+        )}
       </div>
 
       {notice && <p className={`banner ${notice.tone}`}>{notice.text}</p>}
@@ -254,6 +266,7 @@ export default function Editor(props: EditorProps) {
                     <span className={`dot ${filled ? 'filled' : ''}`} aria-hidden="true" />
                     <span className="name">{candidate.label}</span>
                     {issues > 0 && <span className="badge bad">{issues}</span>}
+                    {check?.mark(candidate)}
                   </button>
                 )
               })}
@@ -261,6 +274,7 @@ export default function Editor(props: EditorProps) {
             <div className="section" ref={main}>
               <FormProvider value={{ root: schema, problems: byPointer, focus, change }}>
                 <h2>{active.label}</h2>
+                {check?.line(active)}
                 <SectionBody key={`${cardType}:${active.key}`} schema={schema} bodyNode={bodyNode} root={root} fields={active.fields} body={body} />
               </FormProvider>
             </div>
@@ -281,7 +295,7 @@ export default function Editor(props: EditorProps) {
             ·{' '}
           </span>
         )}
-        {leaving ? (
+        {check ? null : leaving ? (
           <span>
             Leave this card? It stays saved in this browser until you start another one.{' '}
             <button type="button" className="link" onClick={props.onStartOver}>Yes, leave</button>{' · '}
